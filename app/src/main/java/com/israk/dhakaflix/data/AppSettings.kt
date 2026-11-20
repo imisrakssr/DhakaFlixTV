@@ -29,6 +29,11 @@ class AppSettings(ctx: Context) {
     val uiSize: StateFlow<Int> = _uiSize
     fun setUiSize(v: Int) { _uiSize.value = v; prefs.edit().putInt("ui_size", v).apply() }
 
+    /** Audio delay in ms (positive = sound later). Device-wide, so it's remembered. */
+    private val _audioDelay = MutableStateFlow(prefs.getLong("audio_delay", 0L))
+    val audioDelay: StateFlow<Long> = _audioDelay
+    fun setAudioDelay(v: Long) { _audioDelay.value = v; prefs.edit().putLong("audio_delay", v).apply() }
+
     private val _tmdbKey = MutableStateFlow(prefs.getString("tmdb_key", "") ?: "")
     val tmdbKey: StateFlow<String> = _tmdbKey
     fun setTmdbKey(v: String) { _tmdbKey.value = v.trim(); prefs.edit().putString("tmdb_key", v.trim()).apply() }

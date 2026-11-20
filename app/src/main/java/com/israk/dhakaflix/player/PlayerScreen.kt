@@ -125,7 +125,7 @@ fun PlayerScreen(c: PlayerController) {
         SeekFlash(c)
 
         AnimatedVisibility(
-            visible = c.controlsVisible && c.resumeAsk == null && c.error == null,
+            visible = c.controlsVisible && c.resumeAsk == null && c.error == null && !c.exitAsk,
             enter = fadeIn() + slideInVertically { it / 10 }, exit = fadeOut() + slideOutVertically { it / 10 },
         ) { Controls(c) }
 
@@ -143,6 +143,7 @@ fun PlayerScreen(c: PlayerController) {
         ) { SidePanel(c) }
 
         c.resumeAsk?.let { ResumePrompt(c, it) }
+        if (c.exitAsk) ExitPrompt(c)
         c.error?.let { ErrorOverlay(c, it) }
         c.toast?.let {
             Text(
@@ -335,6 +336,7 @@ private fun SidePanel(c: PlayerController) {
         PlayerController.Panel.AUDIO -> s.audio
         PlayerController.Panel.SUBS -> s.subtitles
         PlayerController.Panel.SYNC -> s.subtitleSync
+        PlayerController.Panel.AUDIO_SYNC -> s.audioSync
         PlayerController.Panel.SPEED -> s.speed
         PlayerController.Panel.ASPECT -> s.aspect
         PlayerController.Panel.OPTIONS -> s.options
@@ -367,10 +369,12 @@ private fun SidePanel(c: PlayerController) {
             PlayerController.Panel.ASPECT -> OptionList(
                 listOf(s.fit, s.zoom, s.stretch).mapIndexed { i, l -> Opt(i.toString(), l, i == c.scaleMode) }
             ) { id -> id?.toIntOrNull()?.let { c.setScale(it) } }
-            PlayerController.Panel.SYNC -> SyncPanel(c)
+            PlayerController.Panel.SYNC -> SyncPanel(c.subDelay, { c.shiftSubtitles(it) }, if (c.subtitleDelayAvailable) null else s.syncOnlyExternal)
+            PlayerController.Panel.AUDIO_SYNC -> SyncPanel(c.audioDelay, { c.shiftAudio(it) }, null)
             PlayerController.Panel.OPTIONS -> OptionList(
                 listOf(
                     Opt("sync", s.subtitleSync + "  (" + String.format(Locale.US, "%+.1fs", c.subDelay / 1000.0) + ")", false, chevron = true),
+                    Opt("async", s.audioSync + "  (" + String.format(Locale.US, "%+.2fs", c.audioDelay / 1000.0) + ")", false, chevron = true),
                     Opt("speed", s.speed + "  (" + c.speed + "x)", false, chevron = true),
                     Opt("aspect", s.aspect, false, chevron = true),
                     Opt("engine", s.switchEngine + "  (" + (if (c.kind == EngineKind.EXO) "ExoPlayer" else "LibVLC") + ")", false),
@@ -379,6 +383,7 @@ private fun SidePanel(c: PlayerController) {
             ) { id ->
                 when (id) {
                     "sync" -> c.panel = PlayerController.Panel.SYNC
+                    "async" -> c.panel = PlayerController.Panel.AUDIO_SYNC
                     "speed" -> c.panel = PlayerController.Panel.SPEED
                     "aspect" -> c.panel = PlayerController.Panel.ASPECT
                     "engine" -> { c.panel = null; c.switchEngine() }
@@ -420,28 +425,50 @@ private fun OptionList(options: List<Opt>, onPick: (String?) -> Unit) {
 }
 
 @Composable
-private fun SyncPanel(c: PlayerController) {
-    val s = LocalStrings.current
+private fun SyncPanel(valueMs: Long, shift: (Long?) -> Unit, note: String?) {
     val fr = remember { FocusRequester() }
     LaunchedEffect(Unit) { delay(80); runCatching { fr.requestFocus() } }
     Text(
-        String.format(Locale.US, "%+.2f s", c.subDelay / 1000.0),
+        String.format(Locale.US, "%+.2f s", valueMs / 1000.0),
         style = MaterialTheme.typography.displaySmall, color = Color.White, fontWeight = FontWeight.Bold,
     )
     Spacer(Modifier.height(6.dp))
     Text("+ = later   ·   − = earlier", color = TextDim, style = MaterialTheme.typography.bodySmall)
     Spacer(Modifier.height(18.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        PillButton("−0.5", compact = true, onClick = { c.shiftSubtitles(-500) })
-        PillButton("−0.1", compact = true, focusRequester = fr, onClick = { c.shiftSubtitles(-100) })
-        PillButton("+0.1", compact = true, onClick = { c.shiftSubtitles(100) })
-        PillButton("+0.5", compact = true, onClick = { c.shiftSubtitles(500) })
+        PillButton("−0.5", compact = true, onClick = { shift(-500) })
+        PillButton("−0.05", compact = true, focusRequester = fr, onClick = { shift(-50) })
+        PillButton("+0.05", compact = true, onClick = { shift(50) })
+        PillButton("+0.5", compact = true, onClick = { shift(500) })
     }
     Spacer(Modifier.height(10.dp))
-    PillButton("0", icon = Icons.Filled.Refresh, compact = true, onClick = { c.shiftSubtitles(null) })
-    if (!c.subtitleDelayAvailable) {
+    PillButton("0", icon = Icons.Filled.Refresh, compact = true, onClick = { shift(null) })
+    if (note != null) {
         Spacer(Modifier.height(16.dp))
-        Text(s.syncOnlyExternal, color = TextDim, style = MaterialTheme.typography.bodySmall)
+        Text(note, color = TextDim, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+@Composable
+private fun ExitPrompt(c: PlayerController) {
+    val s = LocalStrings.current
+    val fr = remember { FocusRequester() }
+    LaunchedEffect(Unit) { delay(80); runCatching { fr.requestFocus() } }
+    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .55f)), contentAlignment = Alignment.Center) {
+        Column(
+            Modifier.widthIn(max = 520.dp).glass(RoundedCornerShape(26.dp), tint = .12f).padding(28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(s.stopTitle, style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(6.dp))
+            Text(listOfNotNull(c.current.title, c.current.subtitle).joinToString(" · ") + "  ·  " + fmtTime(c.position),
+                color = TextDim, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(22.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                PillButton(s.keepWatching, icon = Icons.Filled.PlayArrow, primary = true, focusRequester = fr, onClick = { c.exitAsk = false })
+                PillButton(s.stopWatching, icon = Icons.Filled.ArrowBack, onClick = { c.exit() })
+            }
+        }
     }
 }
 

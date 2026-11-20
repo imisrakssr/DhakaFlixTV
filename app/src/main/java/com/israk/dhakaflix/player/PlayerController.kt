@@ -27,7 +27,7 @@ class PlayerController(
     private val startMode: String,
 ) : EngineListener {
 
-    enum class Panel { AUDIO, SUBS, SYNC, SPEED, ASPECT, OPTIONS }
+    enum class Panel { AUDIO, SUBS, SYNC, AUDIO_SYNC, SPEED, ASPECT, OPTIONS }
 
     val playlist = mutableStateListOf<PlayItem>().apply { addAll(initialPlaylist) }
 
@@ -73,6 +73,11 @@ class PlayerController(
         private set
     var subDelay by mutableLongStateOf(0L)
         private set
+    var audioDelay by mutableLongStateOf(settings.audioDelay.value)
+        private set
+
+    /** Exit confirmation shown when BACK is pressed during playback. */
+    var exitAsk by mutableStateOf(false)
     var speed by mutableFloatStateOf(1f)
         private set
     var scaleMode by mutableIntStateOf(0)
@@ -149,7 +154,7 @@ class PlayerController(
 
     private fun createEngine(): VideoEngine =
         (if (kind == EngineKind.EXO) ExoEngine(activity, settings.subsDefault.value) else VlcEngine(activity))
-            .also { it.listener = this }
+            .also { it.listener = this; it.setAudioDelay(audioDelay) }
 
     /** Called by the AndroidView factory whenever [viewGeneration] changes. */
     fun viewFor(ctx: Context): View {
@@ -173,6 +178,7 @@ class PlayerController(
                 if (speed != 1f) it.setSpeed(speed)
                 if (scaleMode != 0) it.setScale(scaleMode)
                 if (it.supportsSubtitleDelay && subDelay != 0L) it.setSubtitleDelay(subDelay)
+                if (audioDelay != 0L) it.setAudioDelay(audioDelay)
             }
         }
         if (e.kind == EngineKind.EXO && settings.subsDefault.value) {
@@ -317,6 +323,13 @@ class PlayerController(
         interaction++
     }
 
+    fun shiftAudio(deltaMs: Long?) {
+        audioDelay = if (deltaMs == null) 0L else (audioDelay + deltaMs).coerceIn(-3_000, 3_000)
+        engine?.setAudioDelay(audioDelay)
+        settings.setAudioDelay(audioDelay)
+        interaction++
+    }
+
     fun setPlaybackSpeed(v: Float) { speed = v; engine?.setSpeed(v); panel = null; showControls() }
 
     fun setScale(mode: Int) { scaleMode = mode; engine?.setScale(mode); panel = null; showControls() }
@@ -334,7 +347,7 @@ class PlayerController(
             KeyEvent.KEYCODE_MEDIA_REWIND -> { if (down) seekBy(-30_000); return true }
             KeyEvent.KEYCODE_MEDIA_NEXT -> { if (down && hasNext) next(); return true }
         }
-        if (resumeAsk != null || error != null || panel != null) { if (down) interaction++; return false }
+        if (resumeAsk != null || error != null || panel != null || exitAsk) { if (down) interaction++; return false }
         if (controlsVisible) { if (down) interaction++; return false }
         // Controls hidden: the remote drives playback directly
         when (e.keyCode) {
@@ -355,10 +368,12 @@ class PlayerController(
 
     private fun onBack() {
         when {
-            panel != null -> panel = null
+            exitAsk -> exitAsk = false
+            panel != null -> panel = PlayerController.Panel.OPTIONS.takeIf { panel in setOf(Panel.SYNC, Panel.AUDIO_SYNC, Panel.SPEED, Panel.ASPECT) }
             resumeAsk != null -> activity.finish()
-            controlsVisible && error == null -> controlsVisible = false
-            else -> { save(); activity.finish() }
+            error != null -> { save(); activity.finish() }
+            controlsVisible -> controlsVisible = false
+            else -> exitAsk = true
         }
     }
 

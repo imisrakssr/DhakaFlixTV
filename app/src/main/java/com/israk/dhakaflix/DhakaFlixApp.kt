@@ -44,7 +44,7 @@ class DhakaFlixApp : Application(), ImageLoaderFactory {
         .okHttpClient(http)
         .memoryCache { MemoryCache.Builder(this).maxSizePercent(0.18).build() }
         .diskCache { DiskCache.Builder().directory(cacheDir.resolve("images")).maxSizeBytes(250L * 1024 * 1024).build() }
-        .crossfade(220)
+        .crossfade(false) // decoding + fading every poster while scrolling stutters on TV sticks
         .respectCacheHeaders(false)
         .build()
 

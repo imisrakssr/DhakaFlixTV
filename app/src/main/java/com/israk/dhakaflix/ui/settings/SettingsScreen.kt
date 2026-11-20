@@ -147,6 +147,10 @@ fun SettingsScreen() {
         val sectionFrs = remember { Section.entries.associateWith { FocusRequester() } }
         val fm = LocalFocusManager.current
         val scope = rememberCoroutineScope()
+        // also lock the top/left nav while inside the pane: UP at the top goes nowhere
+        val navLock = com.israk.dhakaflix.ui.LocalNavLock.current
+        androidx.compose.runtime.LaunchedEffect(inPane) { navLock?.value = inPane }
+        androidx.compose.runtime.DisposableEffect(Unit) { onDispose { navLock?.value = false } }
         Row(Modifier.fillMaxSize().padding(start = edge, end = edge, top = top + 6.dp)) {
             Column(Modifier.width(240.dp).fillMaxHeight()) {
                 Text(s.settings, style = MaterialTheme.typography.headlineMedium, color = Color.White)

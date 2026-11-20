@@ -40,6 +40,8 @@ import com.israk.dhakaflix.data.BrowseFilter
 import com.israk.dhakaflix.data.MediaType
 import com.israk.dhakaflix.data.SortMode
 import com.israk.dhakaflix.ui.browse.PosterGrid
+import com.israk.dhakaflix.ui.browse.FilterBar
+import com.israk.dhakaflix.ui.browse.FilterSpec
 import com.israk.dhakaflix.ui.entryFocus
 import com.israk.dhakaflix.ui.browse.rememberBrowsePager
 import com.israk.dhakaflix.ui.browse.sortLabel
@@ -100,13 +102,16 @@ fun SearchScreen(onOpen: (String) -> Unit) {
                         }
                     },
                 )
-                ChipRow(listOf<MediaType?>(null, MediaType.MOVIE, MediaType.SERIES), type,
-                    { when (it) { null -> s.all; MediaType.MOVIE -> s.movies; MediaType.SERIES -> s.series } },
-                    { type = it }, contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 6.dp))
-                ChipRow(listOf<Int?>(null) + years, year, { it?.toString() ?: s.anyYear }, { year = it },
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp))
-                ChipRow(SortMode.entries.toList(), sort, { sortLabel(it, s) }, { sort = it },
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp))
+                FilterBar(
+                    listOf(
+                        FilterSpec(s.category, listOf<Pair<String?, String>>(null to s.all, MediaType.MOVIE.name to s.movies, MediaType.SERIES.name to s.series), type?.name) {
+                            type = it?.let { v -> MediaType.valueOf(v) }
+                        },
+                        FilterSpec(s.year, listOf<Pair<String?, String>>(null to s.anyYear) + years.map { it.toString() to it.toString() }, year?.toString()) { year = it?.toInt() },
+                        FilterSpec(s.sort, SortMode.entries.map { it.name to sortLabel(it, s) }, sort.name, highlight = false) { sort = SortMode.valueOf(it!!) },
+                    ),
+                    onClear = if (type != null || year != null) ({ type = null; year = null }) else null,
+                )
             }
         }
     }

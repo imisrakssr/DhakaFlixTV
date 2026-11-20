@@ -32,6 +32,9 @@ data class Strings(
     val tmdbConnected: String, val tmdbInvalid: String, val tmdbOffline: String, val tmdbChecking: String, val tmdbNotSet: String,
     val edit: String, val testAgain: String, val moreInfo: String, val playNow: String, val options: String,
     val okForNext: String, val autoRefreshNote: String,
+    val exitTitle: String, val exitYes: String, val exitNo: String,
+    val stopTitle: String, val keepWatching: String, val stopWatching: String, val audioSync: String,
+    val sort: String, val category: String, val genre: String, val year: String, val clearFilters: String,
 )
 
 val English = Strings(
@@ -67,6 +70,9 @@ val English = Strings(
     tmdbConnected = "Connected", tmdbInvalid = "Key rejected by TMDB", tmdbOffline = "Can't reach TMDB right now", tmdbChecking = "Checking…", tmdbNotSet = "Not set",
     edit = "Edit", testAgain = "Test again", moreInfo = "More Info", playNow = "Play now", options = "Options",
     okForNext = "Press OK for next episode", autoRefreshNote = "New uploads appear automatically — the library refreshes when the app opens and every 30 minutes.",
+    exitTitle = "Exit DhakaFlix?", exitYes = "Exit", exitNo = "Stay",
+    stopTitle = "Stop watching?", keepWatching = "Keep watching", stopWatching = "Stop", audioSync = "Audio sync",
+    sort = "Sort", category = "Category", genre = "Genre", year = "Year", clearFilters = "Clear",
 )
 
 val Bangla = Strings(
@@ -102,6 +108,9 @@ val Bangla = Strings(
     tmdbConnected = "সংযুক্ত", tmdbInvalid = "TMDB কী সঠিক নয়", tmdbOffline = "এই মুহূর্তে TMDB-তে যাওয়া যাচ্ছে না", tmdbChecking = "যাচাই হচ্ছে…", tmdbNotSet = "দেওয়া হয়নি",
     edit = "সম্পাদনা", testAgain = "আবার যাচাই", moreInfo = "বিস্তারিত", playNow = "এখনই চালান", options = "অপশন",
     okForNext = "পরের পর্বের জন্য OK চাপুন", autoRefreshNote = "নতুন আপলোড নিজে থেকেই আসবে — অ্যাপ খুললে এবং প্রতি ৩০ মিনিটে লাইব্রেরি রিফ্রেশ হয়।",
+    exitTitle = "DhakaFlix থেকে বের হবেন?", exitYes = "বের হই", exitNo = "থাকি",
+    stopTitle = "দেখা বন্ধ করবেন?", keepWatching = "দেখতে থাকি", stopWatching = "বন্ধ করুন", audioSync = "অডিও সিঙ্ক",
+    sort = "সাজান", category = "ক্যাটাগরি", genre = "ধরন", year = "সাল", clearFilters = "মুছুন",
 )
 
 val Dhakaiya = Strings(
@@ -137,6 +146,9 @@ val Dhakaiya = Strings(
     tmdbConnected = "কানেক্ট হইছে, জব্বর! ✅", tmdbInvalid = "চাবি ভুল মামা ❌", tmdbOffline = "TMDB-তে যাইতে পারতাছি না, নেট দেখ", tmdbChecking = "চেক করতাছি…", tmdbNotSet = "চাবি দেস নাই এহনো",
     edit = "বদলা", testAgain = "আবার চেক কর", moreInfo = "বিস্তারিত", playNow = "এহনই চালা", options = "আরো কলকব্জা",
     okForNext = "OK টিপলে পরেরটা 👉", autoRefreshNote = "নয়া ফাইল আপলোড হইলে অ্যাপ নিজেই ধইরা ফালায় — খোলার সময় আর প্রতি ৩০ মিনিটে।",
+    exitTitle = "যাইবাগা মামা? 🥺", exitYes = "হ, যাইগা", exitNo = "না, থাকুম",
+    stopTitle = "ছিনেমা থামায় দিবা?", keepWatching = "না, দেখতাছি", stopWatching = "হ, বন্ধ কর", audioSync = "আওয়াজ আগে-পিছে",
+    sort = "সাজাও", category = "দোকান", genre = "টাইপ", year = "সাল", clearFilters = "মুইছা ফালা",
 )
 
 fun stringsFor(lang: String): Strings = when (lang) {

@@ -48,6 +48,38 @@ import com.israk.dhakaflix.ui.theme.Strings
 import com.israk.dhakaflix.ui.theme.TextDim
 import kotlinx.coroutines.flow.Flow
 import androidx.paging.PagingData
+import androidx.paging.cachedIn
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material3.Icon
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import com.israk.dhakaflix.ui.components.FocusFrame
+import com.israk.dhakaflix.ui.components.PillButton
+import com.israk.dhakaflix.ui.components.glass
+import com.israk.dhakaflix.ui.theme.Bg
+import com.israk.dhakaflix.ui.theme.LocalAccent
+import kotlinx.coroutines.delay
 
 fun sortLabel(m: SortMode, s: Strings) = when (m) {
     SortMode.LATEST -> s.sortLatest
@@ -56,15 +88,23 @@ fun sortLabel(m: SortMode, s: Strings) = when (m) {
     SortMode.RATING -> s.sortRating
 }
 
-@Composable
-fun rememberBrowsePager(filter: BrowseFilter): Flow<PagingData<ItemEntity>> {
-    val app = DhakaFlixApp.instance
-    return remember(filter) {
-        Pager(PagingConfig(pageSize = 48, prefetchDistance = 24, enablePlaceholders = false)) {
+/** Keeps recent pagers alive app-wide so switching back to Movies/Series/Search is instant. */
+private object PagerCache {
+    private val map = object : LinkedHashMap<BrowseFilter, Flow<PagingData<ItemEntity>>>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<BrowseFilter, Flow<PagingData<ItemEntity>>>?) = size > 6
+    }
+
+    @Synchronized
+    fun get(filter: BrowseFilter): Flow<PagingData<ItemEntity>> = map.getOrPut(filter) {
+        val app = DhakaFlixApp.instance
+        Pager(PagingConfig(pageSize = 30, initialLoadSize = 45, prefetchDistance = 30, enablePlaceholders = false)) {
             app.db.items().browse(app.library.browseQuery(filter))
-        }.flow
+        }.flow.cachedIn(app.appScope)
     }
 }
+
+@Composable
+fun rememberBrowsePager(filter: BrowseFilter): Flow<PagingData<ItemEntity>> = remember(filter) { PagerCache.get(filter) }
 
 @Composable
 fun BrowseScreen(type: MediaType, onOpen: (String) -> Unit) {
@@ -72,26 +112,108 @@ fun BrowseScreen(type: MediaType, onOpen: (String) -> Unit) {
     val s = LocalStrings.current
     val allSources by app.settings.sources.collectAsState()
     val sources = remember(allSources, type) { allSources.filter { it.type == type && it.enabled } }
+    val years by remember { app.db.items().years() }.collectAsState(initial = emptyList())
 
     var sort by rememberSaveable { mutableStateOf(SortMode.LATEST) }
     var genre by rememberSaveable { mutableStateOf<String?>(null) }
     var sourceId by rememberSaveable { mutableStateOf<String?>(null) }
+    var year by rememberSaveable { mutableStateOf<Int?>(null) }
 
-    val filter = BrowseFilter(type = type, genre = genre, sourceId = sourceId, sort = sort)
+    val filter = BrowseFilter(type = type, genre = genre, sourceId = sourceId, year = year, sort = sort)
     val items = rememberBrowsePager(filter).collectAsLazyPagingItems()
+
+    val specs = buildList {
+        add(FilterSpec(s.sort, SortMode.entries.map { it.name to sortLabel(it, s) }, sort.name, highlight = false) { sort = SortMode.valueOf(it!!) })
+        if (sources.size > 1) add(FilterSpec(s.category, listOf<Pair<String?, String>>(null to s.allCategories) + sources.map { it.id to it.name }, sourceId) { sourceId = it })
+        add(FilterSpec(s.genre, listOf<Pair<String?, String>>(null to s.allGenres) + ALL_GENRES.map { it to it }, genre) { genre = it })
+        add(FilterSpec(s.year, listOf<Pair<String?, String>>(null to s.anyYear) + years.map { it.toString() to it.toString() }, year?.toString()) { year = it?.toInt() })
+    }
+    val anyFilter = genre != null || sourceId != null || year != null
 
     PosterGrid(items, onOpen, emptyText = s.noResults) {
         item(span = { GridItemSpan(maxLineSpan) }) {
-            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(if (type == MediaType.MOVIE) s.movies else s.series, style = MaterialTheme.typography.headlineMedium, color = Color.White)
-                ChipRow(SortMode.entries.toList(), sort, { sortLabel(it, s) }, { sort = it }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp), firstItemModifier = Modifier.entryFocus())
-                if (sources.size > 1) {
-                    ChipRow(listOf<String?>(null) + sources.map { it.id }, sourceId,
-                        { id -> if (id == null) s.allCategories else sources.first { it.id == id }.name },
-                        { sourceId = it }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp))
+                FilterBar(
+                    specs,
+                    onClear = if (anyFilter) ({ genre = null; sourceId = null; year = null }) else null,
+                    firstModifier = Modifier.entryFocus(),
+                )
+            }
+        }
+    }
+}
+
+/** One dropdown-style filter: ids are strings (null = "all"). */
+class FilterSpec(
+    val title: String,
+    val options: List<Pair<String?, String>>,
+    val selected: String?,
+    val highlight: Boolean = true,
+    val onSelect: (String?) -> Unit,
+) {
+    val selectedLabel: String get() = options.firstOrNull { it.first == selected }?.second ?: options.firstOrNull()?.second.orEmpty()
+}
+
+/** Compact row of filter buttons; each opens an easy D-pad list on the right. */
+@Composable
+fun FilterBar(specs: List<FilterSpec>, onClear: (() -> Unit)?, firstModifier: Modifier = Modifier) {
+    val s = LocalStrings.current
+    var open by remember { mutableStateOf<Int?>(null) }
+    Row(
+        Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        specs.forEachIndexed { i, sp ->
+            PillButton(
+                sp.title + ":  " + sp.selectedLabel,
+                icon = Icons.Filled.KeyboardArrowDown, compact = true,
+                selected = sp.highlight && sp.selected != null,
+                modifier = if (i == 0) firstModifier else Modifier,
+                onClick = { open = i },
+            )
+        }
+        if (onClear != null) PillButton(s.clearFilters, icon = Icons.Filled.Close, compact = true, onClick = onClear)
+    }
+    open?.let { idx -> specs.getOrNull(idx)?.let { FilterSheet(it) { open = null } } }
+}
+
+@Composable
+private fun FilterSheet(spec: FilterSpec, onDismiss: () -> Unit) {
+    val fr = remember { FocusRequester() }
+    val selIdx = spec.options.indexOfFirst { it.first == spec.selected }.coerceAtLeast(0)
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = (selIdx - 3).coerceAtLeast(0))
+    LaunchedEffect(Unit) { delay(80); runCatching { fr.requestFocus() } }
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.fillMaxSize().clickable(onClick = onDismiss), contentAlignment = Alignment.CenterEnd) {
+            Column(
+                Modifier.padding(16.dp).width(340.dp).fillMaxHeight()
+                    .glass(RoundedCornerShape(24.dp), tint = .10f)
+                    .background(Bg.copy(alpha = .88f))
+                    .padding(20.dp)
+            ) {
+                Text(spec.title, style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(14.dp))
+                LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    itemsIndexed(spec.options) { i, (id, label) ->
+                        FocusFrame(
+                            onClick = { spec.onSelect(id); onDismiss() },
+                            focusedScale = 1.03f, shape = RoundedCornerShape(14.dp),
+                            focusRequester = if (i == selIdx) fr else null,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { focused ->
+                            Row(
+                                Modifier.fillMaxWidth().background(if (focused) Color.White else Color.White.copy(alpha = .06f))
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(label, Modifier.weight(1f), color = if (focused) Color.Black else Color.White, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
+                                if (i == selIdx) Icon(Icons.Filled.Check, null, tint = if (focused) Color.Black else LocalAccent.current)
+                            }
+                        }
+                    }
                 }
-                ChipRow(listOf<String?>(null) + ALL_GENRES, genre, { it ?: s.allGenres }, { genre = it },
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp))
             }
         }
     }

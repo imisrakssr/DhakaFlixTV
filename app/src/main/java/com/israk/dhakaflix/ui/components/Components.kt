@@ -170,7 +170,11 @@ fun PosterCard(
             }
         }
         if (showTitle) {
+            // Apple-TV style: on TV the title only appears under the focused poster
+            val isTv = LocalIsTv.current
+            val titleAlpha by animateFloatAsState(if (!isTv || focused) 1f else 0f, label = "title")
             Spacer(Modifier.height(8.dp))
+            Column(Modifier.graphicsLayer { alpha = titleAlpha }) {
             Text(
                 item.displayTitle, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.labelLarge,
@@ -182,6 +186,7 @@ fun PosterCard(
                     .joinToString("  ·  "),
                 style = MaterialTheme.typography.labelSmall, color = TextDim.copy(alpha = .7f), maxLines = 1,
             )
+            }
         }
     }
 }
@@ -202,7 +207,7 @@ fun PosterImage(item: ItemEntity, modifier: Modifier) {
         val url = item.posterUrl()
         if (url != null) {
             AsyncImage(
-                model = ImageRequest.Builder(ctx).data(url).size(342, 513).crossfade(true).build(),
+                model = ImageRequest.Builder(ctx).data(url).size(240, 360).build(),
                 contentDescription = item.displayTitle,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
@@ -239,7 +244,7 @@ fun LandscapeCard(
         ) {
             Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(Surface2)) {
                 AsyncImage(
-                    model = ImageRequest.Builder(ctx).data(item.backdropUrl(false)).size(500, 281).crossfade(true).build(),
+                    model = ImageRequest.Builder(ctx).data(item.backdropUrl(false)).size(440, 248).build(),
                     contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(),
                 )
                 Box(

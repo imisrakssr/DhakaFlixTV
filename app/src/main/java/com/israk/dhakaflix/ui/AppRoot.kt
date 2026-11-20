@@ -64,6 +64,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.runtime.toMutableStateList
+import androidx.compose.ui.window.Dialog
+import androidx.compose.material.icons.filled.Close
+import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -120,6 +131,9 @@ private fun Tab.icon(): ImageVector = when (this) {
     Tab.SEARCH -> Icons.Filled.Search; Tab.LIBRARY -> AppIcons.Library; Tab.SETTINGS -> Icons.Filled.Settings
 }
 
+/** While true the nav bar can't take focus (e.g. focus is inside the settings detail pane). */
+val LocalNavLock = compositionLocalOf<MutableState<Boolean>?> { null }
+
 /** Set by scrolling screens; the TV top bar slides away while content is scrolled. */
 val LocalScrolled = compositionLocalOf<MutableState<Boolean>?> { null }
 
@@ -133,7 +147,10 @@ fun ReportScroll(isScrolled: () -> Boolean) {
 /** Opening "play:<id>" shows the detail page and starts playback right away. */
 @Composable
 fun AppRoot(onExit: () -> Unit) {
-    val stack = remember { mutableStateListOf<String>() }
+    // saveable: survives the system reclaiming the activity while a movie plays (1 GB TV sticks)
+    val stack = rememberSaveable(
+        saver = listSaver<SnapshotStateList<String>, String>(save = { it.toList() }, restore = { it.toMutableStateList() })
+    ) { mutableStateListOf() }
     var tab by rememberSaveable { mutableStateOf(Tab.HOME) }
     val holder = rememberSaveableStateHolder()
     val open: (String) -> Unit = { stack.add(it) }
@@ -173,14 +190,26 @@ private fun MainScaffold(tab: Tab, currentTab: () -> Tab, onTab: (Tab) -> Unit, 
     val requesters = remember { Tab.entries.associateWith { FocusRequester() } }
     var navFocused by remember { mutableStateOf(false) }
     val scrolled = remember { mutableStateOf(false) }
+    val navLock = remember { mutableStateOf(false) }
+    var railActive by remember { mutableStateOf(false) }
+    var askExit by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val fm = LocalFocusManager.current
+
+    fun focusNav() {
+        navLock.value = false
+        if (left) railActive = true
+        scope.launch { delay(40); runCatching { requesters.getValue(currentTab()).requestFocus() } }
+    }
 
     BackHandler {
         when {
-            isTv && !navFocused -> runCatching { requesters.getValue(currentTab()).requestFocus() }
+            isTv && !navFocused -> focusNav()
             tab != Tab.HOME -> onTab(Tab.HOME)
-            else -> onExit()
+            else -> askExit = true
         }
     }
+    if (askExit) ExitDialog(onStay = { askExit = false }, onExit = onExit)
 
     val content: @Composable () -> Unit = {
         AnimatedContent(
@@ -213,32 +242,51 @@ private fun MainScaffold(tab: Tab, currentTab: () -> Tab, onTab: (Tab) -> Unit, 
     if (isTv) {
         LaunchedEffect(Unit) {
             delay(150)
-            if (FocusMemory.restoreId == null) runCatching { requesters.getValue(tab).requestFocus() }
-            else {
+            if (FocusMemory.restoreId != null) {
                 delay(700)
-                if (FocusMemory.restoreId != null) {
-                    FocusMemory.restoreId = null
-                    runCatching { requesters.getValue(tab).requestFocus() }
-                }
+                if (FocusMemory.restoreId == null) return@LaunchedEffect
+                FocusMemory.restoreId = null
             }
+            if (left) {
+                // rail stays closed: start in the content
+                if (runCatching { entry.requestFocus() }.isFailure) focusNav()
+            } else runCatching { requesters.getValue(tab).requestFocus() }
         }
-        val nav = NavHandle(currentTab, onTab, requesters, entry) { navFocused = it }
+        val nav = NavHandle(currentTab, onTab, requesters, entry) {
+            navFocused = it
+            if (!it) railActive = false
+        }
         Box(Modifier.fillMaxSize().background(Bg)) {
             if (left) {
-                Box(Modifier.fillMaxSize().padding(start = 76.dp)) {
+                Box(
+                    Modifier.fillMaxSize().padding(start = 76.dp)
+                        // the rail opens only when LEFT is pressed at the very left of the content
+                        .onKeyEvent { e ->
+                            if (e.type != KeyEventType.KeyDown || e.key != Key.DirectionLeft) return@onKeyEvent false
+                            if (fm.moveFocus(FocusDirection.Left)) return@onKeyEvent true
+                            focusNav()
+                            true
+                        }
+                ) {
                     CompositionLocalProvider(
                         LocalTopInset provides 20.dp,
                         LocalEdge provides 28.dp,
                         LocalEntryFocus provides entry,
                         LocalScrolled provides scrolled,
+                        LocalNavLock provides navLock,
                     ) { content() }
                 }
-                LeftRail(nav)
+                LeftRail(nav, active = railActive) { t ->
+                    onTab(t)
+                    // picking a tab closes the rail and moves into the page
+                    scope.launch { delay(120); runCatching { entry.requestFocus() } }
+                }
             } else {
                 CompositionLocalProvider(
                     LocalTopInset provides 70.dp,
                     LocalEntryFocus provides entry,
                     LocalScrolled provides scrolled,
+                    LocalNavLock provides navLock,
                 ) { content() }
                 // fade that hides rows scrolling under the (hidden) tab bar
                 val scrimAlpha by animateFloatAsState(if (scrolled.value) 1f else 0f, tween(300), label = "scrim")
@@ -246,7 +294,7 @@ private fun MainScaffold(tab: Tab, currentTab: () -> Tab, onTab: (Tab) -> Unit, 
                     Modifier.fillMaxWidth().height(78.dp).graphicsLayer { alpha = scrimAlpha }
                         .background(Brush.verticalGradient(listOf(Bg, Bg.copy(alpha = .85f), Bg.copy(alpha = 0f))))
                 )
-                TvTopBar(nav, visible = navFocused || !scrolled.value)
+                TvTopBar(nav, visible = navFocused || !scrolled.value, locked = navLock.value)
             }
         }
     } else {
@@ -318,7 +366,7 @@ private fun SyncIndicator() {
 }
 
 @Composable
-private fun TvTopBar(nav: NavHandle, visible: Boolean) {
+private fun TvTopBar(nav: NavHandle, visible: Boolean, locked: Boolean) {
     val s = LocalStrings.current
     val shown by animateFloatAsState(if (visible) 1f else 0f, tween(280), label = "bar")
     val tab = nav.currentTab()
@@ -340,7 +388,7 @@ private fun TvTopBar(nav: NavHandle, visible: Boolean) {
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Tab.entries.forEach { t ->
-                TabPill(t.label(s), t == tab, nav.requesters.getValue(t), isCurrent = { nav.currentTab() == t }, redirect = nav::focusCurrent) { nav.onTab(t) }
+                TabPill(t.label(s), t == tab, nav.requesters.getValue(t), !locked, isCurrent = { nav.currentTab() == t }, redirect = nav::focusCurrent) { nav.onTab(t) }
             }
         }
         Box(Modifier.align(Alignment.CenterEnd).padding(end = LocalEdge.current)) { SyncIndicator() }
@@ -349,7 +397,7 @@ private fun TvTopBar(nav: NavHandle, visible: Boolean) {
 
 @Composable
 private fun TabPill(
-    text: String, selected: Boolean, fr: FocusRequester,
+    text: String, selected: Boolean, fr: FocusRequester, focusable: Boolean,
     isCurrent: () -> Boolean, redirect: () -> Unit, onSelect: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -367,6 +415,7 @@ private fun TabPill(
         text,
         Modifier
             .focusRequester(fr)
+            .focusProperties { canFocus = focusable }
             .onFocusChanged {
                 focused = it.isFocused
                 if (it.isFocused && !isCurrent()) redirect()
@@ -382,7 +431,7 @@ private fun TabPill(
 }
 
 @Composable
-private fun LeftRail(nav: NavHandle) {
+private fun LeftRail(nav: NavHandle, active: Boolean, onPick: (Tab) -> Unit) {
     val s = LocalStrings.current
     var expanded by remember { mutableStateOf(false) }
     val width: Dp by animateDpAsState(if (expanded) 220.dp else 64.dp, tween(240), label = "rail")
@@ -403,7 +452,7 @@ private fun LeftRail(nav: NavHandle) {
         ) {
             Image(painterResource(R.drawable.logo_mark), "DhakaFlix", Modifier.padding(start = 6.dp, bottom = 14.dp).size(32.dp))
             Tab.entries.forEach { t ->
-                RailItem(t.icon(), t.label(s), t == tab, expanded, nav.requesters.getValue(t), isCurrent = { nav.currentTab() == t }, redirect = nav::focusCurrent) { nav.onTab(t) }
+                RailItem(t.icon(), t.label(s), t == tab, expanded, nav.requesters.getValue(t), active, isCurrent = { nav.currentTab() == t }, redirect = nav::focusCurrent) { onPick(t) }
             }
             Spacer(Modifier.weight(1f))
             Box(Modifier.padding(start = 14.dp)) { SyncIndicator() }
@@ -413,7 +462,7 @@ private fun LeftRail(nav: NavHandle) {
 
 @Composable
 private fun RailItem(
-    icon: ImageVector, text: String, selected: Boolean, expanded: Boolean, fr: FocusRequester,
+    icon: ImageVector, text: String, selected: Boolean, expanded: Boolean, fr: FocusRequester, focusable: Boolean,
     isCurrent: () -> Boolean, redirect: () -> Unit, onSelect: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -427,6 +476,7 @@ private fun RailItem(
     Row(
         Modifier.fillMaxWidth()
             .focusRequester(fr)
+            .focusProperties { canFocus = focusable }
             .onFocusChanged {
                 focused = it.isFocused
                 if (it.isFocused && !isCurrent()) redirect()
@@ -443,6 +493,28 @@ private fun RailItem(
                 text, Modifier.padding(start = 14.dp), color = fg, maxLines = 1,
                 style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold,
             )
+        }
+    }
+}
+
+@Composable
+private fun ExitDialog(onStay: () -> Unit, onExit: () -> Unit) {
+    val s = LocalStrings.current
+    val fr = remember { FocusRequester() }
+    LaunchedEffect(Unit) { delay(80); runCatching { fr.requestFocus() } }
+    Dialog(onDismissRequest = onStay) {
+        androidx.compose.foundation.layout.Column(
+            Modifier.glass(RoundedCornerShape(26.dp), tint = .12f).background(Bg.copy(alpha = .7f)).padding(28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Image(painterResource(R.drawable.logo_mark), null, Modifier.size(52.dp))
+            Spacer(Modifier.height(14.dp))
+            Text(s.exitTitle, style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(22.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                com.israk.dhakaflix.ui.components.PillButton(s.exitNo, onClick = onStay, primary = true, focusRequester = fr)
+                com.israk.dhakaflix.ui.components.PillButton(s.exitYes, onClick = onExit, icon = Icons.Filled.Close)
+            }
         }
     }
 }

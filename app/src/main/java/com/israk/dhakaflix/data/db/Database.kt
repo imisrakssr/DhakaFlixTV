@@ -25,7 +25,7 @@ import kotlinx.coroutines.flow.Flow
 /** One movie or series folder on the server. */
 @Entity(
     tableName = "items",
-    indices = [Index("groupKey"), Index("uploadedAt"), Index("parentUrl"), Index("type"), Index("isPrimary")],
+    indices = [Index("groupKey"), Index("uploadedAt"), Index("parentUrl"), Index("type"), Index("isPrimary"), Index("isPrimary", "type", "uploadedAt")],
 )
 data class ItemEntity(
     @PrimaryKey val id: String,          // absolute folder URL
@@ -276,7 +276,7 @@ interface ProgressDao {
 
 @Database(
     entities = [ItemEntity::class, DirCacheEntity::class, UserStateEntity::class, ProgressEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -288,8 +288,14 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         fun create(ctx: Context): AppDatabase =
             Room.databaseBuilder(ctx, AppDatabase::class.java, "dhakaflix.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
+
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_items_isPrimary_type_uploadedAt ON items (isPrimary, type, uploadedAt)")
+            }
+        }
 
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {

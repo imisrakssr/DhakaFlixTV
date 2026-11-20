@@ -4,6 +4,9 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -186,17 +189,29 @@ fun HomeScreen(onOpen: (String) -> Unit) {
     val rowFrs = remember { HashMap<String, FocusRequester>() }
     fun frFor(k: String) = rowFrs.getOrPut(k) { FocusRequester() }
 
+    /** Eased scroll that lines an item up under the top inset (smoother than the default spring). */
+    suspend fun smoothScrollTo(index: Int) {
+        val info = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
+        if (info != null) {
+            val target = info.offset - listState.layoutInfo.beforeContentPadding
+            if (target != 0) listState.animateScrollBy(target.toFloat(), tween(340, easing = FastOutSlowInEasing))
+        } else {
+            listState.scrollToItem(index)
+        }
+    }
+
     fun goRow(i: Int) {
         scope.launch {
             if (i < 0) {
-                listState.animateScrollToItem(0)
                 if (featured.isNotEmpty()) runCatching { bannerFr.requestFocus() } else focusManager.moveFocus(FocusDirection.Up)
+                smoothScrollTo(0)
                 return@launch
             }
             if (i > visible.lastIndex) return@launch
-            listState.animateScrollToItem(i + 1)
-            delay(40)
+            // focus first (instant feedback), then glide the row into place
             runCatching { frFor(visible[i].key).requestFocus() }
+            smoothScrollTo(i + 1)
+            runCatching { frFor(visible[i].key).requestFocus() } // in case the row wasn't composed yet
         }
     }
 
@@ -220,7 +235,11 @@ fun HomeScreen(onOpen: (String) -> Unit) {
                     playFr = bannerFr,
                     onPlay = { b -> onOpen("play:" + b.id) },
                     onInfo = { b -> onOpen(b.id) },
-                    onFocus = { focus.inRows = false },
+                    onFocus = {
+                        focus.inRows = false
+                        // always show the whole banner when it has focus (no cut-off title)
+                        if (listState.firstVisibleItemIndex != 0 || listState.firstVisibleItemScrollOffset != 0) scope.launch { smoothScrollTo(0) }
+                    },
                     onDown = { goRow(0) },
                     onNext = { if (featured.isNotEmpty()) bannerIndex = (bannerIndex + 1) % featured.size },
                 )
@@ -378,9 +397,9 @@ private fun HomeBackdrop(focus: HomeFocus, bannerItem: ItemEntity?) {
     val target = if (focus.inRows) focus.item ?: bannerItem else bannerItem
     var shown by remember { mutableStateOf<ItemEntity?>(null) }
     // wait until the user pauses on a card before decoding a big image (keeps scrolling smooth)
-    LaunchedEffect(target?.id) { delay(if (shown == null) 0 else 450); shown = target }
+    LaunchedEffect(target?.id) { delay(if (shown == null) 0 else 700); shown = target }
     Box(Modifier.fillMaxSize()) {
-        Crossfade(targetState = shown?.backdropUrl(true), animationSpec = tween(600), label = "backdrop") { url ->
+        Crossfade(targetState = shown?.backdropUrl(true), animationSpec = tween(450), label = "backdrop") { url ->
             if (url != null) {
                 AsyncImage(
                     model = ImageRequest.Builder(ctx).data(url).size(960, 540).build(),
@@ -389,8 +408,16 @@ private fun HomeBackdrop(focus: HomeFocus, bannerItem: ItemEntity?) {
             }
         }
         val dim by animateFloatAsState(if (focus.inRows) 0.55f else 0f, tween(500), label = "dim")
-        Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to Bg.copy(alpha = .92f), 0.6f to Bg.copy(alpha = .25f), 1f to Color.Transparent)))
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Bg.copy(alpha = .5f), 0.25f to Color.Transparent, 0.6f to Bg.copy(alpha = .75f), 1f to Bg)))
-        Box(Modifier.fillMaxSize().background(Bg.copy(alpha = dim)))
+        // one draw pass for all scrims (cheaper on Mali GPUs than three stacked layers)
+        Spacer(
+            Modifier.fillMaxSize().drawWithCache {
+                val h = Brush.horizontalGradient(0f to Bg.copy(alpha = .92f), 0.6f to Bg.copy(alpha = .25f), 1f to Color.Transparent)
+                val v = Brush.verticalGradient(0f to Bg.copy(alpha = .5f), 0.25f to Color.Transparent, 0.6f to Bg.copy(alpha = .75f), 1f to Bg)
+                onDrawBehind {
+                    drawRect(h); drawRect(v)
+                    if (dim > 0f) drawRect(Bg.copy(alpha = dim))
+                }
+            }
+        )
     }
 }

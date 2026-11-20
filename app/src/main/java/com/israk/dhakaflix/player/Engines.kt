@@ -21,6 +21,8 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.SeekParameters
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.ForwardingAudioSink
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import org.videolan.libvlc.LibVLC
@@ -62,6 +64,8 @@ interface VideoEngine {
     val supportsSubtitleDelay: Boolean
     fun setSubtitleDelay(ms: Long)
     fun setSpeed(speed: Float)
+    /** Audio delay in ms; positive plays sound later (fixes video lagging behind audio). */
+    fun setAudioDelay(ms: Long)
     /** 0 = fit, 1 = zoom/crop, 2 = stretch */
     fun setScale(mode: Int)
     fun release()
@@ -75,15 +79,37 @@ private fun langName(code: String?): String? {
 
 // ---------------------------------------------------------------- ExoPlayer
 
+/** Shifts the audio clock the video syncs to, giving ExoPlayer an adjustable A/V offset. */
+@OptIn(UnstableApi::class)
+private class OffsetAudioSink(sink: AudioSink, private val offsetUs: () -> Long) : ForwardingAudioSink(sink) {
+    override fun getCurrentPositionUs(sourceEnded: Boolean): Long {
+        val p = super.getCurrentPositionUs(sourceEnded)
+        return if (p == AudioSink.CURRENT_POSITION_NOT_SET) p else p + offsetUs()
+    }
+}
+
+@OptIn(UnstableApi::class)
+private class SyncRenderersFactory(ctx: Context, private val offsetUs: () -> Long) : DefaultRenderersFactory(ctx) {
+    override fun buildAudioSink(
+        context: Context,
+        enableFloatOutput: Boolean,
+        enableAudioTrackPlaybackParams: Boolean,
+    ): AudioSink? {
+        val base = super.buildAudioSink(context, enableFloatOutput, enableAudioTrackPlaybackParams) ?: return null
+        return OffsetAudioSink(base, offsetUs)
+    }
+}
+
 @OptIn(UnstableApi::class)
 class ExoEngine(private val ctx: Context, preferSubs: Boolean) : VideoEngine {
     override val kind = EngineKind.EXO
     override var listener: EngineListener? = null
     private var view: PlayerView? = null
+    @Volatile private var audioDelayUs = 0L
 
     private val player: ExoPlayer = ExoPlayer.Builder(
         ctx,
-        DefaultRenderersFactory(ctx)
+        SyncRenderersFactory(ctx) { audioDelayUs }
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
             .setEnableDecoderFallback(true),
     )
@@ -229,6 +255,7 @@ class ExoEngine(private val ctx: Context, preferSubs: Boolean) : VideoEngine {
     override val supportsSubtitleDelay = false
     override fun setSubtitleDelay(ms: Long) {}
     override fun setSpeed(speed: Float) = player.setPlaybackSpeed(speed)
+    override fun setAudioDelay(ms: Long) { audioDelayUs = ms * 1000 }
 
     override fun setScale(mode: Int) {
         view?.resizeMode = when (mode) {
@@ -318,6 +345,7 @@ class VlcEngine(ctx: Context) : VideoEngine {
     override val supportsSubtitleDelay = true
     override fun setSubtitleDelay(ms: Long) { mp.setSpuDelay(ms * 1000) }
     override fun setSpeed(speed: Float) { mp.setRate(speed) }
+    override fun setAudioDelay(ms: Long) { mp.setAudioDelay(ms * 1000) }
 
     override fun setScale(mode: Int) {
         mp.setVideoScale(
