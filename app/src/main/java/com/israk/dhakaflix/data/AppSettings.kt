@@ -7,6 +7,8 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 
 class AppSettings(ctx: Context) {
+    companion object { const val DEFAULT_AUDIO_DELAY = -30L }
+
     private val prefs = ctx.getSharedPreferences("dhakaflix_settings", Context.MODE_PRIVATE)
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
@@ -30,9 +32,23 @@ class AppSettings(ctx: Context) {
     fun setUiSize(v: Int) { _uiSize.value = v; prefs.edit().putInt("ui_size", v).apply() }
 
     /** Audio delay in ms (positive = sound later). Device-wide, so it's remembered. */
-    private val _audioDelay = MutableStateFlow(prefs.getLong("audio_delay", 0L))
+    private val _audioDelay = MutableStateFlow(prefs.getLong("audio_delay", DEFAULT_AUDIO_DELAY))
     val audioDelay: StateFlow<Long> = _audioDelay
     fun setAudioDelay(v: Long) { _audioDelay.value = v; prefs.edit().putLong("audio_delay", v).apply() }
+
+    private val _subDelay = MutableStateFlow(prefs.getLong("sub_delay", 0L))
+    val subDelay: StateFlow<Long> = _subDelay
+    fun setSubDelay(v: Long) { _subDelay.value = v; prefs.edit().putLong("sub_delay", v).apply() }
+
+    /** Titles opened from the Search page, newest first. */
+    private val _recentSearch = MutableStateFlow(prefs.getString("recent_search", "")!!.split('\n').filter { it.isNotBlank() })
+    val recentSearch: StateFlow<List<String>> = _recentSearch
+    fun addRecentSearch(id: String) {
+        val v = (listOf(id) + _recentSearch.value.filter { it != id }).take(30)
+        _recentSearch.value = v
+        prefs.edit().putString("recent_search", v.joinToString("\n")).apply()
+    }
+    fun clearRecentSearch() { _recentSearch.value = emptyList(); prefs.edit().remove("recent_search").apply() }
 
     private val _tmdbKey = MutableStateFlow(prefs.getString("tmdb_key", "") ?: "")
     val tmdbKey: StateFlow<String> = _tmdbKey

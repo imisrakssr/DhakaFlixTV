@@ -499,6 +499,14 @@ private fun PlayerCard() {
                 PillButton("LibVLC", onClick = { st.setEngine("vlc") }, selected = engine == "vlc", compact = true)
             }
         }
+        val audioDelay by st.audioDelay.collectAsState()
+        val subDelay by st.subDelay.collectAsState()
+        Card {
+            Label(s.defaultSync)
+            SyncRow(s.audioSync, audioDelay, step = 10) { v -> st.setAudioDelay(v ?: com.israk.dhakaflix.data.AppSettings.DEFAULT_AUDIO_DELAY) }
+            Spacer(Modifier.height(10.dp))
+            SyncRow(s.subtitleSync, subDelay, step = 100) { v -> st.setSubDelay(v ?: 0L) }
+        }
         ToggleRow(s.autoPlayNext, checked = autoNext, onToggle = { st.setAutoNext(!autoNext) })
         ToggleRow(s.subtitlesByDefault, checked = subsDefault, onToggle = { st.setSubsDefault(!subsDefault) })
     }
@@ -526,6 +534,23 @@ private fun AboutCard() {
 }
 
 // ------------------------------------------------------------------ bits
+
+/** "Audio sync   −   -0.03 s   +   Reset" — value in ms; null = reset to default. */
+@Composable
+private fun SyncRow(title: String, valueMs: Long, step: Long, onChange: (Long?) -> Unit) {
+    val s = LocalStrings.current
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(title, Modifier.width(170.dp), color = Color.White, style = MaterialTheme.typography.bodyLarge)
+        PillButton("−", compact = true, onClick = { onChange(valueMs - step) })
+        Text(
+            String.format(java.util.Locale.US, "%+.2f s", valueMs / 1000.0),
+            Modifier.width(86.dp), color = Color.White, style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.Center, fontWeight = FontWeight.Bold,
+        )
+        PillButton("+", compact = true, onClick = { onChange(valueMs + step) })
+        PillButton(s.resetDefault, compact = true, onClick = { onChange(null) })
+    }
+}
 
 @Composable
 private fun ToggleRow(

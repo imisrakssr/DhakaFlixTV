@@ -71,7 +71,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
                     onClick = {
                         scope.launch {
                             val (list, idx) = repo.playlistFromProgress(e.progress)
-                            PlayerActivity.start(ctx, list, idx)
+                            PlayerActivity.start(ctx, list, idx, PlayerActivity.MODE_RESUME)
                         }
                     },
                 )
@@ -79,12 +79,12 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
         }
         item {
             MediaRow(s.myWatchlist, watchlist, key = { it.id }, modifier = if (cw.isEmpty()) entryMod else Modifier) { item ->
-                PosterCard(item, posterW, onClick = { onOpen(item.id) })
+                PosterCard(item, posterW, onClick = { onOpen(item.id) }, menu = com.israk.dhakaflix.ui.components.CardMenu.LIBRARY)
             }
         }
         item {
             MediaRow(s.history, watched, key = { it.id }, modifier = if (cw.isEmpty() && watchlist.isEmpty()) entryMod else Modifier) { item ->
-                PosterCard(item, posterW, watched = true, onClick = { onOpen(item.id) })
+                PosterCard(item, posterW, watched = true, onClick = { onOpen(item.id) }, menu = com.israk.dhakaflix.ui.components.CardMenu.LIBRARY)
             }
         }
     }

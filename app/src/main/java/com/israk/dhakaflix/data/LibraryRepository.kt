@@ -29,6 +29,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.transform
+import androidx.room.withTransaction
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -98,8 +102,8 @@ class LibraryRepository(private val app: DhakaFlixApp) {
     private val net = Semaphore(4)
     private val seasonCache = ConcurrentHashMap<String, Map<Int, TmdbEpisode>>()
 
-    val itemCount: Flow<Int> get() = db.items().countFlow()
-    val pendingMeta: Flow<Int> get() = db.items().pendingCount()
+    val itemCount: Flow<Int> get() = db.items().countFlow().throttleLatest(1500).distinctUntilChanged()
+    val pendingMeta: Flow<Int> get() = db.items().pendingCount().throttleLatest(2000).distinctUntilChanged()
 
     // ------------------------------------------------------------------ sync
 
@@ -227,16 +231,17 @@ class LibraryRepository(private val app: DhakaFlixApp) {
             while (true) {
                 val batch = db.items().needingPoster(anyMeta, 40)
                 if (batch.isEmpty()) break
-                coroutineScope {
+                val found = coroutineScope {
                     batch.map { item ->
                         async {
                             net.withPermit {
                                 val entries = runCatching { h5ai.list(item.id) }.getOrNull()
-                                db.items().setPosterChecked(item.id, entries?.let { pickPoster(it).first })
+                                item.id to entries?.let { pickPoster(it).first }
                             }
                         }
                     }.awaitAll()
                 }
+                db.withTransaction { found.forEach { (id, poster) -> db.items().setPosterChecked(id, poster) } }
             }
         }
     }
@@ -260,47 +265,65 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         }
     }
 
+    private sealed interface Outcome {
+        class Match(val item: ItemEntity, val r: TmdbResult) : Outcome
+        class Miss(val id: String) : Outcome
+        object Skip : Outcome
+        object Fail : Outcome
+    }
+
     private suspend fun enrichLoop() {
         val sem = Semaphore(8)
         var batches = 0
         while (true) {
             val batch = db.items().pendingMeta(40)
             if (batch.isEmpty()) break
-            val ok = coroutineScope {
-                batch.map { item -> async { sem.withPermit { enrichOne(item) } } }.awaitAll()
+            val outcomes = coroutineScope {
+                batch.map { item -> async { sem.withPermit { lookup(item) } } }.awaitAll()
             }
-            if (ok.none { it }) break // TMDB unreachable: stop, retry next launch
+            if (outcomes.all { it is Outcome.Fail }) break // TMDB unreachable: stop, retry next launch
+            // one transaction per batch = one UI refresh instead of 40 (keeps the TV UI smooth)
+            db.withTransaction { outcomes.forEach { applyOutcome(it) } }
             if (++batches % 5 == 0) db.items().recomputePrimary()
         }
         db.items().recomputePrimary()
     }
 
+    private suspend fun applyOutcome(o: Outcome) {
+        when (o) {
+            is Outcome.Match -> applyResult(o.item, o.r, ItemEntity.META_MATCHED)
+            is Outcome.Miss -> db.items().setMetaState(o.id, ItemEntity.META_NOT_FOUND)
+            else -> Unit
+        }
+    }
+
     /** @return false on network failure (item stays pending). */
     private suspend fun enrichOne(item: ItemEntity): Boolean {
+        val o = lookup(item)
+        applyOutcome(o)
+        return o !is Outcome.Fail
+    }
+
+    private suspend fun lookup(item: ItemEntity): Outcome {
         val tv = item.isSeries
         val q = NameParser.searchQuery(item.title)
         return try {
             var results = tmdb.search(tv, q, item.year)
             if (results.isEmpty() && item.year != null) results = tmdb.search(tv, q, null)
             val best = pickBest(results, item.title, item.year)
-            if (best == null) db.items().setMetaState(item.id, ItemEntity.META_NOT_FOUND)
-            else applyResult(item, best, ItemEntity.META_MATCHED)
-            true
+            if (best == null) Outcome.Miss(item.id) else Outcome.Match(item, best)
         } catch (e: CancellationException) {
             throw e
         } catch (e: TmdbClient.RateLimited) {
-            delay(2500); true
+            delay(2500); Outcome.Skip
         } catch (e: kotlinx.serialization.SerializationException) {
-            db.items().setMetaState(item.id, ItemEntity.META_NOT_FOUND); true
+            Outcome.Miss(item.id)
         } catch (e: TmdbClient.HttpError) {
             // a bad request for this title will never succeed: don't retry it forever
-            if (e.code in 400..499) db.items().setMetaState(item.id, ItemEntity.META_NOT_FOUND)
-            e.code in 400..499
-        } catch (e: TmdbClient.Unauthorized) {
-            false
+            if (e.code in 400..499) Outcome.Miss(item.id) else Outcome.Fail
         } catch (e: Exception) {
             Log.w(TAG, "tmdb failed for ${item.title}", e)
-            false
+            Outcome.Fail
         }
     }
 
@@ -501,6 +524,18 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         Unit
     }
 
+    suspend fun setInWatchlist(id: String, inList: Boolean): Unit = withContext(Dispatchers.IO) {
+        val u = db.user().get(id) ?: UserStateEntity(id)
+        db.user().put(u.copy(inWatchlist = inList, watchlistAt = System.currentTimeMillis()))
+    }
+
+    /** "Remove from My Library": out of the watchlist, history and continue watching. */
+    suspend fun removeFromLibrary(id: String): Unit = withContext(Dispatchers.IO) {
+        val u = db.user().get(id) ?: UserStateEntity(id)
+        db.user().put(u.copy(inWatchlist = false, watched = false))
+        db.progress().completeItem(id)
+    }
+
     suspend fun removeFromContinue(itemId: String): Unit = withContext(Dispatchers.IO) { db.progress().completeItem(itemId) }
 
     // ---------------------------------------------------------------- flows
@@ -509,9 +544,9 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         val latest = list.distinctBy { it.itemId }.take(20)
         val items = db.items().getMany(latest.map { it.itemId }).associateBy { it.id }
         latest.mapNotNull { p -> items[p.itemId]?.let { ContinueEntry(p, it) } }
-    }
+    }.distinctUntilChanged()
 
-    fun featured(): Flow<List<ItemEntity>> = db.items().featured(8)
+    fun featured(): Flow<List<ItemEntity>> = db.items().featured(8).throttleLatest(ROW_THROTTLE).distinctUntilChanged()
 
     /** Episodes of the season after [season] for a series, so playback can run across seasons. */
     suspend fun nextSeasonPlaylist(itemId: String, season: Int): List<PlayItem> = withContext(Dispatchers.IO) {
@@ -522,7 +557,9 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         }.getOrDefault(emptyList())
     }
 
-    fun rowFlow(key: String): Flow<List<ItemEntity>> {
+    fun rowFlow(key: String): Flow<List<ItemEntity>> = rawRowFlow(key).throttleLatest(ROW_THROTTLE).distinctUntilChanged()
+
+    private fun rawRowFlow(key: String): Flow<List<ItemEntity>> {
         val dao = db.items()
         return when {
             key == RowKeys.LATEST -> dao.latest(null, ROW_LIMIT)
@@ -560,6 +597,7 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         private const val TAG = "Library"
         private const val MAX_DEPTH = 4
         private const val ROW_LIMIT = 30
+        private const val ROW_THROTTLE = 3000L
         const val TEN_MINUTES = 10L * 60 * 1000
         const val THIRTY_MINUTES = 30L * 60 * 1000
 
@@ -568,4 +606,10 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         fun episodeLabel(season: Int?, episode: Int?): String? =
             if (episode == null) null else String.format("S%02dE%02d", season ?: 1, episode)
     }
+}
+
+/** Emits the first value at once, then at most one value per [periodMs] (always the latest). */
+fun <T> Flow<T>.throttleLatest(periodMs: Long): Flow<T> = conflate().transform {
+    emit(it)
+    delay(periodMs)
 }

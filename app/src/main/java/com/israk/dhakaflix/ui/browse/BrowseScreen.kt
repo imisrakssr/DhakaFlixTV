@@ -224,6 +224,8 @@ fun PosterGrid(
     items: LazyPagingItems<ItemEntity>,
     onOpen: (String) -> Unit,
     emptyText: String,
+    override: List<ItemEntity>? = null,
+    overrideTitle: String? = null,
     header: LazyGridScope.() -> Unit,
 ) {
     val app = DhakaFlixApp.instance
@@ -243,6 +245,26 @@ fun PosterGrid(
         verticalArrangement = Arrangement.spacedBy(if (isTv) 22.dp else 16.dp),
     ) {
         header()
+        if (override != null) {
+            if (overrideTitle != null && override.isNotEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Text(overrideTitle, color = Color.White, style = MaterialTheme.typography.titleMedium)
+                }
+            }
+            items(override.size, key = { override[it].id }) { i ->
+                val item = override[i]
+                PosterCard(
+                    item = item, width = Dp.Unspecified, modifier = Modifier.fillMaxWidth(),
+                    watched = item.id in watched, onClick = { onOpen(item.id) },
+                )
+            }
+            if (override.isEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Text(emptyText, Modifier.padding(vertical = 40.dp), color = TextDim, style = MaterialTheme.typography.titleMedium)
+                }
+            }
+            return@LazyVerticalGrid
+        }
         items(count = items.itemCount, key = items.itemKey { it.id }) { i ->
             val item = items[i]
             if (item != null) {

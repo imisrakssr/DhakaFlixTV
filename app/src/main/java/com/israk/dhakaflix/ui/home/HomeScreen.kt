@@ -179,7 +179,7 @@ fun HomeScreen(onOpen: (String) -> Unit) {
     val playContinue: (ContinueEntry) -> Unit = { e ->
         scope.launch {
             val (list, idx) = repo.playlistFromProgress(e.progress)
-            PlayerActivity.start(ctx, list, idx)
+            PlayerActivity.start(ctx, list, idx, PlayerActivity.MODE_RESUME)
         }
     }
 
@@ -211,7 +211,8 @@ fun HomeScreen(onOpen: (String) -> Unit) {
             // focus first (instant feedback), then glide the row into place
             runCatching { frFor(visible[i].key).requestFocus() }
             smoothScrollTo(i + 1)
-            runCatching { frFor(visible[i].key).requestFocus() } // in case the row wasn't composed yet
+            // in case the row wasn't composed yet; never leave the user stuck
+            if (runCatching { frFor(visible[i].key).requestFocus() }.isFailure) focusManager.moveFocus(FocusDirection.Down)
         }
     }
 

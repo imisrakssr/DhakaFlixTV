@@ -7,6 +7,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -44,6 +45,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -91,6 +93,7 @@ fun ItemEntity.backdropUrl(large: Boolean): String? =
 /**
  * Apple-TV style focus container: springs up in scale, gains an accent rim and lifts above neighbours.
  */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun FocusFrame(
     onClick: () -> Unit,
@@ -99,12 +102,15 @@ fun FocusFrame(
     focusedScale: Float = 1.06f,
     focusRequester: FocusRequester? = null,
     onFocusChange: (Boolean) -> Unit = {},
+    onLongClick: (() -> Unit)? = null,
     content: @Composable BoxScope.(focused: Boolean) -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
+    var longFired by remember { mutableStateOf(false) }
+    // short tween (no spring overshoot) keeps fast D-pad scrolling calm
     val scale by animateFloatAsState(
         if (focused) focusedScale else 1f,
-        spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow), label = "scale",
+        androidx.compose.animation.core.tween(170), label = "scale",
     )
     val accent = LocalAccent.current
     val rim by animateColorAsState(if (focused) accent else Color.Transparent, label = "rim")
@@ -119,9 +125,27 @@ fun FocusFrame(
                     onFocusChange(it.isFocused)
                 }
             }
+            // hold OK on the remote = long press (Android repeats the key-down while it's held)
+            .then(if (onLongClick == null) Modifier else Modifier.onPreviewKeyEvent { e ->
+                val k = e.nativeKeyEvent
+                val ok = k.keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER || k.keyCode == android.view.KeyEvent.KEYCODE_ENTER ||
+                    k.keyCode == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER
+                when {
+                    !ok -> false
+                    k.action == android.view.KeyEvent.ACTION_DOWN && k.repeatCount > 0 -> {
+                        if (!longFired) { longFired = true; onLongClick() }
+                        true
+                    }
+                    k.action == android.view.KeyEvent.ACTION_UP && longFired -> { longFired = false; true }
+                    else -> false
+                }
+            })
             .border(2.5.dp, rim, shape)
             .clip(shape)
-            .clickable(onClick = onClick),
+            .then(
+                if (onLongClick == null) Modifier.clickable(onClick = onClick)
+                else Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            ),
     ) { content(focused) }
 }
 
@@ -134,9 +158,12 @@ fun PosterCard(
     watched: Boolean = false,
     onFocused: () -> Unit = {},
     showTitle: Boolean = true,
+    menu: CardMenu = CardMenu.DEFAULT,
 ) {
     val fr = remember { FocusRequester() }
     var focused by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
+    if (showMenu) ItemMenu(item, menu) { showMenu = false }
     LaunchedEffect(item.id) {
         if (FocusMemory.restoreId == item.id) {
             FocusMemory.restoreId = null
@@ -148,6 +175,7 @@ fun PosterCard(
             onClick = { FocusMemory.restoreId = item.id; onClick() },
             focusRequester = fr,
             onFocusChange = { focused = it; if (it) onFocused() },
+            onLongClick = if (menu == CardMenu.NONE) null else ({ showMenu = true }),
         ) {
             PosterImage(item, Modifier.fillMaxWidth().aspectRatio(2f / 3f))
             if (watched) {
@@ -229,6 +257,8 @@ fun LandscapeCard(
     val ctx = LocalContext.current
     var focused by remember { mutableStateOf(false) }
     val fr = remember { FocusRequester() }
+    var showMenu by remember { mutableStateOf(false) }
+    if (showMenu) ItemMenu(item, CardMenu.CONTINUE) { showMenu = false }
     val memKey = "cw:" + item.id
     LaunchedEffect(item.id) {
         if (FocusMemory.restoreId == memKey) {
@@ -241,6 +271,7 @@ fun LandscapeCard(
             onClick = { FocusMemory.restoreId = memKey; onClick() },
             focusRequester = fr,
             onFocusChange = { focused = it; if (it) onFocused() },
+            onLongClick = { showMenu = true },
         ) {
             Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(Surface2)) {
                 AsyncImage(
@@ -290,6 +321,7 @@ fun <T> MediaRow(
             title, Modifier.padding(start = edge, bottom = 2.dp),
             style = MaterialTheme.typography.titleMedium, color = Color.White,
         )
+        PivotScroll(enabled = LocalIsTv.current, pivot = edge) {
         LazyRow(
             modifier = if (nav == null) Modifier else Modifier.onPreviewKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -312,6 +344,26 @@ fun <T> MediaRow(
                 ) { itemContent(it) }
             }
         }
+        }
+    }
+}
+
+/**
+ * TV rows scroll like Apple TV: the focused card glides to a fixed spot near the left edge on every
+ * move, instead of the row sitting still and then jumping when focus reaches the screen edge.
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+fun PivotScroll(enabled: Boolean, pivot: Dp, content: @Composable () -> Unit) {
+    if (!enabled) { content(); return }
+    val px = with(androidx.compose.ui.platform.LocalDensity.current) { pivot.toPx() }
+    val spec = remember(px) {
+        object : androidx.compose.foundation.gestures.BringIntoViewSpec {
+            override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = offset - px
+        }
+    }
+    androidx.compose.runtime.CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides spec) {
+        content()
     }
 }
 
@@ -461,4 +513,62 @@ fun Modifier.dpadScrollFallback(state: androidx.compose.foundation.gestures.Scro
         }
         true
     })
+}
+
+
+/** What the hold-OK menu offers for a card. */
+enum class CardMenu { NONE, DEFAULT, LIBRARY, CONTINUE }
+
+/** Hold-OK / long-press menu: mark watched + add to / remove from My Library. */
+@Composable
+fun ItemMenu(item: ItemEntity, mode: CardMenu, onDismiss: () -> Unit) {
+    val app = com.israk.dhakaflix.DhakaFlixApp.instance
+    val repo = app.library
+    val s = com.israk.dhakaflix.ui.theme.LocalStrings.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val user by remember(item.id) { app.db.user().observe(item.id) }.collectAsState(initial = null)
+    val watched = user?.watched == true
+    val inList = user?.inWatchlist == true
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) { kotlinx.coroutines.delay(80); runCatching { first.requestFocus() } }
+
+    val actions: List<Pair<String, suspend () -> Unit>> = buildList {
+        add((if (watched) s.markUnwatched else s.markWatched) to suspend { repo.setWatched(item.id, !watched) })
+        when (mode) {
+            CardMenu.LIBRARY -> add(s.removeFromLibrary to suspend { repo.removeFromLibrary(item.id) })
+            CardMenu.CONTINUE -> add(s.removeFromContinue to suspend { repo.removeFromContinue(item.id) })
+            else -> add((if (inList) s.removeFromLibrary else s.addToLibrary) to suspend { repo.setInWatchlist(item.id, !inList) })
+        }
+    }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier.width(380.dp).glass(RoundedCornerShape(24.dp), tint = .12f)
+                .background(com.israk.dhakaflix.ui.theme.Bg.copy(alpha = .85f)).padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                PosterImage(item, Modifier.width(54.dp).aspectRatio(2f / 3f).clip(RoundedCornerShape(8.dp)))
+                Spacer(Modifier.width(14.dp))
+                Column {
+                    Text(item.displayTitle, color = Color.White, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    item.displayYear?.let { Text(it.toString(), color = TextDim, style = MaterialTheme.typography.labelMedium) }
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            actions.forEachIndexed { i, (label, act) ->
+                FocusFrame(
+                    onClick = { scope.launch { act(); onDismiss() } },
+                    focusedScale = 1.03f, shape = RoundedCornerShape(14.dp),
+                    focusRequester = if (i == 0) first else null,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { f ->
+                    Text(
+                        label,
+                        Modifier.fillMaxWidth().background(if (f) Color.White else Color.White.copy(alpha = .07f)).padding(horizontal = 16.dp, vertical = 13.dp),
+                        color = if (f) Color.Black else Color.White, style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+            }
+        }
+    }
 }

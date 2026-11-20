@@ -21,6 +21,12 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.israk.dhakaflix.data.LibraryRepository
 import com.israk.dhakaflix.ui.AppRoot
+import com.israk.dhakaflix.ui.SplashScreen
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import com.israk.dhakaflix.ui.edgeFor
 import com.israk.dhakaflix.ui.theme.Bg
 import com.israk.dhakaflix.ui.theme.DhakaFlixTheme
@@ -57,8 +63,11 @@ class MainActivity : ComponentActivity() {
             ScaledDensity(isTv = tv, uiSize = uiSize) {
                 DhakaFlixTheme(accentIndex = accent, isTv = tv, edge = edgeFor(tv, width)) {
                     CompositionLocalProvider(LocalStrings provides strings) {
+                        var splashDone by rememberSaveable { mutableStateOf(false) }
                         Box(Modifier.fillMaxSize().background(Bg)) {
-                            AppRoot(onExit = { finish() })
+                            Crossfade(targetState = splashDone, animationSpec = tween(450), label = "splash") { done ->
+                                if (done) AppRoot(onExit = { finish() }) else SplashScreen { splashDone = true }
+                            }
                         }
                     }
                 }

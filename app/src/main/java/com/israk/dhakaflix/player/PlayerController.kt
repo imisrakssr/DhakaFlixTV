@@ -71,7 +71,7 @@ class PlayerController(
     private var cues: List<Cue> = emptyList()
     var subtitleText by mutableStateOf<String?>(null)
         private set
-    var subDelay by mutableLongStateOf(0L)
+    var subDelay by mutableLongStateOf(settings.subDelay.value)
         private set
     var audioDelay by mutableLongStateOf(settings.audioDelay.value)
         private set
@@ -88,6 +88,7 @@ class PlayerController(
     private var endedHandled = false
     private var lastSave = 0L
     private var seekTarget = -1L
+    private var seekJob: kotlinx.coroutines.Job? = null
     private var seekAt = 0L
     private var fetchedNextSeasonFor: Int? = null
 
@@ -107,6 +108,7 @@ class PlayerController(
 
     private suspend fun prepare(i: Int, mode: String) {
         index = i
+        subsChecked = false
         prefetchNextSeason()
         error = null; panel = null; endedHandled = false; triedFallback = false
         clearOwnSubs()
@@ -153,7 +155,7 @@ class PlayerController(
     }
 
     private fun createEngine(): VideoEngine =
-        (if (kind == EngineKind.EXO) ExoEngine(activity, settings.subsDefault.value) else VlcEngine(activity))
+        (if (kind == EngineKind.EXO) ExoEngine(activity, settings.subsDefault.value) else VlcEngine(activity, settings.subsDefault.value))
             .also { it.listener = this; it.setAudioDelay(audioDelay) }
 
     /** Called by the AndroidView factory whenever [viewGeneration] changes. */
@@ -182,16 +184,34 @@ class PlayerController(
             }
         }
         if (e.kind == EngineKind.EXO && settings.subsDefault.value) {
-            item.subs.firstOrNull { SubtitleParser.isOwnRendered(it) }?.let { selectOwnSub(it) }
+            // external .srt next to the video is usually the better match: load it right away
+            item.subs.firstOrNull { SubtitleParser.isOwnRendered(it) }?.let { subsChecked = true; selectOwnSub(it) }
         }
     }
 
     // ------------------------------------------------------------ periodic
 
+    private var subsChecked = false
+
+    /** "Subtitles on by default": if nothing got picked automatically, turn the first one on. */
+    private fun ensureDefaultSubs(e: VideoEngine) {
+        if (subsChecked || !settings.subsDefault.value) return
+        subsChecked = true
+        if (ownSubUrl != null) return
+        val tracks = e.textTracks()
+        if (tracks.any { it.selected }) return
+        val own = current.subs.firstOrNull { SubtitleParser.isOwnRendered(it) }
+        when {
+            e.kind == EngineKind.EXO && own != null -> selectOwnSub(own)
+            tracks.isNotEmpty() -> e.selectText(tracks.first().id)
+        }
+    }
+
     fun tick() {
         val e = engine ?: return
-        position = e.position
+        if (seekJob?.isActive != true && SystemClock.elapsedRealtime() - seekAt > 900) position = e.position
         duration = e.duration
+        if (!subsChecked && duration > 0 && position > 1500) ensureDefaultSubs(e)
         isPlaying = e.isPlaying
         buffering = e.isBuffering
         subtitleText = if (ownSubUrl != null) SubtitleParser.at(cues, position, subDelay) else null
@@ -232,8 +252,13 @@ class PlayerController(
         val max = if (duration > 0) duration - 1000 else Long.MAX_VALUE
         val t = (base + delta).coerceIn(0, max)
         seekTarget = t; seekAt = now
-        e.seekTo(t)
         position = t
+        // coalesce rapid presses into one real seek (each seek restarts buffering)
+        seekJob?.cancel()
+        seekJob = scope.launch {
+            delay(350)
+            engine?.seekTo(seekTarget)
+        }
         if (!controlsVisible) {
             seekFlashDelta = if (now - seekFlashAt < 1500) seekFlashDelta + delta else delta
             seekFlashAt = now
@@ -319,12 +344,13 @@ class PlayerController(
 
     fun shiftSubtitles(deltaMs: Long?) {
         subDelay = if (deltaMs == null) 0L else (subDelay + deltaMs).coerceIn(-60_000, 60_000)
+        settings.setSubDelay(subDelay)
         if (ownSubUrl == null) engine?.takeIf { it.supportsSubtitleDelay }?.setSubtitleDelay(subDelay)
         interaction++
     }
 
     fun shiftAudio(deltaMs: Long?) {
-        audioDelay = if (deltaMs == null) 0L else (audioDelay + deltaMs).coerceIn(-3_000, 3_000)
+        audioDelay = if (deltaMs == null) com.israk.dhakaflix.data.AppSettings.DEFAULT_AUDIO_DELAY else (audioDelay + deltaMs).coerceIn(-3_000, 3_000)
         engine?.setAudioDelay(audioDelay)
         settings.setAudioDelay(audioDelay)
         interaction++

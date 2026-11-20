@@ -70,7 +70,19 @@ fun SearchScreen(onOpen: (String) -> Unit) {
     val filter = BrowseFilter(type = type, query = debounced, year = year, sort = sort)
     val items = rememberBrowsePager(filter).collectAsLazyPagingItems()
 
-    PosterGrid(items, onOpen, emptyText = s.noResults) {
+    // with an empty search box the page shows only titles you opened from search before
+    val recentIds by app.settings.recentSearch.collectAsState()
+    val recentItems by remember(recentIds) { app.db.items().observeMany(recentIds) }.collectAsState(initial = emptyList())
+    val recent = remember(recentItems, recentIds) { val m = recentItems.associateBy { it.id }; recentIds.mapNotNull { m[it] } }
+    val showRecent = debounced.isBlank() && type == null && year == null
+    val openTracked: (String) -> Unit = { id -> app.settings.addRecentSearch(id); onOpen(id) }
+
+    PosterGrid(
+        items, openTracked,
+        emptyText = if (showRecent) s.searchEmptyHint else s.noResults,
+        override = if (showRecent) recent else null,
+        overrideTitle = s.recentSearches,
+    ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 OutlinedTextField(

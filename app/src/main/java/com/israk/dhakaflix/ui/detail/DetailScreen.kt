@@ -166,7 +166,7 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
         val p = plan ?: return@LaunchedEffect
         if (autoPlay && !autoStarted) {
             autoStarted = true
-            play(p, if (p.resumeAt != null) PlayerActivity.MODE_RESUME else PlayerActivity.MODE_START)
+            play(p, PlayerActivity.MODE_RESUME)
         }
     }
     val detailList = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -226,7 +226,7 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
                                 onClick = {
                                     when {
                                         failed -> reload++
-                                        plan != null -> play(plan, if (resumeAt != null) PlayerActivity.MODE_RESUME else PlayerActivity.MODE_START)
+                                        plan != null -> play(plan, PlayerActivity.MODE_RESUME)
                                     }
                                 },
                             )
@@ -276,7 +276,7 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
                 itemsIndexed(episodes, key = { _, v -> v.url }) { i, v ->
                     EpisodeRow(
                         v = v, tmdb = v.episode?.let { tmdbEps[it] }, progress = progressByUrl[v.url],
-                        onClick = { play(PlayPlan(repo.playlistFor(cur, episodes), i, null, null), PlayerActivity.MODE_ASK) },
+                        onClick = { play(PlayPlan(repo.playlistFor(cur, episodes), i, null, null), PlayerActivity.MODE_RESUME) },
                     )
                 }
             } else if (c != null && c.videos.size > 1) {
@@ -284,7 +284,7 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
                 itemsIndexed(c.videos, key = { _, v -> v.url }) { i, v ->
                     EpisodeRow(
                         v = v, tmdb = null, progress = progressByUrl[v.url],
-                        onClick = { play(PlayPlan(repo.playlistFor(cur, c.videos), i, null, null), PlayerActivity.MODE_ASK) },
+                        onClick = { play(PlayPlan(repo.playlistFor(cur, c.videos), i, null, null), PlayerActivity.MODE_RESUME) },
                     )
                 }
             }

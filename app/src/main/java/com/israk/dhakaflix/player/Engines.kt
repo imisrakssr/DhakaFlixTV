@@ -138,7 +138,11 @@ class ExoEngine(private val ctx: Context, preferSubs: Boolean) : VideoEngine {
         // jump to the nearest keyframe: seeking / skipping starts almost instantly
         setSeekParameters(SeekParameters.CLOSEST_SYNC)
         trackSelectionParameters = trackSelectionParameters.buildUpon().apply {
-            if (preferSubs) setPreferredTextLanguage("en")
+            if (preferSubs) {
+                // pick a subtitle at load time (no re-buffer later): English, Bangla, or an untagged one
+                setPreferredTextLanguages("en", "eng", "bn", "ben")
+                setSelectUndeterminedTextLanguage(true)
+            }
         }.build()
         addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
@@ -180,7 +184,11 @@ class ExoEngine(private val ctx: Context, preferSubs: Boolean) : VideoEngine {
     override val isBuffering get() = player.playbackState == Player.STATE_BUFFERING
     override val position get() = player.currentPosition
     override val duration get() = player.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: 0L
-    override fun seekTo(ms: Long) = player.seekTo(ms.coerceAtLeast(0))
+    override fun seekTo(ms: Long) {
+        // never let "+10s" snap back to an earlier keyframe (or "-10s" forward)
+        player.setSeekParameters(if (ms >= player.currentPosition) SeekParameters.NEXT_SYNC else SeekParameters.PREVIOUS_SYNC)
+        player.seekTo(ms.coerceAtLeast(0))
+    }
 
     private fun tracksOf(type: Int): List<TrackOption> {
         val out = mutableListOf<TrackOption>()
@@ -274,7 +282,7 @@ class ExoEngine(private val ctx: Context, preferSubs: Boolean) : VideoEngine {
 
 // ---------------------------------------------------------------- LibVLC
 
-class VlcEngine(ctx: Context) : VideoEngine {
+class VlcEngine(ctx: Context, private val preferSubs: Boolean) : VideoEngine {
     override val kind = EngineKind.VLC
     override var listener: EngineListener? = null
     private val libVlc = LibVLC(
@@ -314,7 +322,7 @@ class VlcEngine(ctx: Context) : VideoEngine {
             if (startMs > 0) media.addOption(":start-time=${startMs / 1000.0}")
             mp.media = media
             media.release()
-            externalSubs.forEach { mp.addSlave(IMedia.Slave.Type.Subtitle, Uri.parse(it), false) }
+            externalSubs.forEachIndexed { i, sub -> mp.addSlave(IMedia.Slave.Type.Subtitle, Uri.parse(sub), i == 0 && preferSubs) }
             mp.play()
         }
     }

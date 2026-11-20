@@ -35,6 +35,8 @@ data class Strings(
     val exitTitle: String, val exitYes: String, val exitNo: String,
     val stopTitle: String, val keepWatching: String, val stopWatching: String, val audioSync: String,
     val sort: String, val category: String, val genre: String, val year: String, val clearFilters: String,
+    val markUnwatched: String, val addToLibrary: String, val removeFromLibrary: String, val removeFromContinue: String,
+    val recentSearches: String, val searchEmptyHint: String, val defaultSync: String, val resetDefault: String,
 )
 
 val English = Strings(
@@ -73,6 +75,8 @@ val English = Strings(
     exitTitle = "Exit DhakaFlix?", exitYes = "Exit", exitNo = "Stay",
     stopTitle = "Stop watching?", keepWatching = "Keep watching", stopWatching = "Stop", audioSync = "Audio sync",
     sort = "Sort", category = "Category", genre = "Genre", year = "Year", clearFilters = "Clear",
+    markUnwatched = "Mark as unwatched", addToLibrary = "Add to My Library", removeFromLibrary = "Remove from My Library", removeFromContinue = "Remove from Continue Watching",
+    recentSearches = "Recently searched", searchEmptyHint = "Titles you open from search will show up here.", defaultSync = "Default sync (all videos)", resetDefault = "Reset",
 )
 
 val Bangla = Strings(
@@ -111,6 +115,8 @@ val Bangla = Strings(
     exitTitle = "DhakaFlix থেকে বের হবেন?", exitYes = "বের হই", exitNo = "থাকি",
     stopTitle = "দেখা বন্ধ করবেন?", keepWatching = "দেখতে থাকি", stopWatching = "বন্ধ করুন", audioSync = "অডিও সিঙ্ক",
     sort = "সাজান", category = "ক্যাটাগরি", genre = "ধরন", year = "সাল", clearFilters = "মুছুন",
+    markUnwatched = "দেখা হয়নি হিসেবে চিহ্নিত", addToLibrary = "আমার লাইব্রেরিতে যোগ", removeFromLibrary = "লাইব্রেরি থেকে সরান", removeFromContinue = "দেখা চালিয়ে যান থেকে সরান",
+    recentSearches = "সম্প্রতি খোঁজা", searchEmptyHint = "সার্চ থেকে যা খুলবেন, এখানে জমা থাকবে।", defaultSync = "ডিফল্ট সিঙ্ক (সব ভিডিও)", resetDefault = "রিসেট",
 )
 
 val Dhakaiya = Strings(
@@ -149,6 +155,8 @@ val Dhakaiya = Strings(
     exitTitle = "যাইবাগা মামা? 🥺", exitYes = "হ, যাইগা", exitNo = "না, থাকুম",
     stopTitle = "ছিনেমা থামায় দিবা?", keepWatching = "না, দেখতাছি", stopWatching = "হ, বন্ধ কর", audioSync = "আওয়াজ আগে-পিছে",
     sort = "সাজাও", category = "দোকান", genre = "টাইপ", year = "সাল", clearFilters = "মুইছা ফালা",
+    markUnwatched = "আসলে দেখি নাই", addToLibrary = "খাজানায় ঢুকা", removeFromLibrary = "খাজানা থেইকা বাইর কর", removeFromContinue = "এইটা আর দেখুম না",
+    recentSearches = "হালকা আগে যা খুঁজছিলা", searchEmptyHint = "সার্চ কইরা যা খুলবা, এইহানে জমা থাকব মামা।", defaultSync = "ডিফল্ট সিঙ্ক (হগল ভিডিওতে)", resetDefault = "আগের মতো",
 )
 
 fun stringsFor(lang: String): Strings = when (lang) {

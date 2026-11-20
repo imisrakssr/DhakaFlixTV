@@ -125,7 +125,7 @@ fun PlayerScreen(c: PlayerController) {
         SeekFlash(c)
 
         AnimatedVisibility(
-            visible = c.controlsVisible && c.resumeAsk == null && c.error == null && !c.exitAsk,
+            visible = c.controlsVisible && c.resumeAsk == null && c.error == null && !c.exitAsk && c.panel == null,
             enter = fadeIn() + slideInVertically { it / 10 }, exit = fadeOut() + slideOutVertically { it / 10 },
         ) { Controls(c) }
 
