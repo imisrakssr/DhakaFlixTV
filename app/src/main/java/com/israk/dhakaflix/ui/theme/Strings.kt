@@ -37,6 +37,7 @@ data class Strings(
     val sort: String, val category: String, val genre: String, val year: String, val clearFilters: String,
     val markUnwatched: String, val addToLibrary: String, val removeFromLibrary: String, val removeFromContinue: String,
     val recentSearches: String, val searchEmptyHint: String, val defaultSync: String, val resetDefault: String,
+    val subtitleSize: String, val subtitleColor: String,
 )
 
 val English = Strings(
@@ -77,6 +78,7 @@ val English = Strings(
     sort = "Sort", category = "Category", genre = "Genre", year = "Year", clearFilters = "Clear",
     markUnwatched = "Mark as unwatched", addToLibrary = "Add to My Library", removeFromLibrary = "Remove from My Library", removeFromContinue = "Remove from Continue Watching",
     recentSearches = "Recently searched", searchEmptyHint = "Titles you open from search will show up here.", defaultSync = "Default sync (all videos)", resetDefault = "Reset",
+    subtitleSize = "Subtitle size", subtitleColor = "Subtitle colour",
 )
 
 val Bangla = Strings(
@@ -117,6 +119,7 @@ val Bangla = Strings(
     sort = "সাজান", category = "ক্যাটাগরি", genre = "ধরন", year = "সাল", clearFilters = "মুছুন",
     markUnwatched = "দেখা হয়নি হিসেবে চিহ্নিত", addToLibrary = "আমার লাইব্রেরিতে যোগ", removeFromLibrary = "লাইব্রেরি থেকে সরান", removeFromContinue = "দেখা চালিয়ে যান থেকে সরান",
     recentSearches = "সম্প্রতি খোঁজা", searchEmptyHint = "সার্চ থেকে যা খুলবেন, এখানে জমা থাকবে।", defaultSync = "ডিফল্ট সিঙ্ক (সব ভিডিও)", resetDefault = "রিসেট",
+    subtitleSize = "সাবটাইটেলের আকার", subtitleColor = "সাবটাইটেলের রং",
 )
 
 val Dhakaiya = Strings(
@@ -157,6 +160,7 @@ val Dhakaiya = Strings(
     sort = "সাজাও", category = "দোকান", genre = "টাইপ", year = "সাল", clearFilters = "মুইছা ফালা",
     markUnwatched = "আসলে দেখি নাই", addToLibrary = "খাজানায় ঢুকা", removeFromLibrary = "খাজানা থেইকা বাইর কর", removeFromContinue = "এইটা আর দেখুম না",
     recentSearches = "হালকা আগে যা খুঁজছিলা", searchEmptyHint = "সার্চ কইরা যা খুলবা, এইহানে জমা থাকব মামা।", defaultSync = "ডিফল্ট সিঙ্ক (হগল ভিডিওতে)", resetDefault = "আগের মতো",
+    subtitleSize = "সাবের সাইজ", subtitleColor = "সাবের রং",
 )
 
 fun stringsFor(lang: String): Strings = when (lang) {

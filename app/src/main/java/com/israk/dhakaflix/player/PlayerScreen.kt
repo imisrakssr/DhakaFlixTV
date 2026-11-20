@@ -118,7 +118,7 @@ fun PlayerScreen(c: PlayerController) {
             }
         }
 
-        c.subtitleText?.let { SubtitleOverlay(it, raised = c.controlsVisible) }
+        c.subtitleText?.let { SubtitleOverlay(it, raised = c.controlsVisible, scale = c.subScale, color = Color(c.subColorArgb)) }
 
         if (c.buffering && c.resumeAsk == null && c.error == null) {
             CircularProgressIndicator(Modifier.align(Alignment.Center).size(54.dp), color = LocalAccent.current, strokeWidth = 4.dp)
@@ -126,10 +126,7 @@ fun PlayerScreen(c: PlayerController) {
 
         SeekFlash(c)
 
-        AnimatedVisibility(
-            visible = c.controlsVisible && c.resumeAsk == null && c.error == null && !c.exitAsk && c.panel == null,
-            enter = fadeIn() + slideInVertically { it / 10 }, exit = fadeOut() + slideOutVertically { it / 10 },
-        ) { Controls(c) }
+        Controls(c, visible = c.controlsVisible && c.resumeAsk == null && c.error == null && !c.exitAsk && c.panel == null)
 
         AnimatedVisibility(
             visible = c.showUpNext && !c.controlsVisible && c.panel == null,
@@ -159,13 +156,13 @@ fun PlayerScreen(c: PlayerController) {
 }
 
 @Composable
-private fun SubtitleOverlay(text: String, raised: Boolean) {
+private fun SubtitleOverlay(text: String, raised: Boolean, scale: Float, color: Color) {
     val bottom by animateDpAsState(if (raised) 170.dp else 42.dp, label = "subPos")
     Box(Modifier.fillMaxSize().padding(bottom = bottom, start = 60.dp, end = 60.dp), contentAlignment = Alignment.BottomCenter) {
         Text(
             text,
             style = TextStyle(
-                color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center,
+                color = color, fontSize = 26.sp * scale, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center,
                 shadow = Shadow(Color.Black, blurRadius = 8f),
             ),
             modifier = Modifier.background(Color.Black.copy(alpha = .35f), RoundedCornerShape(6.dp)).padding(horizontal = 10.dp, vertical = 2.dp),
@@ -207,12 +204,10 @@ private fun SeekFlash(c: PlayerController) {
 }
 
 @Composable
-private fun Controls(c: PlayerController) {
+private fun Controls(c: PlayerController, visible: Boolean) {
     val s = LocalStrings.current
     val isTv = LocalIsTv.current
     val playFr = remember { FocusRequester() }
-    // (re)focus play/pause when controls appear or a side panel closes
-    LaunchedEffect(c.panel) { if (c.panel == null) { delay(60); runCatching { playFr.requestFocus() } } }
     val item = c.current
     val fm = androidx.compose.ui.platform.LocalFocusManager.current
 
@@ -229,12 +224,16 @@ private fun Controls(c: PlayerController) {
             true
         }
     ) {
-        Box(Modifier.fillMaxWidth().height(150.dp).background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = .75f), Color.Transparent))))
+        // ---- top: title slides down from the top edge with its own short shade
+        AnimatedVisibility(
+            visible = visible, modifier = Modifier.align(Alignment.TopCenter),
+            enter = slideInVertically { -it } + fadeIn(), exit = slideOutVertically { -it } + fadeOut(),
+        ) {
         Box(
-            Modifier.fillMaxWidth().height(300.dp).align(Alignment.BottomCenter)
-                .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = .92f))))
-        )
-        Row(Modifier.padding(horizontal = 40.dp, vertical = 26.dp), verticalAlignment = Alignment.CenterVertically) {
+            Modifier.fillMaxWidth()
+                .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = .7f), Color.Transparent)))
+        ) {
+        Row(Modifier.padding(start = 40.dp, end = 40.dp, top = 26.dp, bottom = 40.dp), verticalAlignment = Alignment.CenterVertically) {
             if (!isTv) {
                 Icon(Icons.Filled.ArrowBack, null, tint = Color.White, modifier = Modifier.size(28.dp).clickable { c.exit() })
                 Spacer(Modifier.width(16.dp))
@@ -244,8 +243,21 @@ private fun Controls(c: PlayerController) {
                 item.subtitle?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = TextDim, maxLines = 1) }
             }
         }
+        }
+        }
 
-        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 40.dp, vertical = 24.dp)) {
+        // ---- bottom: transport slides up from the bottom edge with its own shade
+        AnimatedVisibility(
+            visible = visible, modifier = Modifier.align(Alignment.BottomCenter),
+            enter = slideInVertically { it } + fadeIn(), exit = slideOutVertically { it } + fadeOut(),
+        ) {
+        // (re)focus play/pause whenever the bottom bar appears or a side panel closes
+        LaunchedEffect(c.panel) { if (c.panel == null) { delay(60); runCatching { playFr.requestFocus() } } }
+        Column(
+            Modifier.fillMaxWidth()
+                .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = .8f))))
+                .padding(start = 40.dp, end = 40.dp, top = 56.dp, bottom = 24.dp)
+        ) {
             SeekPreview(c)
             SeekBar(c)
             Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
@@ -280,6 +292,7 @@ private fun Controls(c: PlayerController) {
                     ControlButton(Icons.Filled.MoreVert, s.options) { c.panel = PlayerController.Panel.OPTIONS }
                 }
             }
+        }
         }
     }
 }
@@ -360,6 +373,8 @@ private fun SidePanel(c: PlayerController) {
         PlayerController.Panel.SPEED -> s.speed
         PlayerController.Panel.ASPECT -> s.aspect
         PlayerController.Panel.OPTIONS -> s.options
+        PlayerController.Panel.SUB_SIZE -> s.subtitleSize
+        PlayerController.Panel.SUB_COLOR -> s.subtitleColor
     }
     Column(
         Modifier.padding(16.dp).width(360.dp).fillMaxHeight()
@@ -391,9 +406,17 @@ private fun SidePanel(c: PlayerController) {
             ) { id -> id?.toIntOrNull()?.let { c.setScale(it) } }
             PlayerController.Panel.SYNC -> SyncPanel(c.subDelay, { c.shiftSubtitles(it) }, if (c.subtitleDelayAvailable) null else s.syncOnlyExternal)
             PlayerController.Panel.AUDIO_SYNC -> SyncPanel(c.audioDelay, { c.shiftAudio(it) }, null)
+            PlayerController.Panel.SUB_SIZE -> OptionList(
+                listOf(s.sizeSmall, s.sizeMedium, s.sizeLarge, "XL").mapIndexed { i, l -> Opt(i.toString(), l, i == c.subSize) }
+            ) { id -> id?.toIntOrNull()?.let { c.setSubtitleSize(it) } }
+            PlayerController.Panel.SUB_COLOR -> OptionList(
+                com.israk.dhakaflix.data.AppSettings.SUB_COLORS.mapIndexed { i, (_, name) -> Opt(i.toString(), "●  $name", i == c.subColor) }
+            ) { id -> id?.toIntOrNull()?.let { c.setSubtitleColor(it) } }
             PlayerController.Panel.OPTIONS -> OptionList(
                 listOf(
                     Opt("sync", s.subtitleSync + "  (" + String.format(Locale.US, "%+.1fs", c.subDelay / 1000.0) + ")", false, chevron = true),
+                    Opt("subsize", s.subtitleSize + "  (" + listOf(s.sizeSmall, s.sizeMedium, s.sizeLarge, "XL")[c.subSize.coerceIn(0, 3)] + ")", false, chevron = true),
+                    Opt("subcolor", s.subtitleColor + "  (" + com.israk.dhakaflix.data.AppSettings.SUB_COLORS[c.subColor.coerceIn(0, 3)].second + ")", false, chevron = true),
                     Opt("async", s.audioSync + "  (" + String.format(Locale.US, "%+.2fs", c.audioDelay / 1000.0) + ")", false, chevron = true),
                     Opt("speed", s.speed + "  (" + c.speed + "x)", false, chevron = true),
                     Opt("aspect", s.aspect, false, chevron = true),
@@ -404,6 +427,8 @@ private fun SidePanel(c: PlayerController) {
                 when (id) {
                     "sync" -> c.panel = PlayerController.Panel.SYNC
                     "async" -> c.panel = PlayerController.Panel.AUDIO_SYNC
+                    "subsize" -> c.panel = PlayerController.Panel.SUB_SIZE
+                    "subcolor" -> c.panel = PlayerController.Panel.SUB_COLOR
                     "speed" -> c.panel = PlayerController.Panel.SPEED
                     "aspect" -> c.panel = PlayerController.Panel.ASPECT
                     "engine" -> { c.panel = null; c.switchEngine() }

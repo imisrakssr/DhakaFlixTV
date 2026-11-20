@@ -27,7 +27,7 @@ class PlayerController(
     private val startMode: String,
 ) : EngineListener {
 
-    enum class Panel { AUDIO, SUBS, SYNC, AUDIO_SYNC, SPEED, ASPECT, OPTIONS }
+    enum class Panel { AUDIO, SUBS, SYNC, AUDIO_SYNC, SPEED, ASPECT, OPTIONS, SUB_SIZE, SUB_COLOR }
 
     val playlist = mutableStateListOf<PlayItem>().apply { addAll(initialPlaylist) }
 
@@ -160,9 +160,31 @@ class PlayerController(
         viewGeneration++
     }
 
+    var subSize by mutableIntStateOf(settings.subSize.value)
+        private set
+    var subColor by mutableIntStateOf(settings.subColor.value)
+        private set
+    val subScale: Float get() = com.israk.dhakaflix.data.AppSettings.SUB_SCALES[subSize.coerceIn(0, 3)]
+    val subColorArgb: Int get() = com.israk.dhakaflix.data.AppSettings.SUB_COLORS[subColor.coerceIn(0, 3)].first
+
     private fun createEngine(): VideoEngine =
-        (if (kind == EngineKind.EXO) ExoEngine(activity, settings.subsDefault.value) else VlcEngine(activity, settings.subsDefault.value))
-            .also { it.listener = this; it.setAudioDelay(audioDelay) }
+        (if (kind == EngineKind.EXO) ExoEngine(activity, settings.subsDefault.value)
+        else VlcEngine(activity, settings.subsDefault.value, subScale, subColorArgb))
+            .also { it.listener = this; it.setAudioDelay(audioDelay); it.setSubtitleStyle(subScale, subColorArgb) }
+
+    fun setSubtitleSize(i: Int) {
+        subSize = i; settings.setSubSize(i)
+        engine?.setSubtitleStyle(subScale, subColorArgb)
+        if (kind == EngineKind.VLC) toast = "VLC: next video"
+        panel = Panel.OPTIONS
+    }
+
+    fun setSubtitleColor(i: Int) {
+        subColor = i; settings.setSubColor(i)
+        engine?.setSubtitleStyle(subScale, subColorArgb)
+        if (kind == EngineKind.VLC) toast = "VLC: next video"
+        panel = Panel.OPTIONS
+    }
 
     /** Called by the AndroidView factory whenever [viewGeneration] changes. */
     fun viewFor(ctx: Context): View {
@@ -403,7 +425,7 @@ class PlayerController(
     private fun onBack() {
         when {
             exitAsk -> exitAsk = false
-            panel != null -> panel = PlayerController.Panel.OPTIONS.takeIf { panel in setOf(Panel.SYNC, Panel.AUDIO_SYNC, Panel.SPEED, Panel.ASPECT) }
+            panel != null -> panel = PlayerController.Panel.OPTIONS.takeIf { panel in setOf(Panel.SYNC, Panel.AUDIO_SYNC, Panel.SPEED, Panel.ASPECT, Panel.SUB_SIZE, Panel.SUB_COLOR) }
             resumeAsk != null -> activity.finish()
             error != null -> { save(); activity.finish() }
             controlsVisible -> controlsVisible = false

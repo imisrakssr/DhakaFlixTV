@@ -7,7 +7,12 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 
 class AppSettings(ctx: Context) {
-    companion object { const val DEFAULT_AUDIO_DELAY = -30L }
+    companion object {
+        const val DEFAULT_AUDIO_DELAY = -30L
+        val SUB_SCALES = floatArrayOf(0.8f, 1f, 1.25f, 1.5f)
+        /** ARGB colours + names for the subtitle colour picker. */
+        val SUB_COLORS = listOf(0xFFFFFFFF.toInt() to "White", 0xFFFFE14D.toInt() to "Yellow", 0xFF7DF9FF.toInt() to "Cyan", 0xFF9BFF8A.toInt() to "Green")
+    }
 
     private val prefs = ctx.getSharedPreferences("dhakaflix_settings", Context.MODE_PRIVATE)
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
@@ -49,6 +54,14 @@ class AppSettings(ctx: Context) {
         prefs.edit().putString("recent_search", v.joinToString("\n")).apply()
     }
     fun clearRecentSearch() { _recentSearch.value = emptyList(); prefs.edit().remove("recent_search").apply() }
+
+    /** Subtitle style: size 0..3 (small..extra large), colour index into SUB_COLORS. */
+    private val _subSize = MutableStateFlow(prefs.getInt("sub_size", 1))
+    val subSize: StateFlow<Int> = _subSize
+    fun setSubSize(v: Int) { _subSize.value = v; prefs.edit().putInt("sub_size", v).apply() }
+    private val _subColor = MutableStateFlow(prefs.getInt("sub_color", 0))
+    val subColor: StateFlow<Int> = _subColor
+    fun setSubColor(v: Int) { _subColor.value = v; prefs.edit().putInt("sub_color", v).apply() }
 
     private val _tmdbKey = MutableStateFlow(prefs.getString("tmdb_key", "") ?: "")
     val tmdbKey: StateFlow<String> = _tmdbKey
