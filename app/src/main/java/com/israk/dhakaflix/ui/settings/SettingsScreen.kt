@@ -507,6 +507,23 @@ private fun PlayerCard() {
             Spacer(Modifier.height(10.dp))
             SyncRow(s.subtitleSync, subDelay, step = 100) { v -> st.setSubDelay(v ?: 0L) }
         }
+        val subSize by st.subSize.collectAsState()
+        val subColor by st.subColor.collectAsState()
+        Card {
+            Label(s.subtitleSize)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                listOf(s.sizeSmall, s.sizeMedium, s.sizeLarge, "XL").forEachIndexed { i, l ->
+                    PillButton(l, onClick = { st.setSubSize(i) }, selected = subSize == i, compact = true)
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            Label(s.subtitleColor)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                com.israk.dhakaflix.data.AppSettings.SUB_COLORS.forEachIndexed { i, (_, name) ->
+                    PillButton(name, onClick = { st.setSubColor(i) }, selected = subColor == i, compact = true)
+                }
+            }
+        }
         ToggleRow(s.autoPlayNext, checked = autoNext, onToggle = { st.setAutoNext(!autoNext) })
         ToggleRow(s.subtitlesByDefault, checked = subsDefault, onToggle = { st.setSubsDefault(!subsDefault) })
     }

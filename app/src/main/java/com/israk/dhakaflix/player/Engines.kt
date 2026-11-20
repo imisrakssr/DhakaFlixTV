@@ -39,6 +39,8 @@ interface EngineListener {
     fun onEnded()
     fun onError(message: String)
     fun onStateChanged()
+    /** Text of the subtitle line the engine wants shown now (null = nothing). Drawn by our own overlay. */
+    fun onSubtitleText(text: String?) {}
 }
 
 enum class EngineKind { EXO, VLC }
@@ -157,6 +159,14 @@ class ExoEngine(private val ctx: Context, preferSubs: Boolean) : VideoEngine {
             override fun onPlayerError(error: PlaybackException) {
                 listener?.onError("${error.errorCodeName}: ${error.message ?: ""}")
             }
+            override fun onCues(cueGroup: androidx.media3.common.text.CueGroup) {
+                // text subtitles go to our own overlay (so size/colour always apply);
+                // only picture subtitles (PGS/VobSub) are left to Exo's own view
+                val texts = cueGroup.cues.mapNotNull { it.text?.toString()?.trim()?.takeIf { t -> t.isNotEmpty() } }
+                val hasBitmap = cueGroup.cues.any { it.bitmap != null }
+                view?.subtitleView?.visibility = if (hasBitmap && !textHidden) View.VISIBLE else View.GONE
+                listener?.onSubtitleText(if (textHidden || texts.isEmpty()) null else texts.joinToString("\n"))
+            }
         })
     }
 
@@ -168,6 +178,7 @@ class ExoEngine(private val ctx: Context, preferSubs: Boolean) : VideoEngine {
         player = this@ExoEngine.player
         setShutterBackgroundColor(Color.BLACK)
         keepScreenOn = true
+        subtitleView?.visibility = View.GONE
     }.also { view = it; applySubStyle() }
 
     private fun applySubStyle() {
@@ -263,7 +274,7 @@ class ExoEngine(private val ctx: Context, preferSubs: Boolean) : VideoEngine {
 
     override fun setEngineSubtitlesVisible(visible: Boolean) {
         textHidden = !visible
-        view?.subtitleView?.visibility = if (visible) View.VISIBLE else View.GONE
+        if (!visible) { view?.subtitleView?.visibility = View.GONE; listener?.onSubtitleText(null) }
     }
 
     private fun select(type: Int, id: String) {
@@ -297,15 +308,15 @@ class ExoEngine(private val ctx: Context, preferSubs: Boolean) : VideoEngine {
 
 // ---------------------------------------------------------------- LibVLC
 
-class VlcEngine(ctx: Context, private val preferSubs: Boolean, subScale: Float = 1f, subColor: Int = Color.WHITE) : VideoEngine {
+class VlcEngine(ctx: Context, private val preferSubs: Boolean, private var subScale: Float = 1f, subColor: Int = Color.WHITE) : VideoEngine {
     override val kind = EngineKind.VLC
     override var listener: EngineListener? = null
     private val libVlc = LibVLC(
         ctx.applicationContext,
         arrayListOf(
             "--http-reconnect", "--network-caching=1500", "--audio-time-stretch", "--subsdec-encoding=UTF-8",
-            // VLC draws subtitles itself: size (16 = normal, smaller number = bigger) and colour
-            "--freetype-rel-fontsize=" + when { subScale <= 0.85f -> 20; subScale <= 1.05f -> 16; subScale <= 1.3f -> 12; else -> 10 },
+            // VLC draws subtitles itself: size as a percentage, plus text colour (RGB)
+            "--sub-text-scale=" + (subScale * 100).toInt(),
             "--freetype-color=" + (subColor and 0xFFFFFF),
         ),
     )
@@ -340,6 +351,7 @@ class VlcEngine(ctx: Context, private val preferSubs: Boolean, subScale: Float =
             val media = Media(libVlc, Uri.parse(url))
             media.setHWDecoderEnabled(true, false)
             if (startMs > 0) media.addOption(":start-time=${startMs / 1000.0}")
+            media.addOption(":sub-text-scale=${(subScale * 100).toInt()}")
             mp.media = media
             media.release()
             externalSubs.forEachIndexed { i, sub -> mp.addSlave(IMedia.Slave.Type.Subtitle, Uri.parse(sub), i == 0 && preferSubs) }
@@ -369,7 +381,7 @@ class VlcEngine(ctx: Context, private val preferSubs: Boolean, subScale: Float =
 
     override fun selectText(id: String?) { mp.setSpuTrack(id?.toInt() ?: -1) }
     override fun setEngineSubtitlesVisible(visible: Boolean) { if (!visible) mp.setSpuTrack(-1) }
-    override fun setSubtitleStyle(scale: Float, color: Int) {} // applied when the engine is created
+    override fun setSubtitleStyle(scale: Float, color: Int) { subScale = scale } // colour: next engine; size: next file
 
     override val supportsSubtitleDelay = true
     override fun setSubtitleDelay(ms: Long) { mp.setSpuDelay(ms * 1000) }

@@ -1,4 +1,8 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+
 package com.israk.dhakaflix.ui.components
+
+import androidx.compose.foundation.basicMarquee
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
@@ -210,7 +214,9 @@ fun PosterCard(
             Spacer(Modifier.height(8.dp))
             Column(Modifier.graphicsLayer { alpha = titleAlpha }) {
             Text(
-                item.displayTitle, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                item.displayTitle, maxLines = 1,
+                overflow = if (focused) TextOverflow.Clip else TextOverflow.Ellipsis,
+                modifier = if (focused) Modifier.basicMarquee(iterations = Int.MAX_VALUE, initialDelayMillis = 800, velocity = 40.dp) else Modifier,
                 style = MaterialTheme.typography.labelLarge,
                 color = if (focused) Color.White else TextDim,
                 fontWeight = if (focused) FontWeight.SemiBold else FontWeight.Normal,
@@ -290,7 +296,11 @@ fun LandscapeCard(
                     )
                 )
                 Column(Modifier.align(Alignment.BottomStart).padding(10.dp)) {
-                    Text(item.displayTitle, color = Color.White, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        item.displayTitle, color = Color.White, style = MaterialTheme.typography.titleSmall, maxLines = 1, fontWeight = FontWeight.SemiBold,
+                        overflow = if (focused) TextOverflow.Clip else TextOverflow.Ellipsis,
+                        modifier = if (focused) Modifier.basicMarquee(iterations = Int.MAX_VALUE, initialDelayMillis = 800, velocity = 40.dp) else Modifier,
+                    )
                     if (label != null) Text(label, color = TextDim, style = MaterialTheme.typography.labelSmall, maxLines = 1)
                     Spacer(Modifier.height(6.dp))
                     ProgressLine(progress)

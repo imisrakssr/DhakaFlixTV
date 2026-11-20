@@ -242,7 +242,7 @@ class PlayerController(
         if (!subsChecked && duration > 0 && position > 1500) ensureDefaultSubs(e)
         isPlaying = e.isPlaying
         buffering = e.isBuffering
-        subtitleText = if (ownSubUrl != null) SubtitleParser.at(cues, position, subDelay) else null
+        if (ownSubUrl != null) subtitleText = SubtitleParser.at(cues, position, subDelay)
         val now = SystemClock.elapsedRealtime()
         if (now - lastSave > 10_000 && duration > 0 && position > 0) {
             lastSave = now
@@ -461,6 +461,8 @@ class PlayerController(
     }
 
     override fun onStateChanged() {}
+
+    override fun onSubtitleText(text: String?) { if (ownSubUrl == null) subtitleText = text }
 
     fun onStop() { save(); engine?.pause() }
 
