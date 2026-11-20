@@ -24,6 +24,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.foundation.gestures.animateScrollBy
+import kotlinx.coroutines.launch
+import androidx.compose.ui.input.key.type
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -260,29 +270,54 @@ fun ProgressLine(progress: Float, modifier: Modifier = Modifier) {
     }
 }
 
+/** Explicit D-pad handling for a row inside a vertical list (TV). */
+class RowNav(val focusRequester: FocusRequester, val onUp: () -> Unit, val onDown: () -> Unit)
+
 @Composable
 fun <T> MediaRow(
     title: String,
     items: List<T>,
     key: (T) -> Any,
     modifier: Modifier = Modifier,
+    nav: RowNav? = null,
     itemContent: @Composable (T) -> Unit,
 ) {
     if (items.isEmpty()) return
     val edge = LocalEdge.current
+    var lastIdx by remember { mutableIntStateOf(0) }
     Column(modifier.fillMaxWidth()) {
         Text(
             title, Modifier.padding(start = edge, bottom = 2.dp),
             style = MaterialTheme.typography.titleMedium, color = Color.White,
         )
         LazyRow(
+            modifier = if (nav == null) Modifier else Modifier.onPreviewKeyEvent { e ->
+                if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (e.key) {
+                    Key.DirectionDown -> { nav.onDown(); true }
+                    Key.DirectionUp -> { nav.onUp(); true }
+                    else -> false
+                }
+            },
             contentPadding = PaddingValues(horizontal = edge, vertical = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(if (LocalIsTv.current) 18.dp else 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (LocalIsTv.current) 16.dp else 12.dp),
         ) {
-            items(items, key = key) { itemContent(it) }
+            itemsIndexed(items, key = { _, it -> key(it) }) { i, it ->
+                Box(
+                    Modifier
+                        .then(if (nav != null && i == lastIdx.coerceAtMost(items.lastIndex)) Modifier.focusRequester(nav.focusRequester) else Modifier)
+                        .onFocusChanged { f -> if (f.hasFocus) lastIdx = i }
+                ) { itemContent(it) }
+            }
         }
     }
 }
+
+/** Frosted "liquid glass" surface (blur-free so it runs smoothly on low-end TV sticks). */
+fun Modifier.glass(shape: Shape = RoundedCornerShape(18.dp), tint: Float = 0.10f): Modifier = this
+    .clip(shape)
+    .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = tint + 0.06f), Color.White.copy(alpha = tint * 0.45f))))
+    .border(1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.32f), Color.White.copy(alpha = 0.05f))), shape)
 
 /** Rounded pill button: translucent at rest, solid white when focused (tvOS style). */
 @Composable
@@ -315,6 +350,11 @@ fun PillButton(
             .onFocusChanged { focused = it.isFocused }
             .clip(RoundedCornerShape(50))
             .background(bg)
+            .then(
+                if (!focused && !primary) Modifier.border(
+                    1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = .30f), Color.White.copy(alpha = .05f))), RoundedCornerShape(50),
+                ) else Modifier
+            )
             .clickable(onClick = onClick)
             .padding(horizontal = if (compact) 14.dp else 20.dp, vertical = if (compact) 7.dp else 11.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -342,6 +382,7 @@ fun <T> ChipRow(
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues? = null,
+    firstItemModifier: Modifier = Modifier,
 ) {
     val edge = LocalEdge.current
     LazyRow(
@@ -351,7 +392,10 @@ fun <T> ChipRow(
     ) {
         items(options.size) { i ->
             val o = options[i]
-            PillButton(label(o), onClick = { onSelect(o) }, selected = o == selected, compact = true)
+            PillButton(
+                label(o), onClick = { onSelect(o) }, selected = o == selected, compact = true,
+                modifier = if (i == 0) firstItemModifier else Modifier,
+            )
         }
     }
 }
@@ -392,4 +436,27 @@ fun CenterMessage(text: String, modifier: Modifier = Modifier, action: (@Composa
             if (action != null) { Spacer(Modifier.height(18.dp)); action() }
         }
     }
+}
+
+/**
+ * TV safety net: if the D-pad can't find anything up/down (item not composed yet),
+ * scroll the list a bit and try again, so long lists and grids never get "stuck".
+ */
+@Composable
+fun Modifier.dpadScrollFallback(state: androidx.compose.foundation.gestures.ScrollableState): Modifier {
+    val fm = androidx.compose.ui.platform.LocalFocusManager.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    return this.then(Modifier.onKeyEvent { e ->
+        if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
+        val down = e.key == Key.DirectionDown
+        val up = e.key == Key.DirectionUp
+        if (!down && !up) return@onKeyEvent false
+        val dir = if (down) androidx.compose.ui.focus.FocusDirection.Down else androidx.compose.ui.focus.FocusDirection.Up
+        if (fm.moveFocus(dir)) return@onKeyEvent true
+        scope.launch {
+            state.animateScrollBy(if (down) 360f else -360f)
+            fm.moveFocus(dir)
+        }
+        true
+    })
 }

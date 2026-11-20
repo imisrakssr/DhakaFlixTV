@@ -2,28 +2,35 @@ package com.israk.dhakaflix.ui.home
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -34,36 +41,52 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.israk.dhakaflix.DhakaFlixApp
 import com.israk.dhakaflix.data.ContinueEntry
-import com.israk.dhakaflix.data.HomeRow
 import com.israk.dhakaflix.data.RowKeys
 import com.israk.dhakaflix.data.Source
 import com.israk.dhakaflix.data.db.ItemEntity
 import com.israk.dhakaflix.player.PlayerActivity
+import com.israk.dhakaflix.ui.LocalEntryFocus
 import com.israk.dhakaflix.ui.LocalTopInset
+import com.israk.dhakaflix.ui.components.AppIcons
 import com.israk.dhakaflix.ui.components.CenterMessage
 import com.israk.dhakaflix.ui.components.LandscapeCard
 import com.israk.dhakaflix.ui.components.MediaRow
 import com.israk.dhakaflix.ui.components.MetaLine
 import com.israk.dhakaflix.ui.components.PillButton
 import com.israk.dhakaflix.ui.components.PosterCard
+import com.israk.dhakaflix.ui.components.RowNav
 import com.israk.dhakaflix.ui.components.backdropUrl
+import com.israk.dhakaflix.ui.components.glass
 import com.israk.dhakaflix.ui.theme.Bg
 import com.israk.dhakaflix.ui.theme.LocalAccent
 import com.israk.dhakaflix.ui.theme.LocalEdge
@@ -86,15 +109,18 @@ fun rowTitle(key: String, s: Strings, sources: List<Source>): String = when {
     else -> key
 }
 
+/** One visible home row: either continue-watching entries or titles. */
+private class HomeRowData(val key: String, val title: String, val cw: List<ContinueEntry>, val items: List<ItemEntity>)
+
 @Composable
 fun HomeScreen(onOpen: (String) -> Unit) {
     val app = DhakaFlixApp.instance
     val repo = app.library
     val s = LocalStrings.current
     val isTv = LocalIsTv.current
-    val edge = LocalEdge.current
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
 
     val rows by app.settings.homeRows.collectAsState()
     val sources by app.settings.sources.collectAsState()
@@ -103,12 +129,26 @@ fun HomeScreen(onOpen: (String) -> Unit) {
     val watchedIds by remember { app.db.user().watchedIds() }.collectAsState(initial = emptyList())
     val watchedSet = remember(watchedIds) { watchedIds.toHashSet() }
     val cw by remember { repo.continueWatching() }.collectAsState(initial = emptyList())
-    val latest by remember { repo.rowFlow(RowKeys.LATEST) }.collectAsState(initial = emptyList())
+    val featured by remember { repo.featured() }.collectAsState(initial = emptyList())
 
-    var hero by remember { mutableStateOf<ItemEntity?>(null) }
-    var shownHero by remember { mutableStateOf<ItemEntity?>(null) }
-    LaunchedEffect(latest) { if (hero == null) hero = latest.firstOrNull() }
-    LaunchedEffect(hero) { delay(if (shownHero == null) 0 else 260); shownHero = hero }
+    // collect every enabled row up-front so empty rows can be skipped by the D-pad
+    val enabledRows = rows.filter { it.enabled }
+    val rowItems = HashMap<String, List<ItemEntity>>()
+    for (r in enabledRows) {
+        if (r.key == RowKeys.CONTINUE) continue
+        key(r.key) {
+            val v by remember { repo.rowFlow(r.key) }.collectAsState(initial = emptyList())
+            rowItems[r.key] = v
+        }
+    }
+    val visible = enabledRows.mapNotNull { r ->
+        if (r.key == RowKeys.CONTINUE) {
+            if (cw.isEmpty()) null else HomeRowData(r.key, s.continueWatching, cw, emptyList())
+        } else {
+            val items = rowItems[r.key].orEmpty()
+            if (items.isEmpty()) null else HomeRowData(r.key, rowTitle(r.key, s, sources), emptyList(), items)
+        }
+    }
 
     if (count == 0) {
         when {
@@ -121,6 +161,17 @@ fun HomeScreen(onOpen: (String) -> Unit) {
         return
     }
 
+    var bannerIndex by remember { mutableIntStateOf(0) }
+    var inRows by remember { mutableStateOf(false) }
+    var focusedItem by remember { mutableStateOf<ItemEntity?>(null) }
+    val bannerItem = if (featured.isEmpty()) null else featured[bannerIndex % featured.size]
+    LaunchedEffect(featured.size, bannerIndex, inRows) {
+        if (featured.size > 1 && !inRows) {
+            delay(9000)
+            bannerIndex = (bannerIndex + 1) % featured.size
+        }
+    }
+
     val playContinue: (ContinueEntry) -> Unit = { e ->
         scope.launch {
             val (list, idx) = repo.playlistFromProgress(e.progress)
@@ -128,144 +179,188 @@ fun HomeScreen(onOpen: (String) -> Unit) {
         }
     }
 
-    val enabledRows = rows.filter { it.enabled }
+    val listState = rememberLazyListState()
+    val bannerFr = LocalEntryFocus.current ?: remember { FocusRequester() }
+    val rowFrs = remember { HashMap<String, FocusRequester>() }
+    fun frFor(k: String) = rowFrs.getOrPut(k) { FocusRequester() }
 
-    if (isTv) {
-        Box(Modifier.fillMaxSize()) {
-            // Full-bleed backdrop that follows focus
-            Crossfade(targetState = shownHero?.backdropUrl(true), animationSpec = tween(600), label = "backdrop") { url ->
+    fun goRow(i: Int) {
+        scope.launch {
+            if (i < 0) {
+                listState.animateScrollToItem(0)
+                if (featured.isNotEmpty()) runCatching { bannerFr.requestFocus() } else focusManager.moveFocus(FocusDirection.Up)
+                return@launch
+            }
+            if (i > visible.lastIndex) return@launch
+            listState.animateScrollToItem(i + 1)
+            delay(40)
+            runCatching { frFor(visible[i].key).requestFocus() }
+        }
+    }
+
+    val posterW = if (isTv) 112.dp else 104.dp
+    val landW = if (isTv) 220.dp else 210.dp
+    val topInset = LocalTopInset.current
+
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val bannerH: Dp = if (isTv) maxHeight * 0.66f - topInset else 460.dp
+        if (isTv) {
+            // full-bleed backdrop that follows focus (banner item, or the focused card)
+            val bgItem = if (inRows) focusedItem ?: bannerItem else bannerItem
+            var shown by remember { mutableStateOf<ItemEntity?>(null) }
+            LaunchedEffect(bgItem?.id) { delay(if (shown == null) 0 else 280); shown = bgItem }
+            Crossfade(targetState = shown?.backdropUrl(true), animationSpec = tween(700), label = "backdrop") { url ->
                 if (url != null) {
                     AsyncImage(
                         model = ImageRequest.Builder(ctx).data(url).size(1280, 720).build(),
-                        contentDescription = null, contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
+                        contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(),
                     )
                 }
             }
-            Box(
-                Modifier.fillMaxSize().background(
-                    Brush.horizontalGradient(0f to Bg.copy(alpha = .95f), 0.55f to Bg.copy(alpha = .35f), 1f to Color.Transparent)
-                )
-            )
-            Box(
-                Modifier.fillMaxSize().background(
-                    Brush.verticalGradient(0f to Bg.copy(alpha = .55f), 0.3f to Color.Transparent, 0.62f to Bg.copy(alpha = .9f), 1f to Bg)
-                )
-            )
-            Column(Modifier.fillMaxSize()) {
-                Spacer(Modifier.height(LocalTopInset.current))
-                HeroInfo(shownHero, Modifier.padding(start = edge, end = edge).height(196.dp))
-                HomeRows(
-                    rows = enabledRows, sources = sources, s = s, cw = cw, watched = watchedSet,
-                    onOpen = onOpen, onPlayContinue = playContinue, onFocusItem = { hero = it },
-                    contentPadding = PaddingValues(bottom = 60.dp),
-                    modifier = Modifier.fillMaxWidth().weight(1f),
+            val dim by animateFloatAsState(if (inRows) 0.55f else 0f, tween(500), label = "dim")
+            Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to Bg.copy(alpha = .92f), 0.6f to Bg.copy(alpha = .25f), 1f to Color.Transparent)))
+            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Bg.copy(alpha = .5f), 0.25f to Color.Transparent, 0.6f to Bg.copy(alpha = .75f), 1f to Bg)))
+            Box(Modifier.fillMaxSize().background(Bg.copy(alpha = dim)))
+        }
+
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            state = listState,
+            contentPadding = PaddingValues(top = if (isTv) topInset else 0.dp, bottom = 80.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            item(key = "banner") {
+                FeaturedBanner(
+                    item = bannerItem, count = featured.size, index = bannerIndex, height = bannerH,
+                    playFr = bannerFr,
+                    onPlay = { b -> onOpen("play:" + b.id) },
+                    onInfo = { b -> onOpen(b.id) },
+                    onFocus = { inRows = false },
+                    onDown = { goRow(0) },
+                    onNext = { if (featured.isNotEmpty()) bannerIndex = (bannerIndex + 1) % featured.size },
                 )
             }
+            itemsIndexed(visible, key = { _, r -> r.key }) { ri, row ->
+                val nav = if (isTv) RowNav(frFor(row.key), onUp = { goRow(ri - 1) }, onDown = { goRow(ri + 1) }) else null
+                if (row.key == RowKeys.CONTINUE) {
+                    MediaRow(row.title, row.cw, key = { it.progress.fileUrl }, nav = nav) { e ->
+                        LandscapeCard(
+                            item = e.item, label = e.progress.label, progress = e.progress.fraction, width = landW,
+                            onClick = { playContinue(e) },
+                            onFocused = { inRows = true; focusedItem = e.item },
+                        )
+                    }
+                } else {
+                    MediaRow(row.title, row.items, key = { it.id }, nav = nav) { item ->
+                        PosterCard(
+                            item = item, width = posterW, watched = item.id in watchedSet,
+                            onClick = { onOpen(item.id) },
+                            onFocused = { inRows = true; focusedItem = item },
+                        )
+                    }
+                }
+            }
         }
-    } else {
-        val heroItem = latest.firstOrNull()
-        HomeRows(
-            rows = enabledRows, sources = sources, s = s, cw = cw, watched = watchedSet,
-            onOpen = onOpen, onPlayContinue = playContinue, onFocusItem = {},
-            contentPadding = PaddingValues(bottom = 24.dp),
-            modifier = Modifier.fillMaxSize(),
-            header = { if (heroItem != null) PhoneHero(heroItem, onOpen) },
-        )
     }
 }
 
 @Composable
-private fun HomeRows(
-    rows: List<HomeRow>,
-    sources: List<Source>,
-    s: Strings,
-    cw: List<ContinueEntry>,
-    watched: Set<String>,
-    onOpen: (String) -> Unit,
-    onPlayContinue: (ContinueEntry) -> Unit,
-    onFocusItem: (ItemEntity) -> Unit,
-    contentPadding: PaddingValues,
-    modifier: Modifier,
-    header: (@Composable () -> Unit)? = null,
+private fun FeaturedBanner(
+    item: ItemEntity?,
+    count: Int,
+    index: Int,
+    height: Dp,
+    playFr: FocusRequester,
+    onPlay: (ItemEntity) -> Unit,
+    onInfo: (ItemEntity) -> Unit,
+    onFocus: () -> Unit,
+    onDown: () -> Unit,
+    onNext: () -> Unit,
 ) {
-    val repo = DhakaFlixApp.instance.library
+    val s = LocalStrings.current
     val isTv = LocalIsTv.current
-    val posterW = if (isTv) 128.dp else 108.dp
-    val listState = rememberLazyListState()
-    LazyColumn(modifier, state = listState, contentPadding = contentPadding, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (header != null) item(key = "header") { header() }
-        items(rows, key = { it.key }) { row ->
-            if (row.key == RowKeys.CONTINUE) {
-                MediaRow(title = s.continueWatching, items = cw, key = { it.progress.fileUrl }) { e ->
-                    LandscapeCard(
-                        item = e.item, label = e.progress.label, progress = e.progress.fraction,
-                        width = if (isTv) 250.dp else 220.dp,
-                        onClick = { onPlayContinue(e) }, onFocused = { onFocusItem(e.item) },
-                    )
-                }
-            } else {
-                val items by remember(row.key) { repo.rowFlow(row.key) }.collectAsState(initial = emptyList())
-                MediaRow(title = rowTitle(row.key, s, sources), items = items, key = { it.id }) { item ->
-                    PosterCard(
-                        item = item, width = posterW, watched = item.id in watched,
-                        onClick = { onOpen(item.id) }, onFocused = { onFocusItem(item) },
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun HeroInfo(item: ItemEntity?, modifier: Modifier) {
-    val s = LocalStrings.current
-    AnimatedContent(
-        targetState = item,
-        transitionSpec = { fadeIn(tween(450)) togetherWith fadeOut(tween(250)) },
-        contentKey = { it?.id },
-        modifier = modifier,
-        label = "hero",
-    ) { cur ->
-        Column(Modifier.widthIn(max = 620.dp).fillMaxHeight()) {
-            if (cur == null) {
-                Text(s.greeting, style = MaterialTheme.typography.headlineLarge, color = Color.White)
-                return@Column
-            }
-            Spacer(Modifier.weight(1f))
-            Text(
-                cur.displayTitle, style = MaterialTheme.typography.headlineLarge, color = Color.White,
-                maxLines = 2, overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.height(8.dp))
-            MetaLine(cur, extra = cur.genreList.take(3))
-            Spacer(Modifier.height(10.dp))
-            Text(
-                cur.overview ?: "", style = MaterialTheme.typography.bodyMedium, color = TextDim,
-                maxLines = 3, overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.height(8.dp))
-        }
-    }
-}
-
-@Composable
-private fun PhoneHero(item: ItemEntity, onOpen: (String) -> Unit) {
+    val edge = LocalEdge.current
     val ctx = LocalContext.current
-    val s = LocalStrings.current
-    Box(Modifier.fillMaxWidth().height(420.dp)) {
-        AsyncImage(
-            model = ImageRequest.Builder(ctx).data(item.backdropUrl(false)).crossfade(true).build(),
-            contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(),
-        )
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color.Transparent, 0.45f to Color.Transparent, 1f to Bg)))
-        Column(Modifier.align(Alignment.BottomStart).padding(20.dp)) {
-            Text(item.displayTitle, style = MaterialTheme.typography.headlineMedium, color = Color.White, maxLines = 2)
-            Spacer(Modifier.height(6.dp))
-            MetaLine(item)
-            Spacer(Modifier.height(14.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                PillButton(s.play, onClick = { onOpen(item.id) }, icon = Icons.Filled.PlayArrow, primary = true)
+    val accent = LocalAccent.current
+    val app = DhakaFlixApp.instance
+    val scope = rememberCoroutineScope()
+
+    Box(Modifier.fillMaxWidth().height(height)) {
+        if (!isTv && item != null) {
+            Crossfade(targetState = item.backdropUrl(false), animationSpec = tween(700), label = "phoneBanner") { url ->
+                AsyncImage(ImageRequest.Builder(ctx).data(url).crossfade(true).build(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            }
+            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color.Transparent, 0.45f to Color.Transparent, 1f to Bg)))
+        }
+        Column(Modifier.align(Alignment.BottomStart).padding(start = edge, end = edge, bottom = 10.dp)) {
+            AnimatedContent(
+                targetState = item,
+                contentKey = { it?.id },
+                transitionSpec = { (fadeIn(tween(500)) + slideInVertically(tween(500)) { it / 12 }) togetherWith fadeOut(tween(250)) },
+                label = "bannerInfo",
+            ) { cur ->
+                Column(Modifier.widthIn(max = 600.dp)) {
+                    if (cur == null) {
+                        Text(s.greeting, style = MaterialTheme.typography.headlineLarge, color = Color.White)
+                        Spacer(Modifier.height(16.dp))
+                        return@Column
+                    }
+                    Text(
+                        (if (cur.isSeries) s.series else s.movies).uppercase() + "  ·  " + s.latestUploads,
+                        Modifier.glass(RoundedCornerShape(50), tint = .08f).padding(horizontal = 12.dp, vertical = 4.dp),
+                        color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        cur.displayTitle, style = MaterialTheme.typography.displaySmall, color = Color.White,
+                        fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    MetaLine(cur, extra = cur.genreList.take(3))
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        cur.overview ?: "", style = MaterialTheme.typography.bodyMedium, color = TextDim,
+                        maxLines = 3, overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(18.dp))
+                }
+            }
+            // buttons stay outside AnimatedContent so focus survives the banner rotating
+            if (item != null) {
+                val user by remember(item.id) { app.db.user().observe(item.id) }.collectAsState(initial = null)
+                val inList = user?.inWatchlist == true
+                Row(
+                    Modifier
+                        .onFocusChanged { if (it.hasFocus) onFocus() }
+                        .onPreviewKeyEvent { e ->
+                            if (e.type == KeyEventType.KeyDown && e.key == Key.DirectionDown) { onDown(); true } else false
+                        },
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    PillButton(s.play, onClick = { onPlay(item) }, icon = Icons.Filled.PlayArrow, primary = true, focusRequester = playFr)
+                    PillButton(s.moreInfo, onClick = { onInfo(item) }, icon = Icons.Filled.Info)
+                    PillButton(
+                        if (inList) s.inWatchlist else s.addToWatchlist,
+                        onClick = { scope.launch { app.library.toggleWatchlist(item.id) } },
+                        icon = if (inList) Icons.Filled.Check else Icons.Filled.Add, selected = inList,
+                    )
+                    if (count > 1) {
+                        Spacer(Modifier.width(10.dp))
+                        PillButton("", onClick = onNext, icon = AppIcons.Forward, compact = true)
+                        Spacer(Modifier.width(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            repeat(count) { i ->
+                                val on = i == index % count
+                                Box(
+                                    Modifier.size(width = if (on) 18.dp else 6.dp, height = 6.dp)
+                                        .clip(CircleShape)
+                                        .background(if (on) accent else Color.White.copy(alpha = .35f))
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -282,7 +377,6 @@ private fun ScanningState(title: String, sub: String) {
                 Spacer(Modifier.height(8.dp))
                 Text(sub, style = MaterialTheme.typography.bodyMedium, color = TextDim)
             }
-            Spacer(Modifier.width(1.dp))
         }
     }
 }

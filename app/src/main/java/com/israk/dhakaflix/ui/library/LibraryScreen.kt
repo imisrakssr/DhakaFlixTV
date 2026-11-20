@@ -19,6 +19,9 @@ import androidx.compose.ui.unit.dp
 import com.israk.dhakaflix.DhakaFlixApp
 import com.israk.dhakaflix.player.PlayerActivity
 import com.israk.dhakaflix.ui.LocalTopInset
+import com.israk.dhakaflix.ui.entryFocus
+import com.israk.dhakaflix.ui.components.dpadScrollFallback
+import androidx.compose.foundation.lazy.rememberLazyListState
 import com.israk.dhakaflix.ui.components.CenterMessage
 import com.israk.dhakaflix.ui.components.LandscapeCard
 import com.israk.dhakaflix.ui.components.MediaRow
@@ -40,14 +43,17 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
     val cw by remember { repo.continueWatching() }.collectAsState(initial = emptyList())
     val watchlist by remember { app.db.user().watchlist() }.collectAsState(initial = emptyList())
     val watched by remember { app.db.user().watched() }.collectAsState(initial = emptyList())
-    val posterW = if (isTv) 128.dp else 108.dp
+    val posterW = if (isTv) 112.dp else 104.dp
 
     if (cw.isEmpty() && watchlist.isEmpty() && watched.isEmpty()) {
         CenterMessage(s.libraryEmpty, Modifier.padding(top = LocalTopInset.current))
         return
     }
+    val listState = rememberLazyListState()
+    val entryMod = Modifier.entryFocus()
     LazyColumn(
-        Modifier.fillMaxSize(),
+        Modifier.fillMaxSize().dpadScrollFallback(listState),
+        state = listState,
         contentPadding = PaddingValues(top = LocalTopInset.current + 8.dp, bottom = 56.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -58,9 +64,9 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
             )
         }
         item {
-            MediaRow(s.continueWatching, cw, key = { it.progress.fileUrl }) { e ->
+            MediaRow(s.continueWatching, cw, key = { it.progress.fileUrl }, modifier = entryMod) { e ->
                 LandscapeCard(
-                    e.item, e.progress.label, e.progress.fraction, if (isTv) 250.dp else 220.dp,
+                    e.item, e.progress.label, e.progress.fraction, if (isTv) 220.dp else 210.dp,
                     onClick = {
                         scope.launch {
                             val (list, idx) = repo.playlistFromProgress(e.progress)
@@ -71,12 +77,12 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
             }
         }
         item {
-            MediaRow(s.myWatchlist, watchlist, key = { it.id }) { item ->
+            MediaRow(s.myWatchlist, watchlist, key = { it.id }, modifier = if (cw.isEmpty()) entryMod else Modifier) { item ->
                 PosterCard(item, posterW, onClick = { onOpen(item.id) })
             }
         }
         item {
-            MediaRow(s.history, watched, key = { it.id }) { item ->
+            MediaRow(s.history, watched, key = { it.id }, modifier = if (cw.isEmpty() && watchlist.isEmpty()) entryMod else Modifier) { item ->
                 PosterCard(item, posterW, watched = true, onClick = { onOpen(item.id) })
             }
         }

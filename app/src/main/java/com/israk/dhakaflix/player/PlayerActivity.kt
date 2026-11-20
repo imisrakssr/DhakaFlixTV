@@ -20,6 +20,7 @@ import com.israk.dhakaflix.data.PlayItem
 import com.israk.dhakaflix.ui.edgeFor
 import com.israk.dhakaflix.ui.theme.DhakaFlixTheme
 import com.israk.dhakaflix.ui.theme.LocalStrings
+import com.israk.dhakaflix.ui.theme.ScaledDensity
 import com.israk.dhakaflix.ui.theme.stringsFor
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
@@ -47,9 +48,12 @@ class PlayerActivity : ComponentActivity() {
         setContent {
             val accent by app.settings.accent.collectAsState()
             val lang by app.settings.language.collectAsState()
-            DhakaFlixTheme(accentIndex = accent, isTv = tv, edge = edgeFor(tv, LocalConfiguration.current.screenWidthDp)) {
-                CompositionLocalProvider(LocalStrings provides stringsFor(lang)) {
-                    PlayerScreen(c)
+            val uiSize by app.settings.uiSize.collectAsState()
+            ScaledDensity(isTv = tv, uiSize = uiSize) {
+                DhakaFlixTheme(accentIndex = accent, isTv = tv, edge = edgeFor(tv, LocalConfiguration.current.screenWidthDp)) {
+                    CompositionLocalProvider(LocalStrings provides stringsFor(lang)) {
+                        PlayerScreen(c)
+                    }
                 }
             }
         }

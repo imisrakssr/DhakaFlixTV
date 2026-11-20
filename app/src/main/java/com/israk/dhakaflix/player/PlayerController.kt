@@ -6,6 +6,7 @@ import android.view.KeyEvent
 import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -21,12 +22,14 @@ import kotlinx.coroutines.launch
 class PlayerController(
     private val activity: ComponentActivity,
     private val app: DhakaFlixApp,
-    val playlist: List<PlayItem>,
+    initialPlaylist: List<PlayItem>,
     startIndex: Int,
     private val startMode: String,
 ) : EngineListener {
 
-    enum class Panel { AUDIO, SUBS, SYNC, SPEED, ASPECT }
+    enum class Panel { AUDIO, SUBS, SYNC, SPEED, ASPECT, OPTIONS }
+
+    val playlist = mutableStateListOf<PlayItem>().apply { addAll(initialPlaylist) }
 
     private val repo = app.library
     private val settings = app.settings
@@ -81,11 +84,25 @@ class PlayerController(
     private var lastSave = 0L
     private var seekTarget = -1L
     private var seekAt = 0L
+    private var fetchedNextSeasonFor: Int? = null
+
+    /** Last hidden-controls seek, for the on-screen "+10s" bubble. */
+    var seekFlashAt by mutableLongStateOf(0L)
+        private set
+    var seekFlashDelta by mutableLongStateOf(0L)
+        private set
+
+    /** "Up next" card in the last 40 seconds of an episode. */
+    val showUpNext: Boolean
+        get() = hasNext && current.episode != null && duration > 120_000 && duration - position in 1L..40_000L
+
+    val nextItem: PlayItem? get() = playlist.getOrNull(index + 1)
 
     fun begin() { scope.launch { prepare(index, startMode) } }
 
     private suspend fun prepare(i: Int, mode: String) {
         index = i
+        prefetchNextSeason()
         error = null; panel = null; endedHandled = false; triedFallback = false
         clearOwnSubs()
         position = 0; duration = 0
@@ -97,6 +114,18 @@ class PlayerController(
             mode == PlayerActivity.MODE_START || resumable == null -> start(0)
             mode == PlayerActivity.MODE_RESUME -> start(resumable)
             else -> { engine?.pause(); resumeAsk = resumable }
+        }
+    }
+
+    /** When the last loaded episode starts, append the next season so "Next" keeps working. */
+    private fun prefetchNextSeason() {
+        val cur = current
+        val season = cur.season ?: return
+        if (index != playlist.lastIndex || fetchedNextSeasonFor == season) return
+        fetchedNextSeasonFor = season
+        scope.launch {
+            val more = repo.nextSeasonPlaylist(cur.itemId, season)
+            if (more.isNotEmpty() && playlist.none { it.url == more.first().url }) playlist.addAll(more)
         }
     }
 
@@ -199,7 +228,10 @@ class PlayerController(
         seekTarget = t; seekAt = now
         e.seekTo(t)
         position = t
-        showControls()
+        if (!controlsVisible) {
+            seekFlashDelta = if (now - seekFlashAt < 1500) seekFlashDelta + delta else delta
+            seekFlashAt = now
+        } else showControls()
     }
 
     fun seekToFraction(f: Float) {
@@ -307,7 +339,8 @@ class PlayerController(
         // Controls hidden: the remote drives playback directly
         when (e.keyCode) {
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
-                if (down && e.repeatCount == 0) togglePlay(); return true
+                if (down && e.repeatCount == 0) { if (showUpNext) next() else togglePlay() }
+                return true
             }
             KeyEvent.KEYCODE_DPAD_LEFT -> { if (down) seekBy(-step(e)); return true }
             KeyEvent.KEYCODE_DPAD_RIGHT -> { if (down) seekBy(step(e)); return true }

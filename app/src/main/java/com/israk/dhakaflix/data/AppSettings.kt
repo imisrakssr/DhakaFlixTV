@@ -19,6 +19,16 @@ class AppSettings(ctx: Context) {
     val language: StateFlow<String> = _language
     fun setLanguage(v: String) { _language.value = v; prefs.edit().putString("language", v).apply() }
 
+    /** "top" or "left" navigation on TV. */
+    private val _navPosition = MutableStateFlow(prefs.getString("nav_position", "top") ?: "top")
+    val navPosition: StateFlow<String> = _navPosition
+    fun setNavPosition(v: String) { _navPosition.value = v; prefs.edit().putString("nav_position", v).apply() }
+
+    /** 0 = small, 1 = medium, 2 = large */
+    private val _uiSize = MutableStateFlow(prefs.getInt("ui_size", 1))
+    val uiSize: StateFlow<Int> = _uiSize
+    fun setUiSize(v: Int) { _uiSize.value = v; prefs.edit().putInt("ui_size", v).apply() }
+
     private val _tmdbKey = MutableStateFlow(prefs.getString("tmdb_key", "") ?: "")
     val tmdbKey: StateFlow<String> = _tmdbKey
     fun setTmdbKey(v: String) { _tmdbKey.value = v.trim(); prefs.edit().putString("tmdb_key", v.trim()).apply() }

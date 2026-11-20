@@ -40,6 +40,7 @@ import com.israk.dhakaflix.data.BrowseFilter
 import com.israk.dhakaflix.data.MediaType
 import com.israk.dhakaflix.data.SortMode
 import com.israk.dhakaflix.ui.browse.PosterGrid
+import com.israk.dhakaflix.ui.entryFocus
 import com.israk.dhakaflix.ui.browse.rememberBrowsePager
 import com.israk.dhakaflix.ui.browse.sortLabel
 import com.israk.dhakaflix.ui.components.ChipRow
@@ -89,7 +90,7 @@ fun SearchScreen(onOpen: (String) -> Unit) {
                         focusedContainerColor = Color.White.copy(alpha = .06f), unfocusedContainerColor = Color.White.copy(alpha = .04f),
                         cursorColor = accent, focusedTextColor = Color.White, unfocusedTextColor = Color.White,
                     ),
-                    modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth().onPreviewKeyEvent { e ->
+                    modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth().entryFocus().onPreviewKeyEvent { e ->
                         // Let the D-pad leave the text field on TV
                         if (e.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
                         when (e.nativeKeyEvent.keyCode) {

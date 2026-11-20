@@ -148,10 +148,26 @@ class TmdbClient(private val http: OkHttpClient, private val key: () -> String) 
         }.build()
         http.newCall(req).execute().use { r ->
             if (r.code == 429) throw RateLimited()
+            if (r.code == 401) throw Unauthorized()
             if (!r.isSuccessful) throw IOException("TMDB HTTP ${r.code}")
             r.body?.string().orEmpty()
         }
     }
 
     class RateLimited : IOException("TMDB rate limited")
+    class Unauthorized : IOException("TMDB key rejected")
+
+    enum class Status { NOT_SET, CHECKING, CONNECTED, INVALID, OFFLINE }
+
+    /** Checks the key against /configuration. */
+    suspend fun verify(): Status {
+        if (!hasKey) return Status.NOT_SET
+        return try {
+            get("configuration", emptyMap()); Status.CONNECTED
+        } catch (e: Unauthorized) {
+            Status.INVALID
+        } catch (e: Exception) {
+            Status.OFFLINE
+        }
+    }
 }

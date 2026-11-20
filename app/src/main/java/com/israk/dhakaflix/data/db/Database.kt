@@ -2,6 +2,7 @@ package com.israk.dhakaflix.data.db
 
 import android.content.Context
 import androidx.paging.PagingSource
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -16,6 +17,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
 import androidx.room.Update
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.sqlite.db.SupportSQLiteQuery
 import kotlinx.coroutines.flow.Flow
 
@@ -54,6 +57,7 @@ data class ItemEntity(
     val tagline: String? = null,
     val detailsFetched: Boolean = false,
     val localPoster: String? = null,     // server-provided jpg
+    @ColumnInfo(defaultValue = "0") val posterChecked: Boolean = false,
 ) {
     @get:Ignore val isSeries: Boolean get() = type == "SERIES"
     @get:Ignore val displayTitle: String get() = tmdbTitle ?: title
@@ -179,6 +183,15 @@ abstract class ItemDao {
     @Query("UPDATE items SET localPoster = :url WHERE id = :id")
     abstract suspend fun setLocalPoster(id: String, url: String)
 
+    @Query("SELECT * FROM items WHERE posterPath IS NULL AND localPoster IS NULL AND posterChecked = 0 AND (:anyMeta = 1 OR metaState != 0) ORDER BY uploadedAt DESC LIMIT :limit")
+    abstract suspend fun needingPoster(anyMeta: Boolean, limit: Int): List<ItemEntity>
+
+    @Query("UPDATE items SET posterChecked = 1, localPoster = COALESCE(:poster, localPoster) WHERE id = :id")
+    abstract suspend fun setPosterChecked(id: String, poster: String?)
+
+    @Query("SELECT * FROM items WHERE isPrimary = 1 AND (backdropPath IS NOT NULL OR localPoster IS NOT NULL) ORDER BY uploadedAt DESC LIMIT :limit")
+    abstract fun featured(limit: Int): Flow<List<ItemEntity>>
+
     @Query("SELECT COUNT(*) FROM items WHERE sourceId = :sourceId")
     abstract suspend fun countForSource(sourceId: String): Int
 
@@ -263,7 +276,7 @@ interface ProgressDao {
 
 @Database(
     entities = [ItemEntity::class, DirCacheEntity::class, UserStateEntity::class, ProgressEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -274,6 +287,14 @@ abstract class AppDatabase : RoomDatabase() {
 
     companion object {
         fun create(ctx: Context): AppDatabase =
-            Room.databaseBuilder(ctx, AppDatabase::class.java, "dhakaflix.db").build()
+            Room.databaseBuilder(ctx, AppDatabase::class.java, "dhakaflix.db")
+                .addMigrations(MIGRATION_1_2)
+                .build()
+
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE items ADD COLUMN posterChecked INTEGER NOT NULL DEFAULT 0")
+            }
+        }
     }
 }

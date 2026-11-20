@@ -14,7 +14,11 @@ import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
@@ -79,7 +83,29 @@ class ExoEngine(private val ctx: Context, preferSubs: Boolean) : VideoEngine {
         DefaultRenderersFactory(ctx)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
             .setEnableDecoderFallback(true),
-    ).build().apply {
+    )
+        // LAN streaming on a 1 GB TV stick: modest buffer, quick start
+        .setLoadControl(
+            DefaultLoadControl.Builder()
+                .setBufferDurationsMs(15_000, 45_000, 1_500, 3_000)
+                .setTargetBufferBytes(48 * 1024 * 1024)
+                .setPrioritizeTimeOverSizeThresholds(false)
+                .build()
+        )
+        .setMediaSourceFactory(
+            DefaultMediaSourceFactory(
+                DefaultDataSource.Factory(
+                    ctx,
+                    DefaultHttpDataSource.Factory()
+                        .setUserAgent("DhakaFlixTV")
+                        .setConnectTimeoutMs(15_000)
+                        .setReadTimeoutMs(20_000)
+                        .setAllowCrossProtocolRedirects(true),
+                ),
+            )
+        )
+        .setHandleAudioBecomingNoisy(true)
+        .build().apply {
         trackSelectionParameters = trackSelectionParameters.buildUpon().apply {
             if (preferSubs) setPreferredTextLanguage("en")
         }.build()

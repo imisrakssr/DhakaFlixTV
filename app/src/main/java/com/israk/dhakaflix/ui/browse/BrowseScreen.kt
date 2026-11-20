@@ -37,6 +37,8 @@ import com.israk.dhakaflix.data.MediaType
 import com.israk.dhakaflix.data.SortMode
 import com.israk.dhakaflix.data.db.ItemEntity
 import com.israk.dhakaflix.ui.LocalTopInset
+import com.israk.dhakaflix.ui.entryFocus
+import com.israk.dhakaflix.ui.components.dpadScrollFallback
 import com.israk.dhakaflix.ui.components.ChipRow
 import com.israk.dhakaflix.ui.components.PosterCard
 import com.israk.dhakaflix.ui.theme.LocalEdge
@@ -82,7 +84,7 @@ fun BrowseScreen(type: MediaType, onOpen: (String) -> Unit) {
         item(span = { GridItemSpan(maxLineSpan) }) {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(if (type == MediaType.MOVIE) s.movies else s.series, style = MaterialTheme.typography.headlineMedium, color = Color.White)
-                ChipRow(SortMode.entries.toList(), sort, { sortLabel(it, s) }, { sort = it }, contentPadding = PaddingValues(vertical = 6.dp))
+                ChipRow(SortMode.entries.toList(), sort, { sortLabel(it, s) }, { sort = it }, contentPadding = PaddingValues(vertical = 6.dp), firstItemModifier = Modifier.entryFocus())
                 if (sources.size > 1) {
                     ChipRow(listOf<String?>(null) + sources.map { it.id }, sourceId,
                         { id -> if (id == null) s.allCategories else sources.first { it.id == id }.name },
@@ -107,11 +109,12 @@ fun PosterGrid(
     val edge = LocalEdge.current
     val watchedIds by remember { app.db.user().watchedIds() }.collectAsState(initial = emptyList())
     val watched = remember(watchedIds) { watchedIds.toHashSet() }
-    val cell: Dp = if (isTv) 130.dp else 104.dp
+    val cell: Dp = if (isTv) 112.dp else 104.dp
+    val gridState = rememberLazyGridState()
     LazyVerticalGrid(
         columns = GridCells.Adaptive(cell),
-        state = rememberLazyGridState(),
-        modifier = Modifier.fillMaxSize(),
+        state = gridState,
+        modifier = Modifier.fillMaxSize().dpadScrollFallback(gridState),
         contentPadding = PaddingValues(start = edge, end = edge, top = LocalTopInset.current + 8.dp, bottom = 56.dp),
         horizontalArrangement = Arrangement.spacedBy(if (isTv) 20.dp else 12.dp),
         verticalArrangement = Arrangement.spacedBy(if (isTv) 22.dp else 16.dp),

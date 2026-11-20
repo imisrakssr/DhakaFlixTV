@@ -89,8 +89,12 @@ class LibraryRepository(private val app: DhakaFlixApp) {
     private val _enriching = MutableStateFlow(false)
     val enriching: StateFlow<Boolean> = _enriching
 
+    private val _tmdbStatus = MutableStateFlow(TmdbClient.Status.NOT_SET)
+    val tmdbStatus: StateFlow<TmdbClient.Status> = _tmdbStatus
+
     private var syncJob: Job? = null
     private var enrichJob: Job? = null
+    private var posterJob: Job? = null
     private val net = Semaphore(4)
     private val seasonCache = ConcurrentHashMap<String, Map<Int, TmdbEpisode>>()
 
@@ -99,11 +103,19 @@ class LibraryRepository(private val app: DhakaFlixApp) {
 
     // ------------------------------------------------------------------ sync
 
-    fun syncIfStale() {
+    /** Incremental sync when the library is older than [maxAgeMs]; cheap because unchanged folders are skipped. */
+    fun syncIfStale(maxAgeMs: Long = TEN_MINUTES) {
         scope.launch(Dispatchers.IO) {
             val count = db.items().countFlow().first()
-            val stale = System.currentTimeMillis() - settings.lastSync.value > SIX_HOURS
-            if (count == 0 || stale) startSync(force = false) else startEnrich()
+            val stale = System.currentTimeMillis() - settings.lastSync.value > maxAgeMs
+            if (count == 0 || stale) startSync(force = false) else { startEnrich(); startPosterScan() }
+        }
+    }
+
+    fun verifyTmdb() {
+        scope.launch(Dispatchers.IO) {
+            _tmdbStatus.value = if (tmdb.hasKey) TmdbClient.Status.CHECKING else TmdbClient.Status.NOT_SET
+            _tmdbStatus.value = tmdb.verify()
         }
     }
 
@@ -112,6 +124,7 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         syncJob = scope.launch(Dispatchers.IO) {
             runSync(force)
             startEnrich()
+            if (!tmdb.hasKey) startPosterScan()
         }
     }
 
@@ -202,7 +215,41 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         enrichJob = scope.launch(Dispatchers.IO) {
             _enriching.value = true
             try { enrichLoop() } finally { _enriching.value = false }
+            startPosterScan()
         }
+    }
+
+    /** Uses the poster image stored inside the server folder when TMDB has none. */
+    fun startPosterScan() {
+        if (posterJob?.isActive == true) return
+        posterJob = scope.launch(Dispatchers.IO) {
+            val anyMeta = !tmdb.hasKey
+            while (true) {
+                val batch = db.items().needingPoster(anyMeta, 40)
+                if (batch.isEmpty()) break
+                coroutineScope {
+                    batch.map { item ->
+                        async {
+                            net.withPermit {
+                                val entries = runCatching { h5ai.list(item.id) }.getOrNull()
+                                db.items().setPosterChecked(item.id, entries?.let { pickPoster(it).first })
+                            }
+                        }
+                    }.awaitAll()
+                }
+            }
+        }
+    }
+
+    /** (poster, backdrop) image URLs found in a folder listing. */
+    private fun pickPoster(entries: List<DirEntry>): Pair<String?, String?> {
+        val images = entries.filter { !it.isDir && NameParser.ext(it.name) in NameParser.imageExt }
+        fun has(vararg k: String) = images.firstOrNull { e -> k.any { e.name.contains(it, ignoreCase = true) } }
+        val backdrop = has("_VL_", "backdrop", "fanart", "banner")
+        val poster = has("_AL_", "poster", "folder", "cover")
+            ?: images.firstOrNull { it != backdrop }
+            ?: backdrop
+        return poster?.url to backdrop?.url
     }
 
     /** Called after the user adds a TMDB key. */
@@ -333,11 +380,8 @@ class LibraryRepository(private val app: DhakaFlixApp) {
                 ?.filter { !it.isDir && NameParser.ext(it.name) in NameParser.subExt }
                 ?.forEach { subs += it.url }
         }
-        val images = files.filter { NameParser.ext(it.name) in NameParser.imageExt }
-        val poster = images.firstOrNull { it.name.contains("_AL_") }?.url
-            ?: images.firstOrNull { !it.name.contains("_VL_") }?.url
-        val backdrop = images.firstOrNull { it.name.contains("_VL_") }?.url
-        if (poster != null && item.localPoster == null) db.items().setLocalPoster(item.id, poster)
+        val (poster, backdrop) = pickPoster(entries)
+        if (poster != null && item.localPoster == null) db.items().setPosterChecked(item.id, poster)
 
         val seasons = if (item.isSeries) {
             dirs.filterNot { it.name.lowercase().startsWith("sub") }
@@ -461,6 +505,17 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         latest.mapNotNull { p -> items[p.itemId]?.let { ContinueEntry(p, it) } }
     }
 
+    fun featured(): Flow<List<ItemEntity>> = db.items().featured(8)
+
+    /** Episodes of the season after [season] for a series, so playback can run across seasons. */
+    suspend fun nextSeasonPlaylist(itemId: String, season: Int): List<PlayItem> = withContext(Dispatchers.IO) {
+        val item = db.items().get(itemId) ?: return@withContext emptyList()
+        runCatching {
+            val next = listItem(item).seasons.firstOrNull { it.number > season } ?: return@runCatching emptyList()
+            playlistFor(item, listSeason(next))
+        }.getOrDefault(emptyList())
+    }
+
     fun rowFlow(key: String): Flow<List<ItemEntity>> {
         val dao = db.items()
         return when {
@@ -499,7 +554,7 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         private const val TAG = "Library"
         private const val MAX_DEPTH = 4
         private const val ROW_LIMIT = 30
-        private const val SIX_HOURS = 6L * 60 * 60 * 1000
+        const val TEN_MINUTES = 10L * 60 * 1000
 
         fun fileName(url: String): String = Uri.decode(url.trimEnd('/').substringAfterLast('/'))
 

@@ -9,6 +9,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -96,5 +99,20 @@ fun DhakaFlixTheme(accentIndex: Int, isTv: Boolean, edge: Dp, content: @Composab
         LocalEdge provides edge,
     ) {
         MaterialTheme(colorScheme = scheme, typography = AppTypography, content = content)
+    }
+}
+
+/**
+ * Makes the layout look identical on every TV: everything is designed for a 960dp-wide canvas
+ * and scaled to the real screen, then multiplied by the user's size preference.
+ */
+@Composable
+fun ScaledDensity(isTv: Boolean, uiSize: Int, content: @Composable () -> Unit) {
+    val cfg = LocalConfiguration.current
+    val base = LocalDensity.current
+    val user = when (uiSize) { 0 -> 0.88f; 2 -> 1.12f; else -> 1f }
+    val factor = if (isTv) (cfg.screenWidthDp / 960f).coerceIn(0.6f, 2.4f) * user else user
+    CompositionLocalProvider(LocalDensity provides Density(base.density * factor, base.fontScale)) {
+        content()
     }
 }

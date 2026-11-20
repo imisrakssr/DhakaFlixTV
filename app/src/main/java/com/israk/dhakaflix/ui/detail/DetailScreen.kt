@@ -76,6 +76,7 @@ import com.israk.dhakaflix.ui.components.PosterImage
 import com.israk.dhakaflix.ui.components.ProgressLine
 import com.israk.dhakaflix.ui.components.backdropUrl
 import com.israk.dhakaflix.ui.components.fmtTime
+import com.israk.dhakaflix.ui.components.dpadScrollFallback
 import com.israk.dhakaflix.ui.theme.Bg
 import com.israk.dhakaflix.ui.theme.LocalAccent
 import com.israk.dhakaflix.ui.theme.LocalEdge
@@ -91,7 +92,7 @@ import kotlinx.coroutines.launch
 private data class PlayPlan(val list: List<PlayItem>, val index: Int, val resumeAt: Long?, val label: String?)
 
 @Composable
-fun DetailScreen(id: String, onOpen: (String) -> Unit) {
+fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false) {
     val app = DhakaFlixApp.instance
     val repo = app.library
     val s = LocalStrings.current
@@ -160,6 +161,15 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit) {
         buildPlan(cur, content, episodes, progressByUrl, progress.firstOrNull(), app.library)
     }
     val play: (PlayPlan, String) -> Unit = { p, mode -> PlayerActivity.start(ctx, p.list, p.index, mode) }
+    var autoStarted by rememberSaveable(id) { mutableStateOf(false) }
+    LaunchedEffect(plan, autoPlay) {
+        val p = plan ?: return@LaunchedEffect
+        if (autoPlay && !autoStarted) {
+            autoStarted = true
+            play(p, if (p.resumeAt != null) PlayerActivity.MODE_RESUME else PlayerActivity.MODE_START)
+        }
+    }
+    val detailList = androidx.compose.foundation.lazy.rememberLazyListState()
 
     Box(Modifier.fillMaxSize().background(Bg)) {
         AsyncImage(
@@ -177,14 +187,15 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit) {
         if (isTv) Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.55f to Color.Transparent, 1f to Bg)))
 
         LazyColumn(
-            Modifier.fillMaxSize(),
+            Modifier.fillMaxSize().dpadScrollFallback(detailList),
+            state = detailList,
             contentPadding = PaddingValues(start = edge, end = edge, top = if (isTv) 44.dp else 210.dp, bottom = 60.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             item(key = "header") {
                 Row {
                     if (isTv) {
-                        PosterImage(cur, Modifier.width(190.dp).aspectRatio(2f / 3f).clip(RoundedCornerShape(14.dp)))
+                        PosterImage(cur, Modifier.width(170.dp).aspectRatio(2f / 3f).clip(RoundedCornerShape(14.dp)))
                         Spacer(Modifier.width(32.dp))
                     }
                     Column(Modifier.widthIn(max = 720.dp)) {
