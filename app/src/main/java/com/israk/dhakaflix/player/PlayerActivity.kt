@@ -79,6 +79,12 @@ class PlayerActivity : ComponentActivity() {
         return super.dispatchKeyEvent(event)
     }
 
+    override fun onPause() {
+        super.onPause()
+        // stop sound the moment the player is closed, don't wait for onDestroy
+        if (isFinishing) { ctrl?.release(); ctrl = null }
+    }
+
     override fun onStop() {
         super.onStop()
         ctrl?.onStop()
@@ -98,8 +104,14 @@ class PlayerActivity : ComponentActivity() {
         const val MODE_RESUME = "resume"
         const val MODE_START = "start"
 
+        private var lastStart = 0L
+
         fun start(ctx: Context, list: List<PlayItem>, index: Int, mode: String = MODE_ASK) {
             if (list.isEmpty()) return
+            // a double OK press must not open two players (the hidden one kept playing sound)
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (now - lastStart < 2000) return
+            lastStart = now
             val json = Json.encodeToString(ListSerializer(PlayItem.serializer()), list)
             ctx.startActivity(
                 Intent(ctx, PlayerActivity::class.java)

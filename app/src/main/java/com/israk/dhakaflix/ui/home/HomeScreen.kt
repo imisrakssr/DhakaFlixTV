@@ -162,11 +162,12 @@ fun HomeScreen(onOpen: (String) -> Unit) {
     }
 
     var bannerIndex by remember { mutableIntStateOf(0) }
-    var inRows by remember { mutableStateOf(false) }
-    var focusedItem by remember { mutableStateOf<ItemEntity?>(null) }
+    // focus state lives in a holder that only the backdrop reads, so moving between
+    // posters doesn't recompose the whole page (that caused the jitter)
+    val focus = remember { HomeFocus() }
     val bannerItem = if (featured.isEmpty()) null else featured[bannerIndex % featured.size]
-    LaunchedEffect(featured.size, bannerIndex, inRows) {
-        if (featured.size > 1 && !inRows) {
+    LaunchedEffect(featured.size, bannerIndex, focus.inRows) {
+        if (featured.size > 1 && !focus.inRows) {
             delay(9000)
             bannerIndex = (bannerIndex + 1) % featured.size
         }
@@ -180,6 +181,7 @@ fun HomeScreen(onOpen: (String) -> Unit) {
     }
 
     val listState = rememberLazyListState()
+    com.israk.dhakaflix.ui.ReportScroll { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 140 }
     val bannerFr = LocalEntryFocus.current ?: remember { FocusRequester() }
     val rowFrs = remember { HashMap<String, FocusRequester>() }
     fun frFor(k: String) = rowFrs.getOrPut(k) { FocusRequester() }
@@ -203,25 +205,8 @@ fun HomeScreen(onOpen: (String) -> Unit) {
     val topInset = LocalTopInset.current
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val bannerH: Dp = if (isTv) maxHeight * 0.66f - topInset else 460.dp
-        if (isTv) {
-            // full-bleed backdrop that follows focus (banner item, or the focused card)
-            val bgItem = if (inRows) focusedItem ?: bannerItem else bannerItem
-            var shown by remember { mutableStateOf<ItemEntity?>(null) }
-            LaunchedEffect(bgItem?.id) { delay(if (shown == null) 0 else 280); shown = bgItem }
-            Crossfade(targetState = shown?.backdropUrl(true), animationSpec = tween(700), label = "backdrop") { url ->
-                if (url != null) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(ctx).data(url).size(1280, 720).build(),
-                        contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(),
-                    )
-                }
-            }
-            val dim by animateFloatAsState(if (inRows) 0.55f else 0f, tween(500), label = "dim")
-            Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to Bg.copy(alpha = .92f), 0.6f to Bg.copy(alpha = .25f), 1f to Color.Transparent)))
-            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Bg.copy(alpha = .5f), 0.25f to Color.Transparent, 0.6f to Bg.copy(alpha = .75f), 1f to Bg)))
-            Box(Modifier.fillMaxSize().background(Bg.copy(alpha = dim)))
-        }
+        val bannerH: Dp = if (isTv) maxHeight * 0.82f - topInset else 460.dp
+        if (isTv) HomeBackdrop(focus, bannerItem)
 
         LazyColumn(
             Modifier.fillMaxSize(),
@@ -235,7 +220,7 @@ fun HomeScreen(onOpen: (String) -> Unit) {
                     playFr = bannerFr,
                     onPlay = { b -> onOpen("play:" + b.id) },
                     onInfo = { b -> onOpen(b.id) },
-                    onFocus = { inRows = false },
+                    onFocus = { focus.inRows = false },
                     onDown = { goRow(0) },
                     onNext = { if (featured.isNotEmpty()) bannerIndex = (bannerIndex + 1) % featured.size },
                 )
@@ -247,7 +232,7 @@ fun HomeScreen(onOpen: (String) -> Unit) {
                         LandscapeCard(
                             item = e.item, label = e.progress.label, progress = e.progress.fraction, width = landW,
                             onClick = { playContinue(e) },
-                            onFocused = { inRows = true; focusedItem = e.item },
+                            onFocused = { focus.inRows = true; focus.item = e.item },
                         )
                     }
                 } else {
@@ -255,7 +240,7 @@ fun HomeScreen(onOpen: (String) -> Unit) {
                         PosterCard(
                             item = item, width = posterW, watched = item.id in watchedSet,
                             onClick = { onOpen(item.id) },
-                            onFocused = { inRows = true; focusedItem = item },
+                            onFocused = { focus.inRows = true; focus.item = item },
                         )
                     }
                 }
@@ -312,7 +297,7 @@ private fun FeaturedBanner(
                     )
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        cur.displayTitle, style = MaterialTheme.typography.displaySmall, color = Color.White,
+                        cur.displayTitle, style = MaterialTheme.typography.headlineLarge, color = Color.White,
                         fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis,
                     )
                     Spacer(Modifier.height(8.dp))
@@ -320,7 +305,7 @@ private fun FeaturedBanner(
                     Spacer(Modifier.height(10.dp))
                     Text(
                         cur.overview ?: "", style = MaterialTheme.typography.bodyMedium, color = TextDim,
-                        maxLines = 3, overflow = TextOverflow.Ellipsis,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis,
                     )
                     Spacer(Modifier.height(18.dp))
                 }
@@ -378,5 +363,34 @@ private fun ScanningState(title: String, sub: String) {
                 Text(sub, style = MaterialTheme.typography.bodyMedium, color = TextDim)
             }
         }
+    }
+}
+
+private class HomeFocus {
+    var inRows by mutableStateOf(false)
+    var item by mutableStateOf<ItemEntity?>(null)
+}
+
+/** Full-bleed backdrop that follows the banner, or the focused card once you're in the rows. */
+@Composable
+private fun HomeBackdrop(focus: HomeFocus, bannerItem: ItemEntity?) {
+    val ctx = LocalContext.current
+    val target = if (focus.inRows) focus.item ?: bannerItem else bannerItem
+    var shown by remember { mutableStateOf<ItemEntity?>(null) }
+    // wait until the user pauses on a card before decoding a big image (keeps scrolling smooth)
+    LaunchedEffect(target?.id) { delay(if (shown == null) 0 else 450); shown = target }
+    Box(Modifier.fillMaxSize()) {
+        Crossfade(targetState = shown?.backdropUrl(true), animationSpec = tween(600), label = "backdrop") { url ->
+            if (url != null) {
+                AsyncImage(
+                    model = ImageRequest.Builder(ctx).data(url).size(960, 540).build(),
+                    contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+        val dim by animateFloatAsState(if (focus.inRows) 0.55f else 0f, tween(500), label = "dim")
+        Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to Bg.copy(alpha = .92f), 0.6f to Bg.copy(alpha = .25f), 1f to Color.Transparent)))
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Bg.copy(alpha = .5f), 0.25f to Color.Transparent, 0.6f to Bg.copy(alpha = .75f), 1f to Bg)))
+        Box(Modifier.fillMaxSize().background(Bg.copy(alpha = dim)))
     }
 }

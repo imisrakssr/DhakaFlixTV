@@ -20,6 +20,7 @@ import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import org.videolan.libvlc.LibVLC
@@ -56,6 +57,8 @@ interface VideoEngine {
     fun selectAudio(id: String)
     fun textTracks(): List<TrackOption>
     fun selectText(id: String?)
+    /** Show/hide the engine's own subtitle rendering without changing tracks (no re-buffering). */
+    fun setEngineSubtitlesVisible(visible: Boolean)
     val supportsSubtitleDelay: Boolean
     fun setSubtitleDelay(ms: Long)
     fun setSpeed(speed: Float)
@@ -87,8 +90,8 @@ class ExoEngine(private val ctx: Context, preferSubs: Boolean) : VideoEngine {
         // LAN streaming on a 1 GB TV stick: modest buffer, quick start
         .setLoadControl(
             DefaultLoadControl.Builder()
-                .setBufferDurationsMs(15_000, 45_000, 1_500, 3_000)
-                .setTargetBufferBytes(48 * 1024 * 1024)
+                .setBufferDurationsMs(8_000, 30_000, 1_000, 2_000)
+                .setTargetBufferBytes(32 * 1024 * 1024)
                 .setPrioritizeTimeOverSizeThresholds(false)
                 .build()
         )
@@ -106,6 +109,8 @@ class ExoEngine(private val ctx: Context, preferSubs: Boolean) : VideoEngine {
         )
         .setHandleAudioBecomingNoisy(true)
         .build().apply {
+        // jump to the nearest keyframe: seeking / skipping starts almost instantly
+        setSeekParameters(SeekParameters.CLOSEST_SYNC)
         trackSelectionParameters = trackSelectionParameters.buildUpon().apply {
             if (preferSubs) setPreferredTextLanguage("en")
         }.build()
@@ -190,15 +195,26 @@ class ExoEngine(private val ctx: Context, preferSubs: Boolean) : VideoEngine {
         return if (parts.isEmpty()) "Track $n" else parts.joinToString(" · ")
     }
 
+    private var textHidden = false
+
     override fun audioTracks() = tracksOf(C.TRACK_TYPE_AUDIO)
-    override fun textTracks() = tracksOf(C.TRACK_TYPE_TEXT)
+    override fun textTracks() = tracksOf(C.TRACK_TYPE_TEXT).map { if (textHidden) it.copy(selected = false) else it }
     override fun selectAudio(id: String) = select(C.TRACK_TYPE_AUDIO, id)
 
     override fun selectText(id: String?) {
         if (id == null) {
-            player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
-                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
-        } else select(C.TRACK_TYPE_TEXT, id)
+            // hiding instead of disabling the track avoids a full re-buffer
+            setEngineSubtitlesVisible(false)
+            return
+        }
+        setEngineSubtitlesVisible(true)
+        val already = tracksOf(C.TRACK_TYPE_TEXT).firstOrNull { it.id == id }?.selected == true
+        if (!already) select(C.TRACK_TYPE_TEXT, id)
+    }
+
+    override fun setEngineSubtitlesVisible(visible: Boolean) {
+        textHidden = !visible
+        view?.subtitleView?.visibility = if (visible) View.VISIBLE else View.GONE
     }
 
     private fun select(type: Int, id: String) {
@@ -236,7 +252,7 @@ class VlcEngine(ctx: Context) : VideoEngine {
     override var listener: EngineListener? = null
     private val libVlc = LibVLC(
         ctx.applicationContext,
-        arrayListOf("--http-reconnect", "--network-caching=3000", "--audio-time-stretch", "--subsdec-encoding=UTF-8"),
+        arrayListOf("--http-reconnect", "--network-caching=1500", "--audio-time-stretch", "--subsdec-encoding=UTF-8"),
     )
     private val mp = MediaPlayer(libVlc)
     private var layout: VLCVideoLayout? = null
@@ -297,6 +313,7 @@ class VlcEngine(ctx: Context) : VideoEngine {
     }
 
     override fun selectText(id: String?) { mp.setSpuTrack(id?.toInt() ?: -1) }
+    override fun setEngineSubtitlesVisible(visible: Boolean) { if (!visible) mp.setSpuTrack(-1) }
 
     override val supportsSubtitleDelay = true
     override fun setSubtitleDelay(ms: Long) { mp.setSpuDelay(ms * 1000) }

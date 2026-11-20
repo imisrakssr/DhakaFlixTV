@@ -149,13 +149,14 @@ class TmdbClient(private val http: OkHttpClient, private val key: () -> String) 
         http.newCall(req).execute().use { r ->
             if (r.code == 429) throw RateLimited()
             if (r.code == 401) throw Unauthorized()
-            if (!r.isSuccessful) throw IOException("TMDB HTTP ${r.code}")
+            if (!r.isSuccessful) throw HttpError(r.code)
             r.body?.string().orEmpty()
         }
     }
 
     class RateLimited : IOException("TMDB rate limited")
     class Unauthorized : IOException("TMDB key rejected")
+    class HttpError(val code: Int) : IOException("TMDB HTTP $code")
 
     enum class Status { NOT_SET, CHECKING, CONNECTED, INVALID, OFFLINE }
 

@@ -50,6 +50,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
         return
     }
     val listState = rememberLazyListState()
+    com.israk.dhakaflix.ui.ReportScroll { listState.firstVisibleItemIndex > 1 }
     val entryMod = Modifier.entryFocus()
     LazyColumn(
         Modifier.fillMaxSize().dpadScrollFallback(listState),

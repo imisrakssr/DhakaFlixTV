@@ -261,7 +261,7 @@ class LibraryRepository(private val app: DhakaFlixApp) {
     }
 
     private suspend fun enrichLoop() {
-        val sem = Semaphore(4)
+        val sem = Semaphore(8)
         var batches = 0
         while (true) {
             val batch = db.items().pendingMeta(40)
@@ -292,6 +292,12 @@ class LibraryRepository(private val app: DhakaFlixApp) {
             delay(2500); true
         } catch (e: kotlinx.serialization.SerializationException) {
             db.items().setMetaState(item.id, ItemEntity.META_NOT_FOUND); true
+        } catch (e: TmdbClient.HttpError) {
+            // a bad request for this title will never succeed: don't retry it forever
+            if (e.code in 400..499) db.items().setMetaState(item.id, ItemEntity.META_NOT_FOUND)
+            e.code in 400..499
+        } catch (e: TmdbClient.Unauthorized) {
+            false
         } catch (e: Exception) {
             Log.w(TAG, "tmdb failed for ${item.title}", e)
             false
@@ -555,6 +561,7 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         private const val MAX_DEPTH = 4
         private const val ROW_LIMIT = 30
         const val TEN_MINUTES = 10L * 60 * 1000
+        const val THIRTY_MINUTES = 30L * 60 * 1000
 
         fun fileName(url: String): String = Uri.decode(url.trimEnd('/').substringAfterLast('/'))
 

@@ -41,9 +41,8 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 while (true) {
-                    app.library.syncIfStale(LibraryRepository.TEN_MINUTES)
-                    delay(30L * 60 * 1000)
-                    app.library.startSync(force = false)
+                    app.library.syncIfStale(LibraryRepository.THIRTY_MINUTES)
+                    delay(LibraryRepository.THIRTY_MINUTES)
                 }
             }
         }

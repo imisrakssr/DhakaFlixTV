@@ -32,6 +32,7 @@ class DhakaFlixApp : Application(), ImageLoaderFactory {
         http = OkHttpClient.Builder()
             .connectTimeout(8, TimeUnit.SECONDS)
             .readTimeout(25, TimeUnit.SECONDS)
+            .callTimeout(60, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .build()
         settings = AppSettings(this)

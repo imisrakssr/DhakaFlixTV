@@ -302,7 +302,7 @@ class PlayerController(
             if (list.isNotEmpty()) {
                 cues = list
                 ownSubUrl = url
-                engine?.selectText(null)
+                engine?.setEngineSubtitlesVisible(false)
             } else toast = "Subtitle could not be loaded"
         }
     }
@@ -393,10 +393,15 @@ class PlayerController(
 
     fun onStop() { save(); engine?.pause() }
 
+    private var released = false
+
     fun exit() { save(); activity.finish() }
 
     fun release() {
+        if (released) return
+        released = true
         save()
+        engine?.pause()
         engine?.release()
         engine = null
     }

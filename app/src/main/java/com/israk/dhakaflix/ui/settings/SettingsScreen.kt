@@ -63,6 +63,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
@@ -128,6 +141,12 @@ fun SettingsScreen() {
 
     if (isTv) {
         var section by rememberSaveable { mutableStateOf(Section.LIBRARY) }
+        // While focus is inside the right pane the section list can't be reached by up/down,
+        // so reaching the end of a section never jumps to another one. LEFT goes back to the list.
+        var inPane by remember { mutableStateOf(false) }
+        val sectionFrs = remember { Section.entries.associateWith { FocusRequester() } }
+        val fm = LocalFocusManager.current
+        val scope = rememberCoroutineScope()
         Row(Modifier.fillMaxSize().padding(start = edge, end = edge, top = top + 6.dp)) {
             Column(Modifier.width(240.dp).fillMaxHeight()) {
                 Text(s.settings, style = MaterialTheme.typography.headlineMedium, color = Color.White)
@@ -135,7 +154,9 @@ fun SettingsScreen() {
                 Section.entries.forEachIndexed { i, sec ->
                     SectionItem(
                         sec, selected = sec == section, selectOnFocus = true,
-                        modifier = if (i == 0) Modifier.entryFocus() else Modifier,
+                        modifier = (if (i == 0) Modifier.entryFocus() else Modifier)
+                            .focusRequester(sectionFrs.getValue(sec))
+                            .focusProperties { canFocus = !inPane },
                     ) { section = sec }
                     Spacer(Modifier.height(6.dp))
                 }
@@ -144,7 +165,18 @@ fun SettingsScreen() {
             AnimatedContent(
                 targetState = section,
                 transitionSpec = { (fadeIn(tween(260)) + slideInHorizontally(tween(300)) { it / 16 }) togetherWith fadeOut(tween(150)) },
-                modifier = Modifier.weight(1f).fillMaxHeight(),
+                modifier = Modifier.weight(1f).fillMaxHeight()
+                    .onFocusChanged { inPane = it.hasFocus }
+                    .onPreviewKeyEvent { e ->
+                        if (e.type != KeyEventType.KeyDown || e.key != Key.DirectionLeft) return@onPreviewKeyEvent false
+                        if (fm.moveFocus(FocusDirection.Left)) return@onPreviewKeyEvent true
+                        scope.launch {
+                            inPane = false
+                            delay(40)
+                            runCatching { sectionFrs.getValue(section).requestFocus() }
+                        }
+                        true
+                    },
                 label = "settingsPane",
             ) { sec -> SectionContent(sec) }
         }

@@ -96,7 +96,7 @@ fun FocusFrame(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(12.dp),
-    focusedScale: Float = 1.08f,
+    focusedScale: Float = 1.06f,
     focusRequester: FocusRequester? = null,
     onFocusChange: (Boolean) -> Unit = {},
     content: @Composable BoxScope.(focused: Boolean) -> Unit,
@@ -111,12 +111,7 @@ fun FocusFrame(
     Box(
         modifier
             .zIndex(if (focused) 2f else 0f)
-            .graphicsLayer {
-                scaleX = scale; scaleY = scale
-                shadowElevation = if (focused) 28f else 0f
-                this.shape = shape
-                clip = false
-            }
+            .graphicsLayer { scaleX = scale; scaleY = scale }
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged {
                 if (focused != it.isFocused) {
@@ -303,10 +298,12 @@ fun <T> MediaRow(
             horizontalArrangement = Arrangement.spacedBy(if (LocalIsTv.current) 16.dp else 12.dp),
         ) {
             itemsIndexed(items, key = { _, it -> key(it) }) { i, it ->
+                // derived so only the old/new "last focused" items recompose, not the whole row
+                val isLast by remember(i) { androidx.compose.runtime.derivedStateOf { i == lastIdx.coerceAtMost(items.lastIndex) } }
                 Box(
                     Modifier
-                        .then(if (nav != null && i == lastIdx.coerceAtMost(items.lastIndex)) Modifier.focusRequester(nav.focusRequester) else Modifier)
-                        .onFocusChanged { f -> if (f.hasFocus) lastIdx = i }
+                        .then(if (nav != null && isLast) Modifier.focusRequester(nav.focusRequester) else Modifier)
+                        .onFocusChanged { f -> if (f.hasFocus && lastIdx != i) lastIdx = i }
                 ) { itemContent(it) }
             }
         }
@@ -333,7 +330,7 @@ fun PillButton(
 ) {
     var focused by remember { mutableStateOf(false) }
     val accent = LocalAccent.current
-    val scale by animateFloatAsState(if (focused) 1.07f else 1f, spring(dampingRatio = 0.7f), label = "pill")
+    val scale by animateFloatAsState(if (focused) 1.05f else 1f, spring(dampingRatio = 0.75f), label = "pill")
     val bg by animateColorAsState(
         when {
             focused -> Color.White

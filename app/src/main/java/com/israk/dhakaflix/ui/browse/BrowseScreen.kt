@@ -84,14 +84,14 @@ fun BrowseScreen(type: MediaType, onOpen: (String) -> Unit) {
         item(span = { GridItemSpan(maxLineSpan) }) {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(if (type == MediaType.MOVIE) s.movies else s.series, style = MaterialTheme.typography.headlineMedium, color = Color.White)
-                ChipRow(SortMode.entries.toList(), sort, { sortLabel(it, s) }, { sort = it }, contentPadding = PaddingValues(vertical = 6.dp), firstItemModifier = Modifier.entryFocus())
+                ChipRow(SortMode.entries.toList(), sort, { sortLabel(it, s) }, { sort = it }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp), firstItemModifier = Modifier.entryFocus())
                 if (sources.size > 1) {
                     ChipRow(listOf<String?>(null) + sources.map { it.id }, sourceId,
                         { id -> if (id == null) s.allCategories else sources.first { it.id == id }.name },
-                        { sourceId = it }, contentPadding = PaddingValues(vertical = 6.dp))
+                        { sourceId = it }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp))
                 }
                 ChipRow(listOf<String?>(null) + ALL_GENRES, genre, { it ?: s.allGenres }, { genre = it },
-                    contentPadding = PaddingValues(vertical = 6.dp))
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp))
             }
         }
     }
@@ -111,6 +111,7 @@ fun PosterGrid(
     val watched = remember(watchedIds) { watchedIds.toHashSet() }
     val cell: Dp = if (isTv) 112.dp else 104.dp
     val gridState = rememberLazyGridState()
+    com.israk.dhakaflix.ui.ReportScroll { gridState.firstVisibleItemIndex > 0 }
     LazyVerticalGrid(
         columns = GridCells.Adaptive(cell),
         state = gridState,

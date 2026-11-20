@@ -102,11 +102,11 @@ fun SearchScreen(onOpen: (String) -> Unit) {
                 )
                 ChipRow(listOf<MediaType?>(null, MediaType.MOVIE, MediaType.SERIES), type,
                     { when (it) { null -> s.all; MediaType.MOVIE -> s.movies; MediaType.SERIES -> s.series } },
-                    { type = it }, contentPadding = PaddingValues(top = 10.dp, bottom = 4.dp))
+                    { type = it }, contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 6.dp))
                 ChipRow(listOf<Int?>(null) + years, year, { it?.toString() ?: s.anyYear }, { year = it },
-                    contentPadding = PaddingValues(vertical = 4.dp))
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp))
                 ChipRow(SortMode.entries.toList(), sort, { sortLabel(it, s) }, { sort = it },
-                    contentPadding = PaddingValues(vertical = 4.dp))
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp))
             }
         }
     }

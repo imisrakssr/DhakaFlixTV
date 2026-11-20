@@ -210,7 +210,7 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
                         )
                         Spacer(Modifier.height(20.dp))
                         Row(
-                            Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 6.dp),
+                            Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 10.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
                             val resumeAt = plan?.resumeAt
@@ -268,7 +268,7 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
                         Column {
                             Section(s.seasons)
                             ChipRow(c.seasons.map { it.number }, season ?: -1, { "${s.season} $it" }, { season = it },
-                                contentPadding = PaddingValues(vertical = 6.dp))
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp))
                         }
                     }
                 } else item(key = "eps-title") { Section(s.episodes) }
@@ -321,7 +321,7 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
                 item(key = "versions") {
                     Column {
                         Section(s.versions)
-                        Row(Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             others.forEach { v ->
                                 PillButton(
                                     listOfNotNull(v.quality, sourceName(v)).joinToString(" · ").ifEmpty { v.rawName },
