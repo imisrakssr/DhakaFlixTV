@@ -1,0 +1,128 @@
+package com.israk.dhakaflix.ui.theme
+
+import androidx.compose.runtime.staticCompositionLocalOf
+
+/** All user-facing text. Three flavours: English, Bengali and Dhakaiya (funny Old-Dhaka slang). */
+data class Strings(
+    val home: String, val movies: String, val series: String, val search: String, val library: String, val settings: String,
+    val continueWatching: String, val latestUploads: String, val latestMovies: String, val latestSeries: String,
+    val myWatchlist: String, val topRated: String, val latestIn: String,
+    val play: String, val resume: String, val startOver: String, val resumeFrom: String,
+    val addToWatchlist: String, val inWatchlist: String, val markWatched: String, val watched: String,
+    val openInVlc: String, val fixMatch: String, val versions: String, val seasons: String, val episodes: String,
+    val cast: String, val files: String, val noResults: String, val searchHint: String,
+    val all: String, val anyYear: String, val sortLatest: String, val sortYear: String, val sortAz: String, val sortRating: String,
+    val allGenres: String, val allCategories: String, val libraryEmpty: String, val history: String,
+    val scanning: String, val scanProgress: String, val serverUnreachable: String, val retry: String,
+    val refreshLibrary: String, val fullRescan: String, val lastUpdated: String, val never: String, val metadataPending: String,
+    val appearance: String, val accentColor: String, val language: String, val homeRows: String,
+    val categories: String, val addCategory: String, val name: String, val url: String, val resetDefaults: String,
+    val save: String, val cancel: String, val delete: String,
+    val tmdbKey: String, val tmdbKeyHint: String, val player: String, val playerEngine: String,
+    val engineAuto: String, val autoPlayNext: String, val subtitlesByDefault: String,
+    val about: String, val version: String,
+    val audio: String, val subtitles: String, val off: String, val subtitleSync: String, val aspect: String,
+    val speed: String, val nextEpisode: String, val switchEngine: String, val playbackError: String,
+    val vlcNotInstalled: String, val syncOnlyExternal: String, val loading: String, val folderError: String,
+    val minutes: String, val season: String, val noMetadata: String, val remove: String, val back: String,
+    val fit: String, val zoom: String, val stretch: String, val searchTmdb: String, val upNext: String,
+    val greeting: String,
+)
+
+val English = Strings(
+    home = "Home", movies = "Movies", series = "Series", search = "Search", library = "My Library", settings = "Settings",
+    continueWatching = "Continue Watching", latestUploads = "Latest Uploads", latestMovies = "New Movies", latestSeries = "New Series",
+    myWatchlist = "My Watchlist", topRated = "Top Rated", latestIn = "Latest in %s",
+    play = "Play", resume = "Resume", startOver = "Start Over", resumeFrom = "Resume from %s",
+    addToWatchlist = "Watchlist", inWatchlist = "In Watchlist", markWatched = "Mark Watched", watched = "Watched",
+    openInVlc = "Open in VLC", fixMatch = "Fix Match", versions = "Versions", seasons = "Seasons", episodes = "Episodes",
+    cast = "Cast", files = "Files", noResults = "Nothing found", searchHint = "Search movies & series…",
+    all = "All", anyYear = "Any year", sortLatest = "Latest upload", sortYear = "Release year", sortAz = "A–Z", sortRating = "Rating",
+    allGenres = "All genres", allCategories = "All categories", libraryEmpty = "Nothing here yet. Add titles to your watchlist or start watching.",
+    history = "Watched",
+    scanning = "Scanning DhakaFlix server…", scanProgress = "%1\$d folders scanned · %2\$d titles",
+    serverUnreachable = "Can't reach the DhakaFlix server. Are you on the right network?", retry = "Retry",
+    refreshLibrary = "Refresh library", fullRescan = "Full rescan", lastUpdated = "Last updated", never = "Never",
+    metadataPending = "%d titles waiting for posters",
+    appearance = "Appearance", accentColor = "Accent colour", language = "Language", homeRows = "Home rows",
+    categories = "Server categories", addCategory = "Add category", name = "Name", url = "URL", resetDefaults = "Reset to defaults",
+    save = "Save", cancel = "Cancel", delete = "Delete",
+    tmdbKey = "TMDB API key", tmdbKeyHint = "Paste your TMDB v3 API key or v4 read token", player = "Player", playerEngine = "Player engine",
+    engineAuto = "Auto (ExoPlayer → VLC)", autoPlayNext = "Auto-play next episode", subtitlesByDefault = "Subtitles on by default",
+    about = "About", version = "Version",
+    audio = "Audio", subtitles = "Subtitles", off = "Off", subtitleSync = "Subtitle sync", aspect = "Aspect",
+    speed = "Speed", nextEpisode = "Next", switchEngine = "Switch engine", playbackError = "Playback failed",
+    vlcNotInstalled = "VLC is not installed", syncOnlyExternal = "Sync works for external subtitles, or switch to the VLC engine.",
+    loading = "Loading…", folderError = "Couldn't open this folder on the server.",
+    minutes = "min", season = "Season", noMetadata = "No description available.", remove = "Remove", back = "Back",
+    fit = "Fit", zoom = "Zoom", stretch = "Stretch", searchTmdb = "Search TMDB", upNext = "Up next",
+    greeting = "What are we watching tonight?",
+)
+
+val Bangla = Strings(
+    home = "হোম", movies = "মুভি", series = "সিরিজ", search = "খুঁজুন", library = "আমার লাইব্রেরি", settings = "সেটিংস",
+    continueWatching = "দেখা চালিয়ে যান", latestUploads = "সর্বশেষ আপলোড", latestMovies = "নতুন মুভি", latestSeries = "নতুন সিরিজ",
+    myWatchlist = "আমার ওয়াচলিস্ট", topRated = "সেরা রেটিং", latestIn = "%s – নতুন",
+    play = "চালান", resume = "আবার শুরু", startOver = "শুরু থেকে", resumeFrom = "%s থেকে চালান",
+    addToWatchlist = "ওয়াচলিস্ট", inWatchlist = "ওয়াচলিস্টে আছে", markWatched = "দেখা হয়েছে", watched = "দেখা শেষ",
+    openInVlc = "VLC-তে খুলুন", fixMatch = "তথ্য ঠিক করুন", versions = "ভার্সন", seasons = "সিজন", episodes = "পর্ব",
+    cast = "অভিনয়ে", files = "ফাইল", noResults = "কিছু পাওয়া যায়নি", searchHint = "মুভি ও সিরিজ খুঁজুন…",
+    all = "সব", anyYear = "যেকোনো সাল", sortLatest = "সর্বশেষ আপলোড", sortYear = "মুক্তির সাল", sortAz = "ক–অ / A–Z", sortRating = "রেটিং",
+    allGenres = "সব ধরন", allCategories = "সব ক্যাটাগরি", libraryEmpty = "এখনো কিছু নেই। ওয়াচলিস্টে যোগ করুন বা দেখা শুরু করুন।",
+    history = "দেখা হয়েছে",
+    scanning = "DhakaFlix সার্ভার স্ক্যান হচ্ছে…", scanProgress = "%1\$d ফোল্ডার · %2\$d টাইটেল",
+    serverUnreachable = "DhakaFlix সার্ভারে সংযোগ হচ্ছে না। সঠিক নেটওয়ার্কে আছেন তো?", retry = "আবার চেষ্টা",
+    refreshLibrary = "লাইব্রেরি রিফ্রেশ", fullRescan = "পুরো রিস্ক্যান", lastUpdated = "সর্বশেষ আপডেট", never = "কখনো না",
+    metadataPending = "%d টাইটেলের পোস্টার বাকি",
+    appearance = "চেহারা", accentColor = "অ্যাকসেন্ট রং", language = "ভাষা", homeRows = "হোমের সারি",
+    categories = "সার্ভার ক্যাটাগরি", addCategory = "ক্যাটাগরি যোগ", name = "নাম", url = "URL", resetDefaults = "ডিফল্টে ফেরত",
+    save = "সংরক্ষণ", cancel = "বাতিল", delete = "মুছুন",
+    tmdbKey = "TMDB API কী", tmdbKeyHint = "আপনার TMDB v3 API কী অথবা v4 টোকেন দিন", player = "প্লেয়ার", playerEngine = "প্লেয়ার ইঞ্জিন",
+    engineAuto = "অটো (ExoPlayer → VLC)", autoPlayNext = "পরের পর্ব নিজে চালু", subtitlesByDefault = "সাবটাইটেল ডিফল্টে চালু",
+    about = "সম্পর্কে", version = "ভার্সন",
+    audio = "অডিও", subtitles = "সাবটাইটেল", off = "বন্ধ", subtitleSync = "সাবটাইটেল সিঙ্ক", aspect = "আকার",
+    speed = "গতি", nextEpisode = "পরের পর্ব", switchEngine = "ইঞ্জিন বদলান", playbackError = "চালানো যাচ্ছে না",
+    vlcNotInstalled = "VLC ইনস্টল করা নেই", syncOnlyExternal = "সিঙ্ক শুধু আলাদা সাবটাইটেল ফাইলে কাজ করে, অথবা VLC ইঞ্জিন ব্যবহার করুন।",
+    loading = "লোড হচ্ছে…", folderError = "সার্ভারে এই ফোল্ডার খোলা যাচ্ছে না।",
+    minutes = "মিনিট", season = "সিজন", noMetadata = "কোনো বিবরণ নেই।", remove = "সরান", back = "পেছনে",
+    fit = "ফিট", zoom = "জুম", stretch = "স্ট্রেচ", searchTmdb = "TMDB-তে খুঁজুন", upNext = "এরপর",
+    greeting = "আজ রাতে কী দেখবেন?",
+)
+
+val Dhakaiya = Strings(
+    home = "বাড়িঘর", movies = "সিনেমা", series = "সিরিজ", search = "খোঁজো মামা", library = "আমার মাল-সামান", settings = "সেটিং-ফেটিং",
+    continueWatching = "যেইখানে থামছিলা", latestUploads = "একদম টাটকা মাল", latestMovies = "নতুন সিনেমা আইছে", latestSeries = "নতুন সিরিজ নামছে",
+    myWatchlist = "পরে দেখুম", topRated = "সেরা জিনিস, ওস্তাদ!", latestIn = "%s – গরম গরম",
+    play = "চালাও", resume = "আবার চালু কর", startOver = "গোড়া থেইকা", resumeFrom = "%s থেইকা চালামু?",
+    addToWatchlist = "পরে দেখুম", inWatchlist = "লিস্টে আছে", markWatched = "দেখা শেষ", watched = "দেখছি অলরেডি",
+    openInVlc = "VLC-তে খোল", fixMatch = "ভুল হইছে? ঠিক কর", versions = "ভার্সন", seasons = "সিজন", episodes = "এপিসোড",
+    cast = "কারা কারা আছে", files = "ফাইল", noResults = "কিচ্ছু পাই নাই মামা 😅", searchHint = "কি খুঁজতাছো, কও…",
+    all = "সব", anyYear = "যেকোনো সাল", sortLatest = "নতুন আগে", sortYear = "সাল ধইরা", sortAz = "A–Z", sortRating = "রেটিং ধইরা",
+    allGenres = "সব টাইপ", allCategories = "সব ক্যাটাগরি", libraryEmpty = "খালি খালি লাগে! কিছু লিস্টে ঢুকাও না মামা।",
+    history = "দেখা শেষ",
+    scanning = "সার্ভার ঘাঁটতাছি, এট্টু খাড়াও…", scanProgress = "%1\$d ফোল্ডার ঘাঁটলাম · %2\$d টা পাইলাম",
+    serverUnreachable = "সার্ভার তো ধরা দেয় না মামা! নেট ঠিক আছে তো?", retry = "আবার ট্রাই মার",
+    refreshLibrary = "লাইব্রেরি তাজা কর", fullRescan = "পুরাটা আবার ঘাঁট", lastUpdated = "শেষবার আপডেট", never = "কোনোদিন না",
+    metadataPending = "%d টার পোস্টার আনতাছি",
+    appearance = "চেহারা-সুরত", accentColor = "রং-ঢং", language = "ভাষা", homeRows = "হোমের লাইন",
+    categories = "সার্ভারের ক্যাটাগরি", addCategory = "ক্যাটাগরি ঢুকাও", name = "নাম", url = "URL", resetDefaults = "আগের মতো কইরা দাও",
+    save = "রাইখা দাও", cancel = "বাদ দাও", delete = "ফালায়া দাও",
+    tmdbKey = "TMDB চাবি", tmdbKeyHint = "TMDB-র API কী টা এইখানে পেস্ট কর", player = "প্লেয়ার", playerEngine = "প্লেয়ার ইঞ্জিন",
+    engineAuto = "অটো (ExoPlayer → VLC)", autoPlayNext = "পরের এপিসোড নিজে নিজে চালাও", subtitlesByDefault = "সাবটাইটেল সবসময় অন",
+    about = "আমাগো কথা", version = "ভার্সন",
+    audio = "আওয়াজ", subtitles = "সাবটাইটেল", off = "বন্ধ", subtitleSync = "সাব আগে-পিছে", aspect = "সাইজ",
+    speed = "স্পিড", nextEpisode = "পরেরটা", switchEngine = "ইঞ্জিন বদলাও", playbackError = "চলতাছে না মামা!",
+    vlcNotInstalled = "VLC তো নাই মামা!", syncOnlyExternal = "আলাদা সাব ফাইলে সিঙ্ক হয়, নাইলে VLC ইঞ্জিনে যাও।",
+    loading = "আনতাছি…", folderError = "সার্ভারে ফোল্ডারটা খোলে না।",
+    minutes = "মিনিট", season = "সিজন", noMetadata = "কাহিনি জানা নাই।", remove = "সরাও", back = "পিছে যাও",
+    fit = "ফিট", zoom = "জুম", stretch = "টাইনা লম্বা", searchTmdb = "TMDB-তে খোঁজো", upNext = "এরপরে",
+    greeting = "আইজকা কি দেখবা মামা?",
+)
+
+fun stringsFor(lang: String): Strings = when (lang) {
+    "bn" -> Bangla
+    "dhk" -> Dhakaiya
+    else -> English
+}
+
+val LocalStrings = staticCompositionLocalOf { English }

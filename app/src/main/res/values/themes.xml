@@ -1,0 +1,13 @@
+<resources>
+    <style name="Theme.DhakaFlix" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/df_bg</item>
+        <item name="android:colorBackground">@color/df_bg</item>
+        <item name="android:statusBarColor">@color/df_bg</item>
+        <item name="android:navigationBarColor">@color/df_bg</item>
+        <item name="android:colorAccent">@color/df_accent</item>
+    </style>
+    <style name="Theme.DhakaFlix.Player" parent="Theme.DhakaFlix">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:windowFullscreen">true</item>
+    </style>
+</resources>

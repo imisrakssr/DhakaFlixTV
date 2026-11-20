@@ -1,0 +1,95 @@
+package com.israk.dhakaflix.data
+
+import kotlinx.serialization.Serializable
+
+@Serializable
+enum class MediaType { MOVIE, SERIES }
+
+/** One browsable category root on a DhakaFlix (h5ai) server. */
+@Serializable
+data class Source(
+    val id: String,
+    val name: String,
+    val url: String,
+    val type: MediaType,
+    val enabled: Boolean = true,
+    val custom: Boolean = false,
+)
+
+@Serializable
+data class HomeRow(val key: String, val enabled: Boolean = true)
+
+/** A single playable file handed to the player. */
+@Serializable
+data class PlayItem(
+    val url: String,
+    val itemId: String,
+    val title: String,
+    val subtitle: String? = null,
+    val season: Int? = null,
+    val episode: Int? = null,
+    val subs: List<String> = emptyList(),
+    val poster: String? = null,
+)
+
+object Defaults {
+    private const val S7 = "http://172.16.50.7/DHAKA-FLIX-7/"
+    private const val S10 = "http://172.16.50.10/DHAKA-FLIX-10/"
+    private const val S12 = "http://172.16.50.12/DHAKA-FLIX-12/"
+    private const val S14 = "http://172.16.50.14/DHAKA-FLIX-14/"
+
+    val sources: List<Source> = listOf(
+        Source("eng", "English Movies", "${S7}English%20Movies/", MediaType.MOVIE),
+        Source("eng1080", "English Movies 1080p", "${S14}English%20Movies%20%281080p%29/", MediaType.MOVIE),
+        Source("hindi", "Hindi Movies", "${S14}Hindi%20Movies/", MediaType.MOVIE),
+        Source("south", "South Indian Movies", "${S14}SOUTH%20INDIAN%20MOVIES/South%20Movies/", MediaType.MOVIE),
+        Source("southdub", "South Hindi Dubbed", "${S14}SOUTH%20INDIAN%20MOVIES/Hindi%20Dubbed/", MediaType.MOVIE),
+        Source("kolkata", "Kolkata Bangla Movies", "${S7}Kolkata%20Bangla%20Movies/", MediaType.MOVIE),
+        Source("foreign", "Foreign Language Movies", "${S7}Foreign%20Language%20Movies/", MediaType.MOVIE),
+        Source("anim", "Animation Movies", "${S14}Animation%20Movies/", MediaType.MOVIE),
+        Source("anim1080", "Animation Movies 1080p", "${S14}Animation%20Movies%20%281080p%29/", MediaType.MOVIE),
+        Source("imdb250", "IMDb Top-250", "${S14}IMDb%20Top-250%20Movies/", MediaType.MOVIE, enabled = false),
+        Source("tvweb", "TV & WEB Series", "${S12}TV-WEB-Series/", MediaType.SERIES),
+        Source("korean", "Korean TV & WEB Series", "${S14}KOREAN%20TV%20%26%20WEB%20Series/", MediaType.SERIES),
+        Source("cartoon", "Anime & Cartoon Series", "${S10}Anime%20%26%20Cartoon%20TV%20Series/", MediaType.SERIES),
+    )
+
+    val homeRows: List<HomeRow> = listOf(
+        HomeRow(RowKeys.CONTINUE),
+        HomeRow(RowKeys.LATEST),
+        HomeRow(RowKeys.LATEST_MOVIES),
+        HomeRow(RowKeys.LATEST_SERIES),
+        HomeRow(RowKeys.WATCHLIST),
+        HomeRow(RowKeys.TOP_RATED),
+        HomeRow(RowKeys.genre("Action")),
+        HomeRow(RowKeys.genre("Comedy")),
+        HomeRow(RowKeys.genre("Thriller")),
+        HomeRow(RowKeys.genre("Science Fiction")),
+        HomeRow(RowKeys.genre("Horror"), enabled = false),
+        HomeRow(RowKeys.genre("Romance"), enabled = false),
+        HomeRow(RowKeys.genre("Animation"), enabled = false),
+        HomeRow(RowKeys.genre("Crime"), enabled = false),
+        HomeRow(RowKeys.genre("Drama"), enabled = false),
+        HomeRow(RowKeys.genre("Adventure"), enabled = false),
+        HomeRow(RowKeys.genre("Documentary"), enabled = false),
+    )
+}
+
+object RowKeys {
+    const val CONTINUE = "continue"
+    const val LATEST = "latest"
+    const val LATEST_MOVIES = "latest_movies"
+    const val LATEST_SERIES = "latest_series"
+    const val WATCHLIST = "watchlist"
+    const val TOP_RATED = "top_rated"
+    fun genre(name: String) = "genre:$name"
+    fun source(id: String) = "src:$id"
+}
+
+val ALL_GENRES = listOf(
+    "Action", "Adventure", "Animation", "Comedy", "Crime", "Documentary", "Drama",
+    "Family", "Fantasy", "History", "Horror", "Music", "Mystery", "Romance",
+    "Science Fiction", "Thriller", "War", "Western", "Kids", "Reality",
+)
+
+enum class SortMode { LATEST, YEAR, AZ, RATING }
