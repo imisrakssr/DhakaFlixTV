@@ -11,6 +11,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -184,13 +186,17 @@ private fun SeekFlash(c: PlayerController) {
     AnimatedVisibility(visible, enter = fadeIn() + scaleIn(initialScale = .9f), exit = fadeOut()) {
         Box(Modifier.fillMaxSize()) {
             val d = c.seekFlashDelta / 1000
+            Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+            ThumbImage(c)
+            Spacer(Modifier.height(12.dp))
             Row(
-                Modifier.align(Alignment.Center).glass(RoundedCornerShape(50), tint = .14f).padding(horizontal = 22.dp, vertical = 12.dp),
+                Modifier.glass(RoundedCornerShape(50), tint = .14f).padding(horizontal = 22.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(if (d >= 0) AppIcons.Forward else AppIcons.Rewind, null, tint = Color.White, modifier = Modifier.size(26.dp))
                 Spacer(Modifier.width(10.dp))
                 Text((if (d >= 0) "+" else "−") + "${kotlin.math.abs(d)}s   ·   " + fmtTime(c.position), color = Color.White, style = MaterialTheme.typography.titleMedium)
+            }
             }
             val frac = if (c.duration > 0) (c.position.toFloat() / c.duration).coerceIn(0f, 1f) else 0f
             Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(4.dp).background(Color.White.copy(alpha = .2f))) {
@@ -208,8 +214,21 @@ private fun Controls(c: PlayerController) {
     // (re)focus play/pause when controls appear or a side panel closes
     LaunchedEffect(c.panel) { if (c.panel == null) { delay(60); runCatching { playFr.requestFocus() } } }
     val item = c.current
+    val fm = androidx.compose.ui.platform.LocalFocusManager.current
 
-    Box(Modifier.fillMaxSize()) {
+    Box(
+        Modifier.fillMaxSize().onKeyEvent { e ->
+            // pressing UP at the top row or DOWN at the bottom row closes the overlay
+            if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
+            val dir = when (e.key) {
+                Key.DirectionUp -> androidx.compose.ui.focus.FocusDirection.Up
+                Key.DirectionDown -> androidx.compose.ui.focus.FocusDirection.Down
+                else -> return@onKeyEvent false
+            }
+            if (!fm.moveFocus(dir)) c.controlsVisible = false
+            true
+        }
+    ) {
         Box(Modifier.fillMaxWidth().height(150.dp).background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = .75f), Color.Transparent))))
         Box(
             Modifier.fillMaxWidth().height(300.dp).align(Alignment.BottomCenter)
@@ -227,6 +246,7 @@ private fun Controls(c: PlayerController) {
         }
 
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 40.dp, vertical = 24.dp)) {
+            SeekPreview(c)
             SeekBar(c)
             Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
                 Text(fmtTime(c.position), color = Color.White, style = MaterialTheme.typography.labelLarge)
@@ -513,5 +533,49 @@ private fun ErrorOverlay(c: PlayerController, message: String) {
                 PillButton(s.openInVlc, icon = AppIcons.OpenExternal, onClick = { c.openInVlc() })
             }
         }
+    }
+}
+
+/** Small frame of the seek target (if the device could grab one). */
+@Composable
+private fun ThumbImage(c: PlayerController) {
+    val img = c.thumbs.image ?: return
+    if (kotlin.math.abs(c.thumbs.imageAt - (c.previewTarget / 10_000) * 10_000) > 10_000) return
+    androidx.compose.foundation.Image(
+        img, null,
+        Modifier.size(width = 224.dp, height = 126.dp).clip(RoundedCornerShape(12.dp))
+            .border(2.dp, Color.White.copy(alpha = .8f), RoundedCornerShape(12.dp)),
+        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+    )
+}
+
+/** Thumbnail + time that floats above the seek bar while you're seeking. */
+@Composable
+private fun SeekPreview(c: PlayerController) {
+    var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+    LaunchedEffect(c.previewAt) {
+        now = SystemClock.elapsedRealtime(); delay(1600); now = SystemClock.elapsedRealtime()
+    }
+    val visible = c.previewAt > 0 && now - c.previewAt < 1500
+    if (!visible) return
+    // zero-height anchor: the preview floats above the seek bar without pushing the controls around
+    Box(Modifier.fillMaxWidth().height(0.dp)) {
+    BoxWithConstraints(
+        Modifier.fillMaxWidth().requiredHeight(176.dp).offset(y = (-96).dp),
+        contentAlignment = Alignment.BottomStart,
+    ) {
+        val frac = if (c.duration > 0) (c.position.toFloat() / c.duration).coerceIn(0f, 1f) else 0f
+        val w = 224.dp
+        val x = (maxWidth * frac - w / 2).coerceIn(0.dp, maxWidth - w)
+        Column(Modifier.offset(x = x).width(w), horizontalAlignment = Alignment.CenterHorizontally) {
+            ThumbImage(c)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                fmtTime(c.position),
+                Modifier.glass(RoundedCornerShape(50), tint = .14f).padding(horizontal = 12.dp, vertical = 4.dp),
+                color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
+            )
+        }
+    }
     }
 }

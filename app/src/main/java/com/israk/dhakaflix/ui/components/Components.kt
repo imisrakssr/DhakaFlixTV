@@ -83,7 +83,12 @@ import java.util.Locale
 
 /** Remembers which card opened a detail page so focus can return to it (TV back navigation). */
 object FocusMemory {
-    var restoreId: String? = null
+    private var id: String? = null
+    private var at = 0L
+    /** Only restores right after returning from a page (stale ids must never steal focus). */
+    var restoreId: String?
+        get() = if (android.os.SystemClock.elapsedRealtime() - at < 120_000) id else null
+        set(v) { id = v; at = android.os.SystemClock.elapsedRealtime() }
 }
 
 fun ItemEntity.posterUrl(): String? = TmdbImages.url(posterPath, "w342") ?: localPoster
@@ -132,6 +137,7 @@ fun FocusFrame(
                     k.keyCode == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER
                 when {
                     !ok -> false
+                    k.action == android.view.KeyEvent.ACTION_DOWN && k.repeatCount == 0 -> { longFired = false; false }
                     k.action == android.view.KeyEvent.ACTION_DOWN && k.repeatCount > 0 -> {
                         if (!longFired) { longFired = true; onLongClick() }
                         true
@@ -540,9 +546,17 @@ fun ItemMenu(item: ItemEntity, mode: CardMenu, onDismiss: () -> Unit) {
             else -> add((if (inList) s.removeFromLibrary else s.addToLibrary) to suspend { repo.setInWatchlist(item.id, !inList) })
         }
     }
+    // The OK button is still held when the menu opens: ignore its release, only a new press counts.
+    var armed by remember { mutableStateOf(false) }
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Column(
-            Modifier.width(380.dp).glass(RoundedCornerShape(24.dp), tint = .12f)
+            Modifier
+                .onPreviewKeyEvent { e ->
+                    val k = e.nativeKeyEvent
+                    if (k.action == android.view.KeyEvent.ACTION_DOWN && k.repeatCount == 0) armed = true
+                    !armed // swallow everything (the held OK repeats and its release) until a fresh press
+                }
+                .width(380.dp).glass(RoundedCornerShape(24.dp), tint = .12f)
                 .background(com.israk.dhakaflix.ui.theme.Bg.copy(alpha = .85f)).padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {

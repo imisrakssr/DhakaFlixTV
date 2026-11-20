@@ -98,6 +98,12 @@ class PlayerController(
     var seekFlashDelta by mutableLongStateOf(0L)
         private set
 
+    /** Seek preview frames + when the user last moved the seek position. */
+    val thumbs = SeekThumbnailer(scope)
+    var previewAt by mutableLongStateOf(0L)
+        private set
+    val previewTarget: Long get() = seekTarget
+
     /** "Up next" card in the last 40 seconds of an episode. */
     val showUpNext: Boolean
         get() = hasNext && current.episode != null && duration > 120_000 && duration - position in 1L..40_000L
@@ -253,6 +259,8 @@ class PlayerController(
         val t = (base + delta).coerceIn(0, max)
         seekTarget = t; seekAt = now
         position = t
+        previewAt = now
+        thumbs.request(current.url, t)
         // coalesce rapid presses into one real seek (each seek restarts buffering)
         seekJob?.cancel()
         seekJob = scope.launch {
@@ -445,5 +453,6 @@ class PlayerController(
         engine?.pause()
         engine?.release()
         engine = null
+        thumbs.release()
     }
 }

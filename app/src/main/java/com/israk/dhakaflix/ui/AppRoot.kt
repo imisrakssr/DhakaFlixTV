@@ -254,6 +254,7 @@ private fun MainScaffold(tab: Tab, currentTab: () -> Tab, onTab: (Tab) -> Unit, 
         }
         val nav = NavHandle(currentTab, onTab, requesters, entry) {
             navFocused = it
+            if (it) FocusMemory.restoreId = null // a new page must never pull focus out of the menu
             if (!it) railActive = false
         }
         Box(Modifier.fillMaxSize().background(Bg)) {

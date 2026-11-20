@@ -71,7 +71,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
                     onClick = {
                         scope.launch {
                             val (list, idx) = repo.playlistFromProgress(e.progress)
-                            PlayerActivity.start(ctx, list, idx, PlayerActivity.MODE_RESUME)
+                            PlayerActivity.start(ctx, list, idx, PlayerActivity.MODE_ASK)
                         }
                     },
                 )

@@ -179,7 +179,7 @@ fun HomeScreen(onOpen: (String) -> Unit) {
     val playContinue: (ContinueEntry) -> Unit = { e ->
         scope.launch {
             val (list, idx) = repo.playlistFromProgress(e.progress)
-            PlayerActivity.start(ctx, list, idx, PlayerActivity.MODE_RESUME)
+            PlayerActivity.start(ctx, list, idx, PlayerActivity.MODE_ASK)
         }
     }
 
@@ -395,7 +395,9 @@ private class HomeFocus {
 @Composable
 private fun HomeBackdrop(focus: HomeFocus, bannerItem: ItemEntity?) {
     val ctx = LocalContext.current
-    val target = if (focus.inRows) focus.item ?: bannerItem else bannerItem
+    // The backdrop no longer swaps for every focused poster: a full-screen image change on each
+    // move is what made the whole page look like it was shaking on TV sticks. It just dims instead.
+    val target = bannerItem
     var shown by remember { mutableStateOf<ItemEntity?>(null) }
     // wait until the user pauses on a card before decoding a big image (keeps scrolling smooth)
     LaunchedEffect(target?.id) { delay(if (shown == null) 0 else 700); shown = target }
@@ -408,7 +410,7 @@ private fun HomeBackdrop(focus: HomeFocus, bannerItem: ItemEntity?) {
                 )
             }
         }
-        val dim by animateFloatAsState(if (focus.inRows) 0.55f else 0f, tween(500), label = "dim")
+        val dim by animateFloatAsState(if (focus.inRows) 0.7f else 0f, tween(500), label = "dim")
         // one draw pass for all scrims (cheaper on Mali GPUs than three stacked layers)
         Spacer(
             Modifier.fillMaxSize().drawWithCache {
