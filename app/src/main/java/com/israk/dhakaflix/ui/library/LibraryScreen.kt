@@ -3,6 +3,7 @@
 package com.israk.dhakaflix.ui.library
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,6 +25,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -100,6 +102,10 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
         return
     }
 
+    val perRow by app.settings.postersPerRow.collectAsState()
+    val screenW = with(androidx.compose.ui.platform.LocalDensity.current) { androidx.compose.ui.platform.LocalWindowInfo.current.containerSize.width.toDp() }
+    val posterW = com.israk.dhakaflix.ui.components.posterWidth(screenW - if (isTv && app.settings.navPosition.collectAsState().value == "left") 96.dp else 0.dp)
+    val landW = if (perRow > 0) posterW * 1.96f else if (isTv) 220.dp else 210.dp
     val cell: Dp = if (isTv) 112.dp else 104.dp
     val gridState = rememberLazyGridState()
     com.israk.dhakaflix.ui.ReportScroll { gridState.firstVisibleItemIndex > 0 }
@@ -139,9 +145,31 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
             }
 
             // ---- Continue Watching (no filters)
+            // same wide landscape row as before (v1.0.22)
             if (cw.isNotEmpty()) {
-                item(span = { GridItemSpan(maxLineSpan) }, key = "h:cw") { SectionTitle(s.continueWatching, cw.size) }
-                items(cw.size, key = { "${Shelf.CONTINUE.name}:${cw[it].item.id}" }) { i -> Card(Shelf.CONTINUE, cw[i].item, i == 0) }
+                item(span = { GridItemSpan(maxLineSpan) }, key = "row:cw") {
+                    Box(
+                        // the row brings its own side padding: stretch it over the grid's edge padding
+                        Modifier.layout { m, c ->
+                            val extra = edge.roundToPx()
+                            val w = c.maxWidth + 2 * extra
+                            val pl = m.measure(c.copy(minWidth = w, maxWidth = w))
+                            layout(c.maxWidth, pl.height) { pl.place(-extra, 0) }
+                        }
+                    ) {
+                        com.israk.dhakaflix.ui.components.MediaRow(s.continueWatching, cw, key = { it.progress.fileUrl }, modifier = entry) { e ->
+                            com.israk.dhakaflix.ui.components.LandscapeCard(
+                                e.item, e.progress.label, e.progress.fraction, landW,
+                                onClick = {
+                                    scope.launch {
+                                        val (list, idx) = repo.playlistFromProgress(e.progress)
+                                        PlayerActivity.start(ctx, list, idx, PlayerActivity.MODE_ASK)
+                                    }
+                                },
+                            )
+                        }
+                    }
+                }
             }
 
             // ---- My Watchlist
