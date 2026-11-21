@@ -150,6 +150,7 @@ fun SettingsScreen() {
         // While focus is inside the right pane the section list can't be reached by up/down,
         // so reaching the end of a section never jumps to another one. LEFT goes back to the list.
         var inPane by remember { mutableStateOf(false) }
+        val leaving = remember { booleanArrayOf(false) }
         val sectionFrs = remember { Section.entries.associateWith { FocusRequester() } }
         val fm = LocalFocusManager.current
         val scope = rememberCoroutineScope()
@@ -185,11 +186,17 @@ fun SettingsScreen() {
                     .onFocusChanged { inPane = it.hasFocus }
                     .onPreviewKeyEvent { e ->
                         if (e.type != KeyEventType.KeyDown || e.key != Key.DirectionLeft) return@onPreviewKeyEvent false
+                        // already on the way back to the list: swallow repeated LEFTs, otherwise the
+                        // second one lands on whatever entry sits beside the button and switches section
+                        if (leaving[0]) return@onPreviewKeyEvent true
                         if (fm.moveFocus(FocusDirection.Left)) return@onPreviewKeyEvent true
+                        leaving[0] = true
                         scope.launch {
                             inPane = false
                             delay(40)
                             runCatching { sectionFrs.getValue(section).requestFocus() }
+                            delay(160)
+                            leaving[0] = false
                         }
                         true
                     },

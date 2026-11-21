@@ -198,30 +198,58 @@ fun HomeScreen(onOpen: (String) -> Unit) {
     val rowFrs = remember { HashMap<String, FocusRequester>() }
     fun frFor(k: String) = rowFrs.getOrPut(k) { FocusRequester() }
 
-    /** Eased scroll that lines an item up under the top inset (smoother than the default spring). */
+    /** Eased scroll that lines an item up under the top inset (smoother than the default spring).
+     *  Runs at user-input priority so the list's own bring-into-view can't cancel it half way
+     *  (that left rows half under the screen edge with the next row not composed). */
     suspend fun smoothScrollTo(index: Int) {
         val info = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
         if (info != null) {
             val target = info.offset - listState.layoutInfo.beforeContentPadding
-            if (target != 0) listState.animateScrollBy(target.toFloat(), tween(340, easing = FastOutSlowInEasing))
+            if (target != 0) runCatching {
+                listState.scroll(androidx.compose.foundation.MutatePriority.UserInput) {
+                    var done = 0f
+                    androidx.compose.animation.core.animate(0f, target.toFloat(), animationSpec = tween(340, easing = FastOutSlowInEasing)) { v, _ ->
+                        done += scrollBy(v - done)
+                    }
+                }
+            }
         } else {
             listState.scrollToItem(index)
         }
     }
 
-    fun goRow(i: Int) {
-        scope.launch {
+    val focusedRow = remember { arrayOf<String?>(null) }
+    fun isComposed(key: String) = listState.layoutInfo.visibleItemsInfo.any { it.key == key }
+
+    val navJob = remember { arrayOfNulls<kotlinx.coroutines.Job>(1) }
+    fun goRow(i: Int, up: Boolean = false) {
+        navJob[0]?.cancel()
+        navJob[0] = scope.launch {
             if (i < 0) {
                 if (featured.isNotEmpty()) runCatching { bannerFr.requestFocus() } else focusManager.moveFocus(FocusDirection.Up)
                 smoothScrollTo(0)
                 return@launch
             }
-            if (i > visible.lastIndex) return@launch
-            // focus first (instant feedback), then glide the row into place
-            runCatching { frFor(visible[i].key).requestFocus() }
+            if (i > visible.lastIndex) {
+                // last row: make sure all of it (title + cards) is on screen
+                android.util.Log.d("DfxNav", "goRow $i: end of list")
+                smoothScrollTo(visible.lastIndex + 1)
+                return@launch
+            }
+            val key = visible[i].key
+            if (!isComposed(key)) {
+                // the row is off screen and not composed yet: bring it in first, then focus it
+                listState.scrollToItem(i + 1)
+                for (f in 0 until 4) { if (isComposed(key)) break; androidx.compose.runtime.withFrameNanos { } }
+            }
+            runCatching { frFor(key).requestFocus() }
+            androidx.compose.runtime.withFrameNanos { }
+            if (focusedRow[0] != key) { runCatching { frFor(key).requestFocus() }; androidx.compose.runtime.withFrameNanos { } }
+            if (focusedRow[0] != key) focusManager.moveFocus(if (up) FocusDirection.Up else FocusDirection.Down)
+            val ok = focusedRow[0] == key
+            android.util.Log.d("DfxNav", "goRow $i (${key}) focused=$ok")
+            // glide the row under the menu
             smoothScrollTo(i + 1)
-            // in case the row wasn't composed yet; never leave the user stuck
-            if (runCatching { frFor(visible[i].key).requestFocus() }.isFailure) focusManager.moveFocus(FocusDirection.Down)
         }
     }
 
@@ -249,6 +277,7 @@ fun HomeScreen(onOpen: (String) -> Unit) {
                     onInfo = { b -> onOpen(b.id) },
                     onFocus = {
                         focus.inRows = false
+                        focusedRow[0] = null
                         // always show the whole banner when it has focus (no cut-off title/logo); the
                         // list's own bring-into-view runs right after focus, so correct after it
                         scope.launch {
@@ -262,9 +291,9 @@ fun HomeScreen(onOpen: (String) -> Unit) {
                 )
             }
             itemsIndexed(visible, key = { _, r -> r.key }) { ri, row ->
-                val nav = if (isTv) RowNav(frFor(row.key), onUp = { goRow(ri - 1) }, onDown = { goRow(ri + 1) }) else null
+                val nav = if (isTv) RowNav(frFor(row.key), onUp = { goRow(ri - 1, up = true) }, onDown = { goRow(ri + 1) }) else null
                 if (row.key == RowKeys.CONTINUE) {
-                    MediaRow(row.title, row.cw, key = { it.progress.fileUrl }, nav = nav) { e ->
+                    MediaRow(row.title, row.cw, key = { it.progress.fileUrl }, nav = nav, modifier = Modifier.onFocusChanged { if (it.hasFocus) focusedRow[0] = row.key }) { e ->
                         LandscapeCard(
                             item = e.item, label = e.progress.label, progress = e.progress.fraction, width = landW,
                             onClick = { playContinue(e) },
@@ -272,7 +301,7 @@ fun HomeScreen(onOpen: (String) -> Unit) {
                         )
                     }
                 } else if (row.key == RowKeys.TOP10) {
-                    MediaRow(row.title, row.items, key = { it.id }, nav = nav) { item ->
+                    MediaRow(row.title, row.items, key = { it.id }, nav = nav, modifier = Modifier.onFocusChanged { if (it.hasFocus) focusedRow[0] = row.key }) { item ->
                         com.israk.dhakaflix.ui.components.Top10Card(
                             rank = row.items.indexOf(item) + 1, item = item, width = posterW,
                             onClick = { onOpen(item.id) },
@@ -280,7 +309,7 @@ fun HomeScreen(onOpen: (String) -> Unit) {
                         )
                     }
                 } else {
-                    MediaRow(row.title, row.items, key = { it.id }, nav = nav) { item ->
+                    MediaRow(row.title, row.items, key = { it.id }, nav = nav, modifier = Modifier.onFocusChanged { if (it.hasFocus) focusedRow[0] = row.key }) { item ->
                         PosterCard(
                             item = item, width = posterW, watched = item.id in watchedSet,
                             onClick = { onOpen(item.id) },
