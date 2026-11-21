@@ -77,6 +77,26 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        com.israk.dhakaflix.ui.AppEvents.lastInput = android.os.SystemClock.elapsedRealtime()
+        // any key just wakes the screensaver up
+        if (com.israk.dhakaflix.ui.AppEvents.screensaverOn.value) {
+            if (event.action == android.view.KeyEvent.ACTION_UP) com.israk.dhakaflix.ui.AppEvents.screensaverOn.value = false
+            return true
+        }
+        if (event.keyCode == android.view.KeyEvent.KEYCODE_SEARCH || event.keyCode == android.view.KeyEvent.KEYCODE_VOICE_ASSIST) {
+            if (event.action == android.view.KeyEvent.ACTION_UP) com.israk.dhakaflix.ui.AppEvents.voiceSearch.value++
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        com.israk.dhakaflix.ui.AppEvents.lastInput = android.os.SystemClock.elapsedRealtime()
+        if (com.israk.dhakaflix.ui.AppEvents.screensaverOn.value) { com.israk.dhakaflix.ui.AppEvents.screensaverOn.value = false; return true }
+        return super.dispatchTouchEvent(ev)
+    }
+
     companion object {
         fun isTvDevice(ctx: Context): Boolean {
             val ui = ctx.getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager

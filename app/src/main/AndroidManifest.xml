@@ -10,6 +10,12 @@
     <queries>
         <package android:name="org.videolan.vlc" />
         <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:mimeType="video/*" />
         </intent>

@@ -111,6 +111,24 @@ class AppSettings(ctx: Context) {
     val pauseOverlay: StateFlow<Int> = _pauseOverlay
     fun setPauseOverlay(v: Int) { _pauseOverlay.value = v; prefs.edit().putInt("pause_overlay", v).apply() }
 
+    // ---- extras
+    private val _autoSkipIntro = MutableStateFlow(prefs.getBoolean("auto_skip_intro", false))
+    val autoSkipIntro: StateFlow<Boolean> = _autoSkipIntro
+    fun setAutoSkipIntro(v: Boolean) { _autoSkipIntro.value = v; prefs.edit().putBoolean("auto_skip_intro", v).apply() }
+
+    private val _bgTrailers = MutableStateFlow(prefs.getBoolean("bg_trailers", true))
+    val bgTrailers: StateFlow<Boolean> = _bgTrailers
+    fun setBgTrailers(v: Boolean) { _bgTrailers.value = v; prefs.edit().putBoolean("bg_trailers", v).apply() }
+
+    /** Minutes without input before the screensaver; 0 = off. */
+    private val _screensaver = MutableStateFlow(prefs.getInt("screensaver", 5))
+    val screensaver: StateFlow<Int> = _screensaver
+    fun setScreensaver(v: Int) { _screensaver.value = v; prefs.edit().putInt("screensaver", v).apply() }
+
+    private val _nightMode = MutableStateFlow(prefs.getBoolean("night_mode", false))
+    val nightMode: StateFlow<Boolean> = _nightMode
+    fun setNightMode(v: Boolean) { _nightMode.value = v; prefs.edit().putBoolean("night_mode", v).apply() }
+
     /** Raw access for small feature stores (track memory, caches). */
     fun store(name: String) = appCtx.getSharedPreferences(name, Context.MODE_PRIVATE)
     private val appCtx = ctx.applicationContext
@@ -179,6 +197,13 @@ class AppSettings(ctx: Context) {
         val saved = runCatching { json.decodeFromString(rowSer, s) }.getOrNull() ?: return Defaults.homeRows
         // add any newly introduced default rows at the end
         val keys = saved.map { it.key }.toSet()
-        return saved + Defaults.homeRows.filter { it.key !in keys }.map { it.copy(enabled = false) }
+        // rows added in an update: the discovery rows go in switched on, near their default spot
+        val out = saved.toMutableList()
+        Defaults.homeRows.forEachIndexed { i, r ->
+            if (r.key in keys) return@forEachIndexed
+            if (r.key in setOf(RowKeys.NEW_EPISODES, RowKeys.TOP10, RowKeys.BECAUSE)) out.add(i.coerceAtMost(out.size), r)
+            else out.add(r.copy(enabled = false))
+        }
+        return out
     }
 }

@@ -170,6 +170,14 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
         }
     }
     val detailList = androidx.compose.foundation.lazy.rememberLazyListState()
+    val bgTrailers by app.settings.bgTrailers.collectAsState()
+    var trailerKey by remember(id) { mutableStateOf<String?>(null) }
+    LaunchedEffect(cur.tmdbId) { trailerKey = repo.discovery.trailerKey(cur) }
+    var showTrailer by remember(id) { mutableStateOf(false) }
+    LaunchedEffect(trailerKey, bgTrailers) {
+        showTrailer = false
+        if (trailerKey != null && bgTrailers && isTv) { delay(2500); showTrailer = true }
+    }
 
     Box(Modifier.fillMaxSize().background(Bg)) {
         AsyncImage(
@@ -178,6 +186,10 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
             contentDescription = null, contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxWidth().fillMaxHeight(if (isTv) 1f else .42f),
         )
+        val tk = trailerKey
+        if (showTrailer && tk != null) {
+            com.israk.dhakaflix.ui.components.BackgroundTrailer(tk, Modifier.fillMaxSize())
+        }
         Box(
             Modifier.fillMaxSize().background(
                 if (isTv) Brush.horizontalGradient(0f to Bg, 0.5f to Bg.copy(alpha = .78f), 1f to Bg.copy(alpha = .15f))
@@ -199,7 +211,7 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
                         Spacer(Modifier.width(32.dp))
                     }
                     Column(Modifier.widthIn(max = 720.dp)) {
-                        Text(cur.displayTitle, style = MaterialTheme.typography.headlineLarge, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        com.israk.dhakaflix.ui.components.TitleOrLogo(cur, maxHeight = 110.dp, style = MaterialTheme.typography.headlineLarge)
                         cur.tagline?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = TextDim, maxLines = 1) }
                         Spacer(Modifier.height(10.dp))
                         MetaLine(cur, extra = cur.genreList.take(3))
@@ -233,6 +245,9 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
                             )
                             if (plan?.resumeAt != null) {
                                 PillButton(s.startOver, onClick = { play(plan, PlayerActivity.MODE_START) }, icon = AppIcons.Rewind)
+                            }
+                            trailerKey?.let { k ->
+                                PillButton(s.trailer, icon = Icons.Filled.PlayArrow, onClick = { com.israk.dhakaflix.ui.components.openTrailer(ctx, k) })
                             }
                             val inList = user?.inWatchlist == true
                             PillButton(

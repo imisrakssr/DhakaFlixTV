@@ -107,6 +107,9 @@ fun rowTitle(key: String, s: Strings, sources: List<Source>): String = when {
     key == RowKeys.LATEST_SERIES -> s.latestSeries
     key == RowKeys.WATCHLIST -> s.myWatchlist
     key == RowKeys.TOP_RATED -> s.topRated
+    key == RowKeys.NEW_EPISODES -> s.newEpisodes
+    key == RowKeys.TOP10 -> s.top10
+    key == RowKeys.BECAUSE -> s.becauseYouWatched.format("…")
     key.startsWith("genre:") -> key.removePrefix("genre:")
     key.startsWith("src:") -> s.latestIn.format(sources.firstOrNull { it.id == key.removePrefix("src:") }?.name ?: "")
     else -> key
@@ -133,6 +136,9 @@ fun HomeScreen(onOpen: (String) -> Unit) {
     val watchedSet = remember(watchedIds) { watchedIds.toHashSet() }
     val cw by remember { repo.continueWatching() }.collectAsState(initial = emptyList())
     val featured by remember { repo.featured() }.collectAsState(initial = emptyList())
+    val because by repo.discovery.because.collectAsState()
+    val tmdbStatus by repo.tmdbStatus.collectAsState()
+    LaunchedEffect(tmdbStatus, count > 0) { if (count > 0) repo.discovery.refresh() }
 
     // collect every enabled row up-front so empty rows can be skipped by the D-pad
     val enabledRows = rows.filter { it.enabled }
@@ -149,7 +155,8 @@ fun HomeScreen(onOpen: (String) -> Unit) {
             if (cw.isEmpty()) null else HomeRowData(r.key, s.continueWatching, cw, emptyList())
         } else {
             val items = rowItems[r.key].orEmpty()
-            if (items.isEmpty()) null else HomeRowData(r.key, rowTitle(r.key, s, sources), emptyList(), items)
+            val title = if (r.key == RowKeys.BECAUSE) s.becauseYouWatched.format(because?.seedTitle ?: "…") else rowTitle(r.key, s, sources)
+            if (items.isEmpty()) null else HomeRowData(r.key, title, emptyList(), items)
         }
     }
 
@@ -256,6 +263,14 @@ fun HomeScreen(onOpen: (String) -> Unit) {
                             onFocused = { focus.inRows = true; focus.item = e.item },
                         )
                     }
+                } else if (row.key == RowKeys.TOP10) {
+                    MediaRow(row.title, row.items, key = { it.id }, nav = nav) { item ->
+                        com.israk.dhakaflix.ui.components.Top10Card(
+                            rank = row.items.indexOf(item) + 1, item = item, width = posterW,
+                            onClick = { onOpen(item.id) },
+                            onFocused = { focus.inRows = true; focus.item = item },
+                        )
+                    }
                 } else {
                     MediaRow(row.title, row.items, key = { it.id }, nav = nav) { item ->
                         PosterCard(
@@ -317,10 +332,7 @@ private fun FeaturedBanner(
                         color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold,
                     )
                     Spacer(Modifier.height(12.dp))
-                    Text(
-                        cur.displayTitle, style = MaterialTheme.typography.headlineLarge, color = Color.White,
-                        fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                    )
+                    com.israk.dhakaflix.ui.components.TitleOrLogo(cur, maxHeight = 96.dp, style = MaterialTheme.typography.headlineLarge)
                     Spacer(Modifier.height(8.dp))
                     MetaLine(cur, extra = cur.genreList.take(3))
                     Spacer(Modifier.height(10.dp))

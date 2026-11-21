@@ -27,7 +27,7 @@ class PlayerController(
     private val startMode: String,
 ) : EngineListener {
 
-    enum class Panel { AUDIO, SUBS, SYNC, AUDIO_SYNC, SPEED, ASPECT, OPTIONS, SUB_SIZE, SUB_COLOR }
+    enum class Panel { AUDIO, SUBS, SYNC, AUDIO_SYNC, SPEED, ASPECT, OPTIONS, SUB_SIZE, SUB_COLOR, SLEEP }
 
     val playlist = mutableStateListOf<PlayItem>().apply { addAll(initialPlaylist) }
 
@@ -93,6 +93,48 @@ class PlayerController(
 
     private var tracksRestored = false
 
+    // ---- skip intro (learned per series from the user's own fast-forward)
+    private val introStore = settings.store("intro_memory")
+    var introWindow by mutableStateOf<Pair<Long, Long>?>(null)
+        private set
+    private var introSkipped = false
+    private var seekOrigin = -1L
+    val showSkipIntro: Boolean
+        get() {
+            val w = introWindow ?: return false
+            return !introSkipped && current.episode != null && position in (w.first - 1500)..(w.second - 4000)
+        }
+
+    fun skipIntro() {
+        val w = introWindow ?: return
+        introSkipped = true
+        engine?.seekTo(w.second)
+        position = w.second
+    }
+
+    // ---- sleep timer
+    /** elapsedRealtime when playback should pause; 0 = off. */
+    var sleepAt by mutableLongStateOf(0L)
+        private set
+    var sleepEndOfEpisode by mutableStateOf(false)
+        private set
+    fun setSleep(minutes: Int?) {
+        // minutes: null = end of episode, 0 = off
+        sleepEndOfEpisode = minutes == null
+        sleepAt = if (minutes != null && minutes > 0) SystemClock.elapsedRealtime() + minutes * 60_000L else 0L
+        panel = PlayerController.Panel.OPTIONS
+    }
+
+    // ---- night mode
+    var nightMode by mutableStateOf(settings.nightMode.value)
+        private set
+    fun toggleNightMode() {
+        nightMode = !nightMode
+        settings.setNightMode(nightMode)
+        engine?.setNightMode(nightMode)
+        if (kind == EngineKind.VLC) toast = "VLC: next video"
+    }
+
     private var pendingStart: Long? = null
     private var triedFallback = false
     private var endedHandled = false
@@ -127,6 +169,9 @@ class PlayerController(
         subsChecked = false
         tracksRestored = false
         pauseInfo = false
+        introSkipped = false
+        introWindow = introStore.getString(playlist[i].itemId, null)?.split(',')
+            ?.mapNotNull { it.toLongOrNull() }?.takeIf { it.size == 2 }?.let { it[0] to it[1] }
         loadMeta(playlist[i])
         prefetchNextSeason()
         error = null; panel = null; endedHandled = false; triedFallback = false
@@ -195,7 +240,7 @@ class PlayerController(
     private fun createEngine(): VideoEngine =
         (if (kind == EngineKind.EXO) ExoEngine(activity, settings.subsDefault.value)
         else VlcEngine(activity, settings.subsDefault.value, subScale, subColorArgb))
-            .also { it.listener = this; it.setAudioDelay(audioDelay); it.setSubtitleStyle(subScale, subColorArgb) }
+            .also { it.listener = this; it.setAudioDelay(audioDelay); it.setSubtitleStyle(subScale, subColorArgb); it.setNightMode(nightMode) }
 
     fun setSubtitleSize(i: Int) {
         subSize = i; settings.setSubSize(i)
@@ -298,12 +343,22 @@ class PlayerController(
         isPlaying = e.isPlaying
         buffering = e.isBuffering
         if (ownSubUrl != null) subtitleText = SubtitleParser.at(cues, position, subDelay)
+        if (settings.autoSkipIntro.value && showSkipIntro && position > (introWindow?.first ?: 0)) { skipIntro(); toast = "⏭ " + "Intro" }
+        if (sleepAt > 0 && SystemClock.elapsedRealtime() >= sleepAt) {
+            sleepAt = 0
+            e.pause(); isPlaying = false
+            save()
+            toast = sleepMessage
+        }
         val now = SystemClock.elapsedRealtime()
         if (now - lastSave > 10_000 && duration > 0 && position > 0) {
             lastSave = now
             save(false)
         }
     }
+
+    /** Set by the screen (localised). */
+    var sleepMessage = "Sleep timer"
 
     fun save(forceCompleted: Boolean = false) {
         val e = engine ?: return
@@ -331,7 +386,9 @@ class PlayerController(
     fun seekBy(delta: Long) {
         val e = engine ?: return
         val now = SystemClock.elapsedRealtime()
-        val base = if (seekTarget >= 0 && now - seekAt < 1200) seekTarget else e.position
+        val fresh = !(seekTarget >= 0 && now - seekAt < 1200)
+        if (fresh) seekOrigin = e.position
+        val base = if (!fresh) seekTarget else e.position
         val max = if (duration > 0) duration - 1000 else Long.MAX_VALUE
         val t = (base + delta).coerceIn(0, max)
         seekTarget = t; seekAt = now
@@ -343,11 +400,22 @@ class PlayerController(
         seekJob = scope.launch {
             delay(350)
             engine?.seekTo(seekTarget)
+            learnIntro(seekOrigin, seekTarget)
         }
         if (!controlsVisible) {
             seekFlashDelta = if (now - seekFlashAt < 1500) seekFlashDelta + delta else delta
             seekFlashAt = now
         } else showControls()
+    }
+
+    /** A 30 s – 3 min jump forward in the first 10 minutes of an episode is almost always "skip the intro". */
+    private fun learnIntro(from: Long, to: Long) {
+        if (current.episode == null || from < 0 || from > 10 * 60_000L) return
+        val d = to - from
+        if (d !in 30_000L..180_000L) return
+        introWindow = from to to
+        introSkipped = true
+        introStore.edit().putString(current.itemId, "$from,$to").apply()
     }
 
     fun seekToFraction(f: Float) {
@@ -477,7 +545,7 @@ class PlayerController(
         // Controls hidden: the remote drives playback directly
         when (e.keyCode) {
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
-                if (down && e.repeatCount == 0) { if (showUpNext) next() else togglePlay() }
+                if (down && e.repeatCount == 0) { if (showSkipIntro) skipIntro() else if (showUpNext) next() else togglePlay() }
                 return true
             }
             KeyEvent.KEYCODE_DPAD_LEFT -> { if (down) seekBy(-step(e)); return true }
@@ -495,7 +563,7 @@ class PlayerController(
         when {
             pauseInfo -> { pauseInfo = false; showControls() }
             exitAsk -> exitAsk = false
-            panel != null -> panel = PlayerController.Panel.OPTIONS.takeIf { panel in setOf(Panel.SYNC, Panel.AUDIO_SYNC, Panel.SPEED, Panel.ASPECT, Panel.SUB_SIZE, Panel.SUB_COLOR) }
+            panel != null -> panel = PlayerController.Panel.OPTIONS.takeIf { panel in setOf(Panel.SYNC, Panel.AUDIO_SYNC, Panel.SPEED, Panel.ASPECT, Panel.SUB_SIZE, Panel.SUB_COLOR, Panel.SLEEP) }
             resumeAsk != null -> activity.finish()
             error != null -> { save(); activity.finish() }
             controlsVisible -> controlsVisible = false
@@ -510,6 +578,7 @@ class PlayerController(
             if (endedHandled) return@runOnUiThread
             endedHandled = true
             save(true)
+            if (sleepEndOfEpisode) { sleepEndOfEpisode = false; toast = sleepMessage; activity.finish(); return@runOnUiThread }
             next(auto = true)
         }
     }
@@ -552,6 +621,7 @@ class PlayerController(
         released = true
         save()
         flushSync()
+        repo.discovery.refreshBecause()
         engine?.pause()
         engine?.release()
         engine = null

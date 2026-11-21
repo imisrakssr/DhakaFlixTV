@@ -24,6 +24,7 @@ data class TmdbResult(
     @SerialName("genre_ids") val genreIds: List<Int> = emptyList(),
     @SerialName("release_date") val releaseDate: String? = null,
     @SerialName("first_air_date") val firstAirDate: String? = null,
+    @SerialName("media_type") val mediaType: String? = null,
 ) {
     val displayTitle get() = title ?: name ?: ""
     val year: Int? get() = (releaseDate ?: firstAirDate)?.take(4)?.toIntOrNull()
@@ -31,6 +32,20 @@ data class TmdbResult(
 
 @Serializable
 data class TmdbPage(val results: List<TmdbResult> = emptyList())
+
+@Serializable
+data class TmdbVideo(val key: String = "", val site: String = "", val type: String = "", val official: Boolean = false,
+                     @SerialName("iso_639_1") val lang: String? = null)
+
+@Serializable
+data class TmdbVideos(val results: List<TmdbVideo> = emptyList())
+
+@Serializable
+data class TmdbImage(@SerialName("file_path") val filePath: String, @SerialName("iso_639_1") val lang: String? = null,
+                     @SerialName("vote_average") val vote: Double? = null)
+
+@Serializable
+data class TmdbImageSet(val logos: List<TmdbImage> = emptyList())
 
 @Serializable
 data class TmdbGenre(val id: Int, val name: String)
@@ -128,6 +143,21 @@ class TmdbClient(private val http: OkHttpClient, private val key: () -> String) 
 
     suspend fun season(tvId: Int, season: Int): TmdbSeason =
         json.decodeFromString(TmdbSeason.serializer(), get("tv/$tvId/season/$season", emptyMap()))
+
+    suspend fun recommendations(tv: Boolean, id: Int, page: Int = 1): List<TmdbResult> =
+        json.decodeFromString(TmdbPage.serializer(), get(if (tv) "tv/$id/recommendations" else "movie/$id/recommendations", mapOf("page" to "$page"))).results
+
+    suspend fun similar(tv: Boolean, id: Int): List<TmdbResult> =
+        json.decodeFromString(TmdbPage.serializer(), get(if (tv) "tv/$id/similar" else "movie/$id/similar", emptyMap())).results
+
+    suspend fun trending(page: Int): List<TmdbResult> =
+        json.decodeFromString(TmdbPage.serializer(), get("trending/all/week", mapOf("page" to "$page"))).results
+
+    suspend fun videos(tv: Boolean, id: Int): List<TmdbVideo> =
+        json.decodeFromString(TmdbVideos.serializer(), get(if (tv) "tv/$id/videos" else "movie/$id/videos", emptyMap())).results
+
+    suspend fun logos(tv: Boolean, id: Int): List<TmdbImage> =
+        json.decodeFromString(TmdbImageSet.serializer(), get(if (tv) "tv/$id/images" else "movie/$id/images", mapOf("include_image_language" to "en,null"))).logos
 
     fun castToJson(cast: List<TmdbCast>): String = json.encodeToString(castSer, cast)
     fun castFromJson(s: String?): List<TmdbCast> =

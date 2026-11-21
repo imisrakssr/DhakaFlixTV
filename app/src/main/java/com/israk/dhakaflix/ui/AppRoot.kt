@@ -160,7 +160,13 @@ fun AppRoot(onExit: () -> Unit) {
         holder.removeState("detail:$id:${stack.size}")
     }
 
+    // the remote's search / mic key: jump to Search (SearchScreen starts listening)
+    LaunchedEffect(Unit) {
+        AppEvents.voiceSearch.collect { n -> if (n > AppEvents.navHandled) { AppEvents.navHandled = n; stack.clear(); tab = Tab.SEARCH } }
+    }
+
     val top = stack.lastOrNull()
+    Box(Modifier.fillMaxSize()) {
     AnimatedContent(
         targetState = top?.let { it to stack.size - 1 },
         transitionSpec = {
@@ -176,6 +182,8 @@ fun AppRoot(onExit: () -> Unit) {
                 DetailScreen(target.first.removePrefix("play:"), onOpen = open, autoPlay = autoPlay)
             }
         }
+    }
+    if (LocalIsTv.current) Screensaver()
     }
 }
 

@@ -66,6 +66,8 @@ interface VideoEngine {
     fun setEngineSubtitlesVisible(visible: Boolean)
     /** Size multiplier + ARGB colour for the engine's own subtitle rendering. */
     fun setSubtitleStyle(scale: Float, color: Int)
+    /** Night mode: compress loud peaks and lift quiet dialogue. */
+    fun setNightMode(on: Boolean)
     val supportsSubtitleDelay: Boolean
     fun setSubtitleDelay(ms: Long)
     fun setSpeed(speed: Float)
@@ -159,6 +161,7 @@ class ExoEngine(private val ctx: Context, preferSubs: Boolean) : VideoEngine {
             override fun onPlayerError(error: PlaybackException) {
                 listener?.onError("${error.errorCodeName}: ${error.message ?: ""}")
             }
+            override fun onAudioSessionIdChanged(audioSessionId: Int) { session = audioSessionId; applyNight() }
             override fun onCues(cueGroup: androidx.media3.common.text.CueGroup) {
                 // text subtitles go to our own overlay (so size/colour always apply);
                 // only picture subtitles (PGS/VobSub) are left to Exo's own view
@@ -172,6 +175,31 @@ class ExoEngine(private val ctx: Context, preferSubs: Boolean) : VideoEngine {
 
     private var subScale = 1f
     private var subColor = Color.WHITE
+    private var night = false
+    private var session = 0
+    private var dynamics: android.media.audiofx.DynamicsProcessing? = null
+
+    override fun setNightMode(on: Boolean) { night = on; applyNight() }
+
+    private fun applyNight() {
+        runCatching { dynamics?.release() }
+        dynamics = null
+        if (!night || session == 0 || android.os.Build.VERSION.SDK_INT < 28) return
+        dynamics = runCatching {
+            val cfg = android.media.audiofx.DynamicsProcessing.Config.Builder(
+                android.media.audiofx.DynamicsProcessing.VARIANT_FAVOR_FREQUENCY_RESOLUTION, 2,
+                false, 0, true, 1, false, 0, true,
+            ).build()
+            android.media.audiofx.DynamicsProcessing(0, session, cfg).apply {
+                // one wide compressor band: loud scenes come down, quiet voices come up
+                setMbcBandAllChannelsTo(0, android.media.audiofx.DynamicsProcessing.MbcBand(
+                    true, 20000f, 5f, 120f, 4f, -28f, 6f, -90f, 1f, 0f, 9f,
+                ))
+                setLimiterAllChannelsTo(android.media.audiofx.DynamicsProcessing.Limiter(true, true, 0, 1f, 60f, 10f, -3f, 0f))
+                enabled = true
+            }
+        }.getOrNull()
+    }
 
     override fun createView(ctx: Context): View = PlayerView(ctx).apply {
         useController = false
@@ -301,6 +329,7 @@ class ExoEngine(private val ctx: Context, preferSubs: Boolean) : VideoEngine {
 
     override fun release() {
         listener = null
+        runCatching { dynamics?.release() }
         view?.player = null
         player.release()
     }
@@ -352,6 +381,7 @@ class VlcEngine(ctx: Context, private val preferSubs: Boolean, private var subSc
             media.setHWDecoderEnabled(true, false)
             if (startMs > 0) media.addOption(":start-time=${startMs / 1000.0}")
             media.addOption(":sub-text-scale=${(subScale * 100).toInt()}")
+            if (night) media.addOption(":audio-filter=compressor")
             mp.media = media
             media.release()
             externalSubs.forEachIndexed { i, sub -> mp.addSlave(IMedia.Slave.Type.Subtitle, Uri.parse(sub), i == 0 && preferSubs) }
@@ -382,6 +412,8 @@ class VlcEngine(ctx: Context, private val preferSubs: Boolean, private var subSc
     override fun selectText(id: String?) { mp.setSpuTrack(id?.toInt() ?: -1) }
     override fun setEngineSubtitlesVisible(visible: Boolean) { if (!visible) mp.setSpuTrack(-1) }
     override fun setSubtitleStyle(scale: Float, color: Int) { subScale = scale } // colour: next engine; size: next file
+    private var night = false
+    override fun setNightMode(on: Boolean) { night = on } // VLC: takes effect from the next file
 
     override val supportsSubtitleDelay = true
     override fun setSubtitleDelay(ms: Long) { mp.setSpuDelay(ms * 1000) }

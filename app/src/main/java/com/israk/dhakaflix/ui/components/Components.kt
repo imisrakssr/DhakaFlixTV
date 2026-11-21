@@ -14,6 +14,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import com.israk.dhakaflix.ui.theme.LocalStrings
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -159,6 +162,42 @@ fun FocusFrame(
     ) { content(focused) }
 }
 
+/** TMDB title logo (like Apple TV / Netflix) with the plain title as fallback. */
+@Composable
+fun TitleOrLogo(item: ItemEntity, maxHeight: Dp, style: androidx.compose.ui.text.TextStyle, maxLines: Int = 2) {
+    var logo by remember(item.id) { mutableStateOf<String?>(null) }
+    LaunchedEffect(item.id) { logo = com.israk.dhakaflix.DhakaFlixApp.instance.library.discovery.logoUrl(item) }
+    val l = logo
+    if (l != null) {
+        coil.compose.AsyncImage(
+            model = l, contentDescription = item.displayTitle,
+            modifier = Modifier.heightIn(max = maxHeight).widthIn(max = 440.dp),
+            contentScale = androidx.compose.ui.layout.ContentScale.Fit, alignment = Alignment.CenterStart,
+        )
+    } else {
+        Text(item.displayTitle, style = style, color = Color.White, fontWeight = FontWeight.Bold, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** Netflix-style "Top 10" card: a huge outlined rank number tucked behind the poster. */
+@Composable
+fun Top10Card(rank: Int, item: ItemEntity, width: Dp, onClick: () -> Unit, onFocused: () -> Unit) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val numSize = with(density) { (width * 1.05f).toSp() }
+    Box(Modifier.width(width * (if (rank >= 10) 1.75f else 1.45f))) {
+        Text(
+            "$rank",
+            Modifier.align(Alignment.TopStart).padding(top = width * 0.42f),
+            style = androidx.compose.ui.text.TextStyle(
+                fontSize = numSize, fontWeight = FontWeight.Black, letterSpacing = (-4).sp,
+                color = Color.White.copy(alpha = .9f),
+                drawStyle = androidx.compose.ui.graphics.drawscope.Stroke(width = with(density) { 3.dp.toPx() }),
+            ),
+        )
+        PosterCard(item, width, onClick = onClick, modifier = Modifier.align(Alignment.TopEnd), onFocused = onFocused)
+    }
+}
+
 /** Poster width for a row of [available] width, honouring Settings → Posters per row (0 = auto). */
 @Composable
 fun posterWidth(available: Dp): Dp {
@@ -200,6 +239,16 @@ fun PosterCard(
             onLongClick = if (menu == CardMenu.NONE) null else ({ showMenu = true }),
         ) {
             PosterImage(item, Modifier.fillMaxWidth().aspectRatio(2f / 3f))
+            val newIds by com.israk.dhakaflix.DhakaFlixApp.instance.library.newEpisodeIds.collectAsState()
+            if (item.id in newIds) {
+                Text(
+                    LocalStrings.current.newBadge,
+                    Modifier.align(Alignment.BottomStart).padding(6.dp)
+                        .background(LocalAccent.current, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                    color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold,
+                )
+            }
             if (watched) {
                 Box(
                     Modifier.align(Alignment.TopEnd).padding(6.dp).size(22.dp)

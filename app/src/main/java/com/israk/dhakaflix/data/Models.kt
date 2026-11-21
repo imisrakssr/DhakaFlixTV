@@ -56,10 +56,13 @@ object Defaults {
 
     val homeRows: List<HomeRow> = listOf(
         HomeRow(RowKeys.CONTINUE),
+        HomeRow(RowKeys.NEW_EPISODES),
         HomeRow(RowKeys.LATEST),
+        HomeRow(RowKeys.TOP10),
         HomeRow(RowKeys.LATEST_MOVIES),
         HomeRow(RowKeys.LATEST_SERIES),
         HomeRow(RowKeys.WATCHLIST),
+        HomeRow(RowKeys.BECAUSE),
         HomeRow(RowKeys.TOP_RATED),
         HomeRow(RowKeys.genre("Action")),
         HomeRow(RowKeys.genre("Comedy")),
@@ -82,6 +85,9 @@ object RowKeys {
     const val LATEST_SERIES = "latest_series"
     const val WATCHLIST = "watchlist"
     const val TOP_RATED = "top_rated"
+    const val NEW_EPISODES = "new_episodes"
+    const val TOP10 = "top10"
+    const val BECAUSE = "because"
     fun genre(name: String) = "genre:$name"
     fun source(id: String) = "src:$id"
 }

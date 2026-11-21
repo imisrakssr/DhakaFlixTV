@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.transform
+import kotlinx.coroutines.flow.stateIn
 import androidx.room.withTransaction
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
@@ -89,6 +90,12 @@ class LibraryRepository(private val app: DhakaFlixApp) {
     val tmdb = TmdbClient(app.http) { settings.tmdbKey.value.ifBlank { BuildConfig.TMDB_API_KEY } }
     val mdblist = com.israk.dhakaflix.data.accounts.MdbList(app)
     val simkl = com.israk.dhakaflix.data.accounts.Simkl(app)
+    val discovery = Discovery(app)
+
+    /** Ids of followed series that got new episodes (for the poster badge). */
+    val newEpisodeIds: StateFlow<Set<String>> = db.items().newEpisodes()
+        .map { l -> l.map { it.id }.toSet() }
+        .stateIn(scope, kotlinx.coroutines.flow.SharingStarted.Eagerly, emptySet())
 
     private val _sync = MutableStateFlow(SyncState())
     val sync: StateFlow<SyncState> = _sync
@@ -575,6 +582,9 @@ class LibraryRepository(private val app: DhakaFlixApp) {
             key == RowKeys.LATEST_SERIES -> dao.latest(MediaType.SERIES.name, ROW_LIMIT)
             key == RowKeys.WATCHLIST -> db.user().watchlist()
             key == RowKeys.TOP_RATED -> dao.topRated(ROW_LIMIT)
+            key == RowKeys.NEW_EPISODES -> dao.newEpisodes()
+            key == RowKeys.TOP10 -> discovery.top10
+            key == RowKeys.BECAUSE -> discovery.because.map { it?.items ?: emptyList() }
             key.startsWith("genre:") -> dao.byGenre(key.removePrefix("genre:"), ROW_LIMIT)
             key.startsWith("src:") -> dao.latestInSource(key.removePrefix("src:"), ROW_LIMIT)
             else -> flowOf(emptyList())

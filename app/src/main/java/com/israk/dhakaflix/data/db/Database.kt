@@ -138,6 +138,16 @@ abstract class ItemDao {
     @Query("SELECT * FROM items WHERE id IN (:ids)")
     abstract suspend fun getMany(ids: List<String>): List<ItemEntity>
 
+    /** Followed series (watchlist or started) with uploads newer than the last time you watched / added them. */
+    @Query(
+        "SELECT * FROM items WHERE type = 'SERIES' AND isPrimary = 1 AND " +
+            "(id IN (SELECT itemId FROM user_state WHERE inWatchlist = 1) OR id IN (SELECT itemId FROM progress)) AND " +
+            "uploadedAt > COALESCE((SELECT MAX(p.updatedAt) FROM progress p WHERE p.itemId = items.id), " +
+            "(SELECT u.watchlistAt FROM user_state u WHERE u.itemId = items.id), 0) " +
+            "ORDER BY uploadedAt DESC LIMIT 30"
+    )
+    abstract fun newEpisodes(): Flow<List<ItemEntity>>
+
     @Query("SELECT * FROM items WHERE tmdbId = :tmdbId AND type = :type ORDER BY isPrimary DESC, uploadedAt DESC LIMIT 1")
     abstract suspend fun byTmdb(tmdbId: Int, type: String): ItemEntity?
 

@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -60,6 +61,29 @@ fun SearchScreen(onOpen: (String) -> Unit) {
     val keyboard = LocalSoftwareKeyboardController.current
 
     var query by rememberSaveable { mutableStateOf("") }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val voice = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { r ->
+        r.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.let { query = it }
+    }
+    val startVoice: () -> Unit = {
+        val i = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, s.speakToSearch)
+        runCatching { voice.launch(i) }
+    }
+    val voiceAvailable = remember {
+        android.speech.SpeechRecognizer.isRecognitionAvailable(ctx) ||
+            ctx.packageManager.queryIntentActivities(android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH), 0).isNotEmpty()
+    }
+    val voiceReq by com.israk.dhakaflix.ui.AppEvents.voiceSearch.collectAsState()
+    LaunchedEffect(voiceReq) {
+        if (voiceReq > com.israk.dhakaflix.ui.AppEvents.voiceHandled) {
+            com.israk.dhakaflix.ui.AppEvents.voiceHandled = voiceReq
+            delay(300); startVoice()
+        }
+    }
     var debounced by remember { mutableStateOf(query) }
     LaunchedEffect(query) { delay(350); debounced = query }
     var type by rememberSaveable { mutableStateOf<MediaType?>(null) }
@@ -85,6 +109,7 @@ fun SearchScreen(onOpen: (String) -> Unit) {
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                androidx.compose.foundation.layout.Row(Modifier.widthIn(max = 800.dp).fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
@@ -104,16 +129,22 @@ fun SearchScreen(onOpen: (String) -> Unit) {
                         focusedContainerColor = Color.White.copy(alpha = .06f), unfocusedContainerColor = Color.White.copy(alpha = .04f),
                         cursorColor = accent, focusedTextColor = Color.White, unfocusedTextColor = Color.White,
                     ),
-                    modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth().entryFocus().onPreviewKeyEvent { e ->
+                    modifier = Modifier.weight(1f).entryFocus().onPreviewKeyEvent { e ->
                         // Let the D-pad leave the text field on TV
                         if (e.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
                         when (e.nativeKeyEvent.keyCode) {
                             KeyEvent.KEYCODE_DPAD_DOWN -> { keyboard?.hide(); focusManager.moveFocus(FocusDirection.Down) }
                             KeyEvent.KEYCODE_DPAD_UP -> focusManager.moveFocus(FocusDirection.Up)
+                            KeyEvent.KEYCODE_DPAD_RIGHT -> if (voiceAvailable && query.isEmpty()) focusManager.moveFocus(FocusDirection.Right) else false
                             else -> false
                         }
                     },
                 )
+                if (voiceAvailable) {
+                    androidx.compose.foundation.layout.Spacer(Modifier.width(12.dp))
+                    com.israk.dhakaflix.ui.components.PillButton("", icon = com.israk.dhakaflix.ui.components.AppIcons.Mic, onClick = startVoice)
+                }
+                }
                 FilterBar(
                     listOf(
                         FilterSpec(s.category, listOf<Pair<String?, String>>(null to s.all, MediaType.MOVIE.name to s.movies, MediaType.SERIES.name to s.series), type?.name) {

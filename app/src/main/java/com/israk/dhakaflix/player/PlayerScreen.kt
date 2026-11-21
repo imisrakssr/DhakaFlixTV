@@ -98,6 +98,7 @@ fun PlayerScreen(c: PlayerController) {
         }
     }
     val settings = com.israk.dhakaflix.DhakaFlixApp.instance.settings
+    c.sleepMessage = LocalStrings.current.sleepDone
     val hideAfter by settings.controlsTimeout.collectAsState()
     val pauseAfter by settings.pauseOverlay.collectAsState()
     LaunchedEffect(c.controlsVisible, c.interaction, c.isPlaying, c.panel, hideAfter) {
@@ -145,6 +146,28 @@ fun PlayerScreen(c: PlayerController) {
 
         AnimatedVisibility(c.pauseInfo, enter = fadeIn(androidx.compose.animation.core.tween(600)), exit = fadeOut(androidx.compose.animation.core.tween(250))) {
             PauseInfo(c)
+        }
+
+        AnimatedVisibility(
+            visible = c.showSkipIntro && c.panel == null && !c.pauseInfo && c.resumeAsk == null,
+            enter = fadeIn() + slideInHorizontally { it / 3 }, exit = fadeOut(),
+            modifier = Modifier.align(Alignment.BottomEnd),
+        ) {
+            Row(
+                Modifier.padding(end = 40.dp, bottom = if (c.controlsVisible) 190.dp else 56.dp)
+                    .glass(RoundedCornerShape(50), tint = .16f)
+                    .clickable { c.skipIntro() }
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(AppIcons.SkipNext, null, tint = Color.White, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(LocalStrings.current.skipIntro, color = Color.White, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                if (!c.controlsVisible) {
+                    Spacer(Modifier.width(10.dp))
+                    Text("OK", color = TextDim, style = MaterialTheme.typography.labelSmall)
+                }
+            }
         }
 
         AnimatedVisibility(
@@ -452,6 +475,7 @@ private fun SidePanel(c: PlayerController) {
         PlayerController.Panel.OPTIONS -> s.options
         PlayerController.Panel.SUB_SIZE -> s.subtitleSize
         PlayerController.Panel.SUB_COLOR -> s.subtitleColor
+        PlayerController.Panel.SLEEP -> s.sleepTimer
     }
     Column(
         Modifier.padding(16.dp).width(360.dp).fillMaxHeight()
@@ -483,6 +507,12 @@ private fun SidePanel(c: PlayerController) {
             ) { id -> id?.toIntOrNull()?.let { c.setScale(it) } }
             PlayerController.Panel.SYNC -> SyncPanel(c.subDelay, { c.shiftSubtitles(it) }, if (c.subtitleDelayAvailable) null else s.syncOnlyExternal)
             PlayerController.Panel.AUDIO_SYNC -> SyncPanel(c.audioDelay, { c.shiftAudio(it) }, null)
+            PlayerController.Panel.SLEEP -> OptionList(
+                listOf(
+                    Opt("0", s.off, c.sleepAt == 0L && !c.sleepEndOfEpisode),
+                ) + listOf(15, 30, 45, 60, 90).map { Opt("$it", s.minutesShort.format(it), false) } +
+                    listOf(Opt("eoe", s.endOfEpisode, c.sleepEndOfEpisode))
+            ) { id -> c.setSleep(if (id == "eoe") null else id?.toIntOrNull() ?: 0) }
             PlayerController.Panel.SUB_SIZE -> OptionList(
                 listOf(s.sizeSmall, s.sizeMedium, s.sizeLarge, "XL").mapIndexed { i, l -> Opt(i.toString(), l, i == c.subSize) }
             ) { id -> id?.toIntOrNull()?.let { c.setSubtitleSize(it) } }
@@ -498,6 +528,12 @@ private fun SidePanel(c: PlayerController) {
                     Opt("speed", s.speed + "  (" + c.speed + "x)", false, chevron = true),
                     Opt("aspect", s.aspect, false, chevron = true),
                     Opt("engine", s.switchEngine + "  (" + (if (c.kind == EngineKind.EXO) "ExoPlayer" else "LibVLC") + ")", false),
+                    Opt("night", s.nightMode + "  ·  " + s.nightModeHint, c.nightMode),
+                    Opt("sleep", s.sleepTimer + "  (" + when {
+                        c.sleepEndOfEpisode -> s.endOfEpisode
+                        c.sleepAt > 0 -> s.sleepIn.format(s.minutesShort.format(((c.sleepAt - SystemClock.elapsedRealtime()) / 60_000L + 1).toInt()))
+                        else -> s.off
+                    } + ")", false, chevron = true),
                     Opt("vlc", s.openInVlc, false),
                 )
             ) { id ->
@@ -510,6 +546,8 @@ private fun SidePanel(c: PlayerController) {
                     "aspect" -> c.panel = PlayerController.Panel.ASPECT
                     "engine" -> { c.panel = null; c.switchEngine() }
                     "vlc" -> { c.panel = null; c.openInVlc() }
+                    "night" -> c.toggleNightMode()
+                    "sleep" -> c.panel = PlayerController.Panel.SLEEP
                 }
             }
         }

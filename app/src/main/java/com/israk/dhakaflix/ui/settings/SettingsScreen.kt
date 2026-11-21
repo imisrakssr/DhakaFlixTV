@@ -368,6 +368,18 @@ private fun AppearanceCard() {
             }
         }
         AppIconPicker()
+        val saver by st.screensaver.collectAsState()
+        Label(s.screensaver)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            listOf(0, 2, 5, 10, 15).forEach { n ->
+                PillButton(if (n == 0) s.off else s.minutesShort.format(n), onClick = { st.setScreensaver(n) }, selected = saver == n, compact = true)
+            }
+        }
+        if (isTv) {
+            Spacer(Modifier.height(12.dp))
+            val bgT by st.bgTrailers.collectAsState()
+            ToggleRow(s.bgTrailers, checked = bgT, onToggle = { st.setBgTrailers(!bgT) })
+        }
     }
 }
 
@@ -592,6 +604,10 @@ private fun PlayerCard() {
                 }
             }
         }
+        val autoSkip by st.autoSkipIntro.collectAsState()
+        val night by st.nightMode.collectAsState()
+        ToggleRow(s.autoSkipIntro, subtitle = s.skipIntroHint, checked = autoSkip, onToggle = { st.setAutoSkipIntro(!autoSkip) })
+        ToggleRow(s.nightMode, subtitle = s.nightModeHint, checked = night, onToggle = { st.setNightMode(!night) })
         ToggleRow(s.autoPlayNext, checked = autoNext, onToggle = { st.setAutoNext(!autoNext) })
         ToggleRow(s.subtitlesByDefault, checked = subsDefault, onToggle = { st.setSubsDefault(!subsDefault) })
     }
@@ -661,7 +677,7 @@ private fun ToggleRow(
         ) {
             Column(Modifier.weight(1f)) {
                 Text(title, color = Color.White, style = MaterialTheme.typography.bodyLarge)
-                if (subtitle != null) Text(subtitle, color = TextDim, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                if (subtitle != null) Text(subtitle, color = TextDim, style = MaterialTheme.typography.bodySmall, maxLines = 2)
             }
             Box(
                 Modifier.size(width = 44.dp, height = 26.dp).clip(RoundedCornerShape(13.dp))
