@@ -256,8 +256,16 @@ private fun MainScaffold(tab: Tab, currentTab: () -> Tab, onTab: (Tab) -> Unit, 
                 FocusMemory.restoreId = null
             }
             if (left) {
-                // rail stays closed: start in the content
-                if (runCatching { entry.requestFocus() }.isFailure) focusNav()
+                // rail stays closed: start in the content. On a cold start the banner appears a moment
+                // later, so keep trying for a few seconds before falling back to the menu.
+                var ok = false
+                repeat(25) {
+                    if (!ok) {
+                        ok = runCatching { entry.requestFocus() }.isSuccess
+                        if (!ok) delay(200)
+                    }
+                }
+                if (!ok) focusNav()
             } else runCatching { requesters.getValue(tab).requestFocus() }
         }
         val nav = NavHandle(currentTab, onTab, requesters, entry) {

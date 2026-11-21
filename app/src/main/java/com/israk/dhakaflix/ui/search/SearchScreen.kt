@@ -27,6 +27,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.launch
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -110,7 +113,12 @@ fun SearchScreen(onOpen: (String) -> Unit) {
         item(span = { GridItemSpan(maxLineSpan) }) {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 androidx.compose.foundation.layout.Row(Modifier.widthIn(max = 800.dp).fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                val isTv = com.israk.dhakaflix.ui.theme.LocalIsTv.current
+                var editing by remember { mutableStateOf(!isTv) }
+                val fieldFr = remember { androidx.compose.ui.focus.FocusRequester() }
+                val fieldScope = androidx.compose.runtime.rememberCoroutineScope()
                 OutlinedTextField(
+                    readOnly = isTv && !editing,
                     value = query,
                     onValueChange = { query = it },
                     singleLine = true,
@@ -129,9 +137,21 @@ fun SearchScreen(onOpen: (String) -> Unit) {
                         focusedContainerColor = Color.White.copy(alpha = .06f), unfocusedContainerColor = Color.White.copy(alpha = .04f),
                         cursorColor = accent, focusedTextColor = Color.White, unfocusedTextColor = Color.White,
                     ),
-                    modifier = Modifier.weight(1f).entryFocus().onPreviewKeyEvent { e ->
+                    modifier = Modifier.weight(1f).entryFocus().focusRequester(fieldFr)
+                        .onFocusChanged { if (!it.isFocused && isTv) editing = false }
+                        .onPreviewKeyEvent { e ->
                         // Let the D-pad leave the text field on TV
                         if (e.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
+                        val ok = e.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || e.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_ENTER
+                        if (isTv && !editing && ok) {
+                            // only now start typing: re-focus as an editable field so the keyboard opens
+                            editing = true
+                            fieldScope.launch {
+                                focusManager.clearFocus(); delay(30)
+                                runCatching { fieldFr.requestFocus() }; keyboard?.show()
+                            }
+                            return@onPreviewKeyEvent true
+                        }
                         when (e.nativeKeyEvent.keyCode) {
                             KeyEvent.KEYCODE_DPAD_DOWN -> { keyboard?.hide(); focusManager.moveFocus(FocusDirection.Down) }
                             KeyEvent.KEYCODE_DPAD_UP -> focusManager.moveFocus(FocusDirection.Up)
