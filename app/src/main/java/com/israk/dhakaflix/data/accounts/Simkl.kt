@@ -184,6 +184,16 @@ class Simkl(private val app: DhakaFlixApp) {
     private val snap = app.settings.store("simkl_snapshot")
     private var lastPull = 0L
 
+    /** Watchlist removals made on this device: id -> time. Simkl can keep returning a removed item for a
+     *  while (or the remove call can fail), so a pull must not put it back until Simkl really dropped it. */
+    private fun tombs(key: String = "list_removed"): MutableMap<String, Long> =
+        (snap.getStringSet(key, emptySet()) ?: emptySet()).mapNotNull { e ->
+            val i = e.lastIndexOf('|'); if (i <= 0) null else e.substring(0, i) to (e.substring(i + 1).toLongOrNull() ?: 0L)
+        }.toMap(HashMap())
+    private fun saveTombs(m: Map<String, Long>, key: String = "list_removed") {
+        snap.edit().putStringSet(key, m.map { (k, v) -> "$k|$v" }.toSet()).apply()
+    }
+
     /** Pull Simkl → this device, then push anything this device has that Simkl doesn't. */
     fun syncNow(firstTime: Boolean = false) {
         if (!signedIn) return
@@ -225,8 +235,8 @@ class Simkl(private val app: DhakaFlixApp) {
                 val media = o.obj(if (type == "movies") "movie" else "show") ?: o.obj("show") ?: o.obj("anime") ?: continue
                 val item = match(media, type != "movies") ?: continue
                 when (o.str("status")) {
-                    "completed" -> r.watched[item.id] = parseTime(o.str("last_watched_at")) ?: System.currentTimeMillis()
-                    "plantowatch" -> r.list[item.id] = parseTime(o.str("added_to_watchlist_at")) ?: System.currentTimeMillis()
+                    "completed" -> r.watched[item.id] = parseTime(o.str("last_watched_at")) ?: 0L
+                    "plantowatch" -> r.list[item.id] = parseTime(o.str("added_to_watchlist_at")) ?: 0L
                 }
                 (o["seasons"] as? JsonArray)?.forEach { se ->
                     val so = se as? JsonObject ?: return@forEach
@@ -249,13 +259,24 @@ class Simkl(private val app: DhakaFlixApp) {
         val local = db.user().all().associateBy { it.itemId }
 
         // additions from other devices
+        val wTomb = tombs("watched_removed")
+        wTomb.entries.removeAll { (id, rm) -> id !in r.watched || System.currentTimeMillis() - rm > 14L * 24 * 3600_000 }
+        saveTombs(wTomb, "watched_removed")
         r.watched.forEach { (id, at) ->
+            if (wTomb[id]?.let { at <= it } == true) return@forEach // un-watched here; Simkl hasn't caught up yet
             val u = local[id] ?: UserStateEntity(id)
-            if (!u.watched) { db.user().put(u.copy(watched = true, watchedAt = at)); db.progress().completeItem(id) }
+            if (!u.watched) { db.user().put(u.copy(watched = true, watchedAt = if (at > 0) at else System.currentTimeMillis())); db.progress().completeItem(id) }
         }
+        val tomb = tombs()
+        val now = System.currentTimeMillis()
+        tomb.entries.removeAll { (id, at) -> id !in r.list || now - at > 14L * 24 * 3600_000 }
+        saveTombs(tomb)
         r.list.forEach { (id, at) ->
+            val removedAt = tomb[id]
+            if (removedAt != null && at <= removedAt) return@forEach // removed here; Simkl hasn't caught up yet
+            if (removedAt != null) { tomb.remove(id); saveTombs(tomb) } // re-added elsewhere after our removal
             val u = db.user().get(id) ?: UserStateEntity(id)
-            if (!u.inWatchlist) db.user().put(u.copy(inWatchlist = true, watchlistAt = at))
+            if (!u.inWatchlist) db.user().put(u.copy(inWatchlist = true, watchlistAt = if (at > 0) at else now))
         }
         // removals made on other devices: was on Simkl last time, isn't now
         if (!firstPull) {
@@ -268,7 +289,7 @@ class Simkl(private val app: DhakaFlixApp) {
                 if (u.inWatchlist && id !in r.watched) db.user().put(u.copy(inWatchlist = false))
             }
         }
-        snap.edit().putStringSet("watched", r.watched.keys).putStringSet("list", r.list.keys).apply()
+        snap.edit().putStringSet("watched", r.watched.keys - wTomb.keys).putStringSet("list", r.list.keys - tomb.keys).apply()
 
         // finished episodes from other devices (a few shows per sync: each needs a folder listing)
         var listed = 0
@@ -362,6 +383,10 @@ class Simkl(private val app: DhakaFlixApp) {
         val wl = states.filter { it.inWatchlist && !it.watched && (everything || it.itemId !in remoteList) }.mapNotNull { items[it.itemId]?.takeIf { i -> i.tmdbId != null } }
         if (watched.isNotEmpty()) post("/sync/history", historyBody(watched.map { it to null }))
         if (wl.isNotEmpty()) post("/sync/add-to-list", listBody(wl, "plantowatch"))
+        // removals Simkl still shows: send them again
+        val again = (tombs().keys + tombs("watched_removed").keys).filter { id -> states.none { it.itemId == id && (it.inWatchlist || it.watched) } }
+        val againItems = db.items().getMany(again).filter { it.tmdbId != null }
+        if (againItems.isNotEmpty()) runCatching { post("/sync/history/remove", historyBody(againItems.map { it to null })) }
         if (everything) {
             val done = db.progress().all().filter { it.completed && it.season != null && it.episode != null }
             val shows = db.items().getMany(done.map { it.itemId }.distinct()).associateBy { it.id }
@@ -382,13 +407,31 @@ class Simkl(private val app: DhakaFlixApp) {
         snap.edit().putStringSet(key, if (add) cur + id else cur - id).apply()
     }
 
-    fun onWatched(itemId: String, watched: Boolean) = push(itemId) { item ->
+    fun onWatched(itemId: String, watched: Boolean) {
+        if (signedIn) {
+            val tomb = tombs("watched_removed")
+            if (watched) tomb.remove(itemId) else tomb[itemId] = System.currentTimeMillis()
+            saveTombs(tomb, "watched_removed")
+        }
+        pushWatched(itemId, watched)
+    }
+
+    private fun pushWatched(itemId: String, watched: Boolean) = push(itemId) { item ->
         if (watched) post("/sync/history", historyBody(listOf(item to null)))
         else post("/sync/history/remove", historyBody(listOf(item to null)))
         snapUpdate("watched", itemId, watched)
     }
 
-    fun onWatchlist(itemId: String, inList: Boolean) = push(itemId) { item ->
+    fun onWatchlist(itemId: String, inList: Boolean) {
+        if (signedIn) {
+            val tomb = tombs()
+            if (inList) tomb.remove(itemId) else tomb[itemId] = System.currentTimeMillis()
+            saveTombs(tomb)
+        }
+        pushWatchlist(itemId, inList)
+    }
+
+    private fun pushWatchlist(itemId: String, inList: Boolean) = push(itemId) { item ->
         if (inList) post("/sync/add-to-list", listBody(listOf(item), "plantowatch"))
         else {
             val u = db.user().get(itemId)

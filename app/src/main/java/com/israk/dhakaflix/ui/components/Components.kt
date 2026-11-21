@@ -712,3 +712,46 @@ fun ItemMenu(item: ItemEntity, mode: CardMenu, onDismiss: () -> Unit) {
         }
     }
 }
+
+/** Scrolls only when the focused thing is (partly) off screen — no pivot fighting. */
+val OnlyIfNeededSpec = object : androidx.compose.foundation.gestures.BringIntoViewSpec {
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
+        val end = offset + size
+        return when {
+            offset >= 0f && end <= containerSize -> 0f
+            offset < 0f || size > containerSize -> offset
+            else -> end - containerSize
+        }
+    }
+}
+
+/**
+ * Calm vertical scrolling for TV grids/lists (same feel as Home): moving left/right never scrolls,
+ * and the page only moves when the focused card gets close to the top menu or the bottom edge,
+ * leaving a little of the next line visible. Android TV's default instead re-centres to a 30% pivot
+ * on every move, which made Movies / Series / Search jitter while switching posters.
+ */
+@Composable
+fun CalmVerticalScroll(topMargin: Dp, bottomMargin: Dp = 56.dp, content: @Composable () -> Unit) {
+    if (!LocalIsTv.current) { content(); return }
+    val d = androidx.compose.ui.platform.LocalDensity.current
+    val top = with(d) { topMargin.toPx() }
+    val bottom = with(d) { bottomMargin.toPx() }
+    val spec = remember(top, bottom) {
+        object : androidx.compose.foundation.gestures.BringIntoViewSpec {
+            override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
+                val room = containerSize - top - bottom
+                val end = offset + size
+                return when {
+                    size > room -> offset - top
+                    offset < top -> offset - top
+                    end > containerSize - bottom -> end - (containerSize - bottom)
+                    else -> 0f
+                }
+            }
+        }
+    }
+    androidx.compose.runtime.CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides spec) {
+        content()
+    }
+}

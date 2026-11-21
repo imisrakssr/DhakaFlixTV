@@ -117,6 +117,8 @@ fun SearchScreen(onOpen: (String) -> Unit) {
                 var editing by remember { mutableStateOf(!isTv) }
                 val fieldFr = remember { androidx.compose.ui.focus.FocusRequester() }
                 val fieldScope = androidx.compose.runtime.rememberCoroutineScope()
+                val refocusing = remember { booleanArrayOf(false) }
+                val view = androidx.compose.ui.platform.LocalView.current
                 OutlinedTextField(
                     readOnly = isTv && !editing,
                     value = query,
@@ -138,7 +140,7 @@ fun SearchScreen(onOpen: (String) -> Unit) {
                         cursorColor = accent, focusedTextColor = Color.White, unfocusedTextColor = Color.White,
                     ),
                     modifier = Modifier.weight(1f).entryFocus().focusRequester(fieldFr)
-                        .onFocusChanged { if (!it.isFocused && isTv) editing = false }
+                        .onFocusChanged { if (!it.isFocused && isTv && !refocusing[0]) editing = false }
                         .onPreviewKeyEvent { e ->
                         // Let the D-pad leave the text field on TV
                         if (e.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
@@ -146,9 +148,18 @@ fun SearchScreen(onOpen: (String) -> Unit) {
                         if (isTv && !editing && ok) {
                             // only now start typing: re-focus as an editable field so the keyboard opens
                             editing = true
+                            refocusing[0] = true
                             fieldScope.launch {
-                                focusManager.clearFocus(); delay(30)
-                                runCatching { fieldFr.requestFocus() }; keyboard?.show()
+                                // let readOnly=false reach the field, then re-focus it so a text input
+                                // session starts, and open the TV keyboard
+                                delay(50)
+                                focusManager.clearFocus(force = true); delay(40)
+                                runCatching { fieldFr.requestFocus() }
+                                delay(60)
+                                refocusing[0] = false
+                                keyboard?.show()
+                                val imm = view.context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+                                imm?.showSoftInput(view, 0)
                             }
                             return@onPreviewKeyEvent true
                         }

@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+
 package com.israk.dhakaflix.ui.browse
 
 import androidx.compose.foundation.layout.Arrangement
@@ -163,6 +165,7 @@ class FilterSpec(
 fun FilterBar(specs: List<FilterSpec>, onClear: (() -> Unit)?, firstModifier: Modifier = Modifier) {
     val s = LocalStrings.current
     var open by remember { mutableStateOf<Int?>(null) }
+    androidx.compose.runtime.CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides com.israk.dhakaflix.ui.components.OnlyIfNeededSpec) {
     Row(
         Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -178,6 +181,7 @@ fun FilterBar(specs: List<FilterSpec>, onClear: (() -> Unit)?, firstModifier: Mo
             )
         }
         if (onClear != null) PillButton(s.clearFilters, icon = Icons.Filled.Close, compact = true, onClick = onClear)
+    }
     }
     open?.let { idx -> specs.getOrNull(idx)?.let { FilterSheet(it) { open = null } } }
 }
@@ -239,6 +243,7 @@ fun PosterGrid(
     val cell: Dp = if (isTv) 112.dp else 104.dp
     val gridState = rememberLazyGridState()
     com.israk.dhakaflix.ui.ReportScroll { gridState.firstVisibleItemIndex > 0 }
+    com.israk.dhakaflix.ui.components.CalmVerticalScroll(topMargin = LocalTopInset.current + 12.dp, bottomMargin = 64.dp) {
     LazyVerticalGrid(
         columns = app.settings.postersPerRow.collectAsState().value.let { n -> if (n > 0) GridCells.Fixed(n) else GridCells.Adaptive(cell) },
         state = gridState,
@@ -282,6 +287,7 @@ fun PosterGrid(
                 Text(emptyText, Modifier.padding(vertical = 40.dp), color = TextDim, style = MaterialTheme.typography.titleMedium)
             }
         }
+    }
     }
 }
 

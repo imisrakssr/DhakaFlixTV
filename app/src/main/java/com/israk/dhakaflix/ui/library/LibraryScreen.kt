@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+
 package com.israk.dhakaflix.ui.library
 
 import androidx.compose.foundation.layout.Arrangement
@@ -56,6 +58,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
     val listState = rememberLazyListState()
     com.israk.dhakaflix.ui.ReportScroll { listState.firstVisibleItemIndex > 1 }
     val entryMod = Modifier.entryFocus()
+    com.israk.dhakaflix.ui.components.CalmVerticalScroll(topMargin = LocalTopInset.current + 8.dp, bottomMargin = 40.dp) {
     LazyColumn(
         Modifier.fillMaxSize().dpadScrollFallback(listState),
         state = listState,
@@ -91,5 +94,6 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
                 PosterCard(item, posterW, watched = true, onClick = { onOpen(item.id) }, menu = com.israk.dhakaflix.ui.components.CardMenu.LIBRARY)
             }
         }
+    }
     }
 }
