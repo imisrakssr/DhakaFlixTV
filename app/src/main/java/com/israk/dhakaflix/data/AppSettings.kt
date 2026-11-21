@@ -80,6 +80,12 @@ class AppSettings(ctx: Context) {
         _simklToken.value = token; _simklUser.value = user
         prefs.edit().putString("simkl_token", token).putString("simkl_user", user).apply()
     }
+    /** AUTH V2: refresh token + access-token expiry (ms). */
+    val simklRefresh: String get() = prefs.getString("simkl_refresh", "") ?: ""
+    val simklExpiresAt: Long get() = prefs.getLong("simkl_expires", 0L)
+    fun setSimklRefresh(refresh: String, expiresAt: Long) {
+        prefs.edit().putString("simkl_refresh", refresh).putLong("simkl_expires", expiresAt).apply()
+    }
     private val _simklLastSync = MutableStateFlow(prefs.getLong("simkl_last_sync", 0L))
     val simklLastSync: StateFlow<Long> = _simklLastSync
     fun setSimklLastSync(v: Long) { _simklLastSync.value = v; prefs.edit().putLong("simkl_last_sync", v).apply() }
@@ -110,7 +116,7 @@ class AppSettings(ctx: Context) {
     private val appCtx = ctx.applicationContext
 
     /** Everything in the main settings file, for backups. */
-    fun exportAll(): Map<String, Any?> = prefs.all.filterKeys { it != "simkl_token" }
+    fun exportAll(): Map<String, Any?> = prefs.all.filterKeys { it != "simkl_token" && it != "simkl_refresh" && it != "simkl_expires" }
     fun importAll(m: Map<String, Any?>) {
         val e = prefs.edit()
         m.forEach { (k, v) ->

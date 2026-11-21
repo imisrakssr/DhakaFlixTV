@@ -891,7 +891,7 @@ private fun SimklCard() {
             }
             p != null -> {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    com.israk.dhakaflix.ui.components.QrCode("${p.url}/${p.code}", size = 130.dp)
+                    com.israk.dhakaflix.ui.components.QrCode(p.link, size = 130.dp)
                     Spacer(Modifier.width(20.dp))
                     Column(Modifier.weight(1f)) {
                         Text(s.scanToSignIn.format(p.url.removePrefix("https://")), color = TextDim, style = MaterialTheme.typography.bodyMedium)

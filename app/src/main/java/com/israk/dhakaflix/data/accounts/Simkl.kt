@@ -43,7 +43,7 @@ import java.util.TimeZone
  * watched status, watchlist and playback progress — the same account on every device keeps them in step.
  */
 class Simkl(private val app: DhakaFlixApp) {
-    data class Pin(val code: String, val url: String, val expiresAt: Long)
+    data class Pin(val code: String, val url: String, val expiresAt: Long, val link: String)
 
     private val settings = app.settings
     private val db = app.db
@@ -71,30 +71,101 @@ class Simkl(private val app: DhakaFlixApp) {
         loginJob?.cancel()
         _error.value = null
         loginJob = app.appScope.launch(Dispatchers.IO) {
-            val start = runCatching { getJson("/oauth/pin?client_id=$clientId", auth = false) }
-                .getOrElse { _error.value = it.message; return@launch } as? JsonObject ?: return@launch
-            val code = start.str("user_code") ?: run { _error.value = "Simkl: no code"; return@launch }
-            val url = start.str("verification_url") ?: "https://simkl.com/pin"
-            val expires = (start.int("expires_in") ?: 900) * 1000L
-            val interval = ((start.int("interval") ?: 5).coerceAtLeast(3)) * 1000L
-            _pin.value = Pin(code, url.trimEnd('/'), System.currentTimeMillis() + expires)
-            while (isActive && System.currentTimeMillis() < (_pin.value?.expiresAt ?: 0)) {
-                delay(interval)
-                val r = runCatching { getJson("/oauth/pin/$code?client_id=$clientId", auth = false) as? JsonObject }.getOrNull() ?: continue
-                val token = r.str("access_token")
-                if (r.str("result") == "OK" && !token.isNullOrBlank()) {
-                    settings.setSimklAccount(token, "")
-                    val name = runCatching {
-                        (post("/users/settings", JsonObject(emptyMap())) as? JsonObject)
-                            ?.obj("user")?.str("name")
-                    }.getOrNull() ?: "Simkl"
-                    settings.setSimklAccount(token, name)
-                    _pin.value = null
-                    syncNow(firstTime = true)
-                    return@launch
+            // New Simkl apps are AUTH V2 (device flow); older ones only know the V1 PIN flow.
+            val v2 = runCatching { form("/oauth2/device", mapOf("client_id" to clientId, "scope" to "media:read media:write")) }
+            val start = v2.getOrNull()
+            if (start != null && start.first in 200..299) loginV2(start.second ?: return@launch)
+            else if (start != null && start.first == 401) loginV1()
+            else _error.value = "Simkl: " + (start?.second?.str("error_description") ?: start?.second?.str("error")
+                ?: v2.exceptionOrNull()?.message ?: "HTTP ${start?.first}")
+        }
+    }
+
+    private suspend fun loginV2(start: JsonObject) {
+        val device = start.str("device_code") ?: run { _error.value = "Simkl: no device code"; return }
+        val code = start.str("user_code") ?: return
+        val base = (start.str("verification_uri") ?: "https://simkl.com/pin").trimEnd('/')
+        val link = start.str("verification_uri_complete") ?: "$base?user_code=$code"
+        var interval = ((start.int("interval") ?: 5).coerceAtLeast(3)) * 1000L
+        _pin.value = Pin(code, base, System.currentTimeMillis() + (start.int("expires_in") ?: 900) * 1000L, link)
+        while (System.currentTimeMillis() < (_pin.value?.expiresAt ?: 0)) {
+            delay(interval)
+            val r = runCatching {
+                form("/oauth2/token", mapOf(
+                    "grant_type" to "urn:ietf:params:oauth:grant-type:device_code",
+                    "client_id" to clientId, "device_code" to device,
+                ))
+            }.getOrNull() ?: continue
+            val body = r.second
+            val token = body?.str("access_token")
+            when {
+                r.first in 200..299 && !token.isNullOrBlank() -> {
+                    saveTokens(body)
+                    finishLogin(token)
+                    return
                 }
+                body?.str("error") == "slow_down" -> interval += 5000
+                body?.str("error") == "expired_token" -> break
+                r.first == 401 -> { _error.value = "Simkl: client ID rejected"; break }
             }
-            _pin.value = null
+        }
+        _pin.value = null
+    }
+
+    private suspend fun loginV1() {
+        val start = runCatching { getJson("/oauth/pin?client_id=$clientId", auth = false) }
+            .getOrElse { _error.value = it.message; return } as? JsonObject ?: return
+        val code = start.str("user_code") ?: run { _error.value = "Simkl: no code"; return }
+        val url = (start.str("verification_uri") ?: start.str("verification_url") ?: "https://simkl.com/pin").trimEnd('/')
+        val interval = ((start.int("interval") ?: 5).coerceAtLeast(3)) * 1000L
+        _pin.value = Pin(code, url, System.currentTimeMillis() + (start.int("expires_in") ?: 900) * 1000L, "$url/$code")
+        while (System.currentTimeMillis() < (_pin.value?.expiresAt ?: 0)) {
+            delay(interval)
+            val r = runCatching { getJson("/oauth/pin/$code?client_id=$clientId", auth = false) as? JsonObject }.getOrNull() ?: continue
+            val token = r.str("access_token")
+            if (r.str("result") == "OK" && !token.isNullOrBlank()) { finishLogin(token); return }
+        }
+        _pin.value = null
+    }
+
+    private suspend fun finishLogin(token: String) {
+        settings.setSimklAccount(token, "")
+        val name = runCatching {
+            (post("/users/settings", JsonObject(emptyMap())) as? JsonObject)?.obj("user")?.str("name")
+        }.getOrNull() ?: "Simkl"
+        settings.setSimklAccount(token, name)
+        _pin.value = null
+        syncNow(firstTime = true)
+    }
+
+    private fun saveTokens(body: JsonObject) {
+        val exp = (body.int("expires_in") ?: 7 * 24 * 3600) * 1000L
+        settings.setSimklRefresh(body.str("refresh_token") ?: settings.simklRefresh, System.currentTimeMillis() + exp)
+        body.str("access_token")?.let { settings.setSimklAccount(it, settings.simklUser.value) }
+    }
+
+    /** V2 access tokens last 7 days: renew with the refresh token before / when they run out. */
+    private suspend fun refresh(): Boolean {
+        val rt = settings.simklRefresh.takeIf { it.isNotBlank() } ?: return false
+        val r = runCatching { form("/oauth2/token", mapOf("grant_type" to "refresh_token", "client_id" to clientId, "refresh_token" to rt)) }.getOrNull()
+        val body = r?.second
+        if (r == null || r.first !in 200..299 || body?.str("access_token") == null) return false
+        saveTokens(body)
+        return true
+    }
+
+    private suspend fun ensureFresh() {
+        val exp = settings.simklExpiresAt
+        if (exp > 0 && System.currentTimeMillis() > exp - 24 * 3600_000L) refresh()
+    }
+
+    /** POST x-www-form-urlencoded; returns HTTP code + JSON body. */
+    private suspend fun form(path: String, fields: Map<String, String>): Pair<Int, JsonObject?> = withContext(Dispatchers.IO) {
+        val fb = okhttp3.FormBody.Builder().apply { fields.forEach { (k, v) -> add(k, v) } }.build()
+        val req = Request.Builder().url("https://api.simkl.com$path")
+            .header("User-Agent", "dhakaflixtv/${BuildConfig.VERSION_NAME}").post(fb).build()
+        app.http.newCall(req).execute().use { r ->
+            r.code to runCatching { json.parseToJsonElement(r.body?.string().orEmpty()) as? JsonObject }.getOrNull()
         }
     }
 
@@ -103,6 +174,7 @@ class Simkl(private val app: DhakaFlixApp) {
     fun signOut() {
         cancelLogin()
         settings.setSimklAccount("", "")
+        settings.setSimklRefresh("", 0)
         settings.setSimklLastSync(0)
     }
 
@@ -311,18 +383,24 @@ class Simkl(private val app: DhakaFlixApp) {
         .header("User-Agent", "DhakaFlixTV/${BuildConfig.VERSION_NAME}")
         .apply { if (auth) header("Authorization", "Bearer ${settings.simklToken.value}") }
 
-    private suspend fun getJson(path: String, auth: Boolean = true): JsonElement? = withContext(Dispatchers.IO) {
+    private suspend fun getJson(path: String, auth: Boolean = true, retried: Boolean = false): JsonElement? = withContext(Dispatchers.IO) {
+        if (auth) ensureFresh()
         app.http.newCall(builder(path, auth).build()).execute().use { r ->
-            if (r.code == 401 && auth) { settings.setSimklAccount("", ""); throw java.io.IOException("Simkl sign-in expired") }
+            if (r.code == 401 && auth) {
+                if (!retried && refresh()) return@withContext getJson(path, auth, true)
+                settings.setSimklAccount("", ""); throw java.io.IOException("Simkl sign-in expired")
+            }
             if (!r.isSuccessful) throw java.io.IOException("Simkl HTTP ${r.code}")
             val b = r.body?.string().orEmpty()
             if (b.isBlank() || b == "null") null else json.parseToJsonElement(b)
         }
     }
 
-    private suspend fun post(path: String, body: JsonObject): JsonElement? = withContext(Dispatchers.IO) {
+    private suspend fun post(path: String, body: JsonObject, retried: Boolean = false): JsonElement? = withContext(Dispatchers.IO) {
+        ensureFresh()
         val req = builder(path, true).post(body.toString().toRequestBody("application/json".toMediaType())).build()
         app.http.newCall(req).execute().use { r ->
+            if (r.code == 401 && !retried && refresh()) return@withContext post(path, body, true)
             if (!r.isSuccessful) throw java.io.IOException("Simkl $path HTTP ${r.code}")
             val b = r.body?.string().orEmpty()
             if (b.isBlank()) null else runCatching { json.parseToJsonElement(b) }.getOrNull()
