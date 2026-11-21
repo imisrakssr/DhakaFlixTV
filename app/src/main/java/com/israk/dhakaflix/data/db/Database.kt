@@ -148,6 +148,12 @@ abstract class ItemDao {
     )
     abstract fun newEpisodes(): Flow<List<ItemEntity>>
 
+    @Query(
+        "SELECT * FROM items WHERE type = :type AND (LOWER(title) = :title OR LOWER(tmdbTitle) = :title) " +
+            "AND (year = :year OR releaseYear = :year) ORDER BY isPrimary DESC, uploadedAt DESC LIMIT 1"
+    )
+    abstract suspend fun byTitleYear(title: String, year: Int, type: String): ItemEntity?
+
     @Query("SELECT * FROM items WHERE tmdbId = :tmdbId AND type = :type ORDER BY isPrimary DESC, uploadedAt DESC LIMIT 1")
     abstract suspend fun byTmdb(tmdbId: Int, type: String): ItemEntity?
 

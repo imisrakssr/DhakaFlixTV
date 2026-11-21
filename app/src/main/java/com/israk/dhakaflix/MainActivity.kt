@@ -45,12 +45,13 @@ class MainActivity : ComponentActivity() {
         app.library.mdblist.verify()
 
         // New uploads show up on their own: incremental scan when the app opens and every 30 minutes.
+        // Simkl (watched / watchlist / Continue Watching from other devices): on open and every 5 minutes.
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 while (true) {
                     app.library.syncIfStale(LibraryRepository.THIRTY_MINUTES)
                     app.library.simkl.syncIfStale()
-                    delay(LibraryRepository.THIRTY_MINUTES)
+                    delay(5 * 60_000L)
                 }
             }
         }

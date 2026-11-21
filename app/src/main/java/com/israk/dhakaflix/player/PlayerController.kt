@@ -378,7 +378,7 @@ class PlayerController(
 
     fun togglePlay() {
         val e = engine ?: return
-        if (e.isPlaying) e.pause() else e.play()
+        if (e.isPlaying) { e.pause(); save(); flushSync() } else e.play()
         isPlaying = !isPlaying
         showControls()
     }

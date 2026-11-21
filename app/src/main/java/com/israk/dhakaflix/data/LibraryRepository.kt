@@ -516,7 +516,7 @@ class LibraryRepository(private val app: DhakaFlixApp) {
                     updatedAt = System.currentTimeMillis(), completed = completed,
                 )
             )
-            if (completed && play.episode == null) setWatched(play.itemId, true)
+            if (completed && play.episode == null) { setWatched(play.itemId, true); simkl.onMovieDone(play.itemId) }
             else if (completed && play.season != null) simkl.onEpisodeDone(play.itemId, play.season, play.episode!!)
             else simkl.onProgress(play, positionMs, durationMs, force = false)
             Unit
