@@ -21,8 +21,8 @@ class AppSettings(ctx: Context) {
     val accent: StateFlow<Int> = _accent
     fun setAccent(v: Int) { _accent.value = v; prefs.edit().putInt("accent", v).apply() }
 
-    /** "en", "bn" or "dhk" (Dhakaiya). */
-    private val _language = MutableStateFlow(prefs.getString("language", "en") ?: "en")
+    /** "en" or "dhk" (Dhakaiya). Older "bn" installs fall back to English. */
+    private val _language = MutableStateFlow((prefs.getString("language", "en") ?: "en").let { if (it == "dhk") it else "en" })
     val language: StateFlow<String> = _language
     fun setLanguage(v: String) { _language.value = v; prefs.edit().putString("language", v).apply() }
 
@@ -62,6 +62,68 @@ class AppSettings(ctx: Context) {
     private val _subColor = MutableStateFlow(prefs.getInt("sub_color", 0))
     val subColor: StateFlow<Int> = _subColor
     fun setSubColor(v: Int) { _subColor.value = v; prefs.edit().putInt("sub_color", v).apply() }
+
+    // ---- accounts
+    private val _mdblistKey = MutableStateFlow(prefs.getString("mdblist_key", "") ?: "")
+    val mdblistKey: StateFlow<String> = _mdblistKey
+    fun setMdblistKey(v: String) { _mdblistKey.value = v.trim(); prefs.edit().putString("mdblist_key", v.trim()).apply() }
+
+    /** Simkl app client id (user's own, or the one built in by CI). */
+    private val _simklClientId = MutableStateFlow(prefs.getString("simkl_client", "") ?: "")
+    val simklClientId: StateFlow<String> = _simklClientId
+    fun setSimklClientId(v: String) { _simklClientId.value = v.trim(); prefs.edit().putString("simkl_client", v.trim()).apply() }
+    private val _simklToken = MutableStateFlow(prefs.getString("simkl_token", "") ?: "")
+    val simklToken: StateFlow<String> = _simklToken
+    private val _simklUser = MutableStateFlow(prefs.getString("simkl_user", "") ?: "")
+    val simklUser: StateFlow<String> = _simklUser
+    fun setSimklAccount(token: String, user: String) {
+        _simklToken.value = token; _simklUser.value = user
+        prefs.edit().putString("simkl_token", token).putString("simkl_user", user).apply()
+    }
+    private val _simklLastSync = MutableStateFlow(prefs.getLong("simkl_last_sync", 0L))
+    val simklLastSync: StateFlow<Long> = _simklLastSync
+    fun setSimklLastSync(v: Long) { _simklLastSync.value = v; prefs.edit().putLong("simkl_last_sync", v).apply() }
+
+    // ---- layout / look
+    /** Posters visible per row; 0 = automatic. */
+    private val _postersPerRow = MutableStateFlow(prefs.getInt("posters_per_row", 0))
+    val postersPerRow: StateFlow<Int> = _postersPerRow
+    fun setPostersPerRow(v: Int) { _postersPerRow.value = v; prefs.edit().putInt("posters_per_row", v).apply() }
+
+    private val _appIcon = MutableStateFlow(prefs.getString("app_icon", "classic") ?: "classic")
+    val appIcon: StateFlow<String> = _appIcon
+    fun setAppIcon(v: String) { _appIcon.value = v; prefs.edit().putString("app_icon", v).apply() }
+
+    // ---- player timing
+    /** Seconds before the player controls hide on their own. */
+    private val _controlsTimeout = MutableStateFlow(prefs.getInt("controls_timeout", 5))
+    val controlsTimeout: StateFlow<Int> = _controlsTimeout
+    fun setControlsTimeout(v: Int) { _controlsTimeout.value = v; prefs.edit().putInt("controls_timeout", v).apply() }
+
+    /** Seconds paused before the info overlay appears; 0 = never. */
+    private val _pauseOverlay = MutableStateFlow(prefs.getInt("pause_overlay", 5))
+    val pauseOverlay: StateFlow<Int> = _pauseOverlay
+    fun setPauseOverlay(v: Int) { _pauseOverlay.value = v; prefs.edit().putInt("pause_overlay", v).apply() }
+
+    /** Raw access for small feature stores (track memory, caches). */
+    fun store(name: String) = appCtx.getSharedPreferences(name, Context.MODE_PRIVATE)
+    private val appCtx = ctx.applicationContext
+
+    /** Everything in the main settings file, for backups. */
+    fun exportAll(): Map<String, Any?> = prefs.all.filterKeys { it != "simkl_token" }
+    fun importAll(m: Map<String, Any?>) {
+        val e = prefs.edit()
+        m.forEach { (k, v) ->
+            when (v) {
+                is Boolean -> e.putBoolean(k, v)
+                is Int -> e.putInt(k, v)
+                is Long -> e.putLong(k, v)
+                is Float -> e.putFloat(k, v)
+                is String -> e.putString(k, v)
+            }
+        }
+        e.apply()
+    }
 
     private val _tmdbKey = MutableStateFlow(prefs.getString("tmdb_key", "") ?: "")
     val tmdbKey: StateFlow<String> = _tmdbKey

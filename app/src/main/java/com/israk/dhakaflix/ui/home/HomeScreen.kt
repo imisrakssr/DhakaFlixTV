@@ -216,11 +216,12 @@ fun HomeScreen(onOpen: (String) -> Unit) {
         }
     }
 
-    val posterW = if (isTv) 112.dp else 104.dp
-    val landW = if (isTv) 220.dp else 210.dp
     val topInset = LocalTopInset.current
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
+        val posterW = com.israk.dhakaflix.ui.components.posterWidth(maxWidth)
+        val landW = if (com.israk.dhakaflix.DhakaFlixApp.instance.settings.postersPerRow.collectAsState().value > 0) posterW * 1.96f
+            else if (isTv) 220.dp else 210.dp
         val bannerH: Dp = if (isTv) maxHeight * 0.82f - topInset else 460.dp
         if (isTv) HomeBackdrop(focus, bannerItem)
 

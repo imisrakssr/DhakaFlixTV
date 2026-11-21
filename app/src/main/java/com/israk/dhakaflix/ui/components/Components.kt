@@ -159,6 +159,18 @@ fun FocusFrame(
     ) { content(focused) }
 }
 
+/** Poster width for a row of [available] width, honouring Settings → Posters per row (0 = auto). */
+@Composable
+fun posterWidth(available: Dp): Dp {
+    val n by com.israk.dhakaflix.DhakaFlixApp.instance.settings.postersPerRow.collectAsState()
+    val isTv = LocalIsTv.current
+    if (n <= 0) return if (isTv) 112.dp else 104.dp
+    val edge = LocalEdge.current
+    val gap = if (isTv) 16.dp else 12.dp
+    // a little of the next poster peeks in, so it's obvious the row scrolls
+    return ((available - edge - gap * n) / (n + 0.25f)).coerceIn(60.dp, 260.dp)
+}
+
 @Composable
 fun PosterCard(
     item: ItemEntity,

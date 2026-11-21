@@ -237,7 +237,7 @@ fun PosterGrid(
     val gridState = rememberLazyGridState()
     com.israk.dhakaflix.ui.ReportScroll { gridState.firstVisibleItemIndex > 0 }
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(cell),
+        columns = app.settings.postersPerRow.collectAsState().value.let { n -> if (n > 0) GridCells.Fixed(n) else GridCells.Adaptive(cell) },
         state = gridState,
         modifier = Modifier.fillMaxSize().dpadScrollFallback(gridState),
         contentPadding = PaddingValues(start = edge, end = edge, top = LocalTopInset.current + 8.dp, bottom = 56.dp),

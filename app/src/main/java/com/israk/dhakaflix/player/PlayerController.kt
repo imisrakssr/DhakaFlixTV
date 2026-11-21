@@ -83,6 +83,16 @@ class PlayerController(
     var scaleMode by mutableIntStateOf(0)
         private set
 
+    /** Library entry of what's playing (for the pause screen) + the current episode's TMDB info. */
+    var meta by mutableStateOf<com.israk.dhakaflix.data.db.ItemEntity?>(null)
+        private set
+    var episodeInfo by mutableStateOf<com.israk.dhakaflix.data.tmdb.TmdbEpisode?>(null)
+        private set
+    /** "You're watching" screen shown after a while in pause. */
+    var pauseInfo by mutableStateOf(false)
+
+    private var tracksRestored = false
+
     private var pendingStart: Long? = null
     private var triedFallback = false
     private var endedHandled = false
@@ -115,6 +125,9 @@ class PlayerController(
     private suspend fun prepare(i: Int, mode: String) {
         index = i
         subsChecked = false
+        tracksRestored = false
+        pauseInfo = false
+        loadMeta(playlist[i])
         prefetchNextSeason()
         error = null; panel = null; endedHandled = false; triedFallback = false
         clearOwnSubs()
@@ -127,6 +140,18 @@ class PlayerController(
             mode == PlayerActivity.MODE_START || resumable == null -> start(0)
             mode == PlayerActivity.MODE_RESUME -> start(resumable)
             else -> { engine?.pause(); resumeAsk = resumable }
+        }
+    }
+
+    private fun loadMeta(p: PlayItem) {
+        scope.launch {
+            val m = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { app.db.items().get(p.itemId) }
+            meta = m
+            episodeInfo = null
+            val tmdb = m?.tmdbId
+            if (m?.isSeries == true && tmdb != null && p.season != null && p.episode != null) {
+                episodeInfo = repo.tmdbSeason(tmdb, p.season)[p.episode]
+            }
         }
     }
 
@@ -199,6 +224,8 @@ class PlayerController(
         pendingStart = null
         val item = current
         val engineSubs = if (e.kind == EngineKind.VLC) item.subs else item.subs.filterNot { SubtitleParser.isOwnRendered(it) }
+        val mem = TrackMemory.forFile(item.url) ?: TrackMemory.forTitle(item.itemId)
+        mem?.aspect?.let { scaleMode = it }
         e.load(item.url, startAt, engineSubs)
         buffering = true
         showControls()
@@ -211,7 +238,12 @@ class PlayerController(
                 if (audioDelay != 0L) it.setAudioDelay(audioDelay)
             }
         }
-        if (e.kind == EngineKind.EXO && settings.subsDefault.value) {
+        val memSub = mem?.sub
+        if (e.kind == EngineKind.EXO && memSub != null && memSub.startsWith("ext:")) {
+            // remembered external subtitle: this file's own, or (next episode) its first external one
+            val url = memSub.removePrefix("ext:").takeIf { it in item.subs } ?: item.subs.firstOrNull { SubtitleParser.isOwnRendered(it) }
+            if (url != null) { subsChecked = true; selectOwnSub(url) }
+        } else if (memSub == null && e.kind == EngineKind.EXO && settings.subsDefault.value) {
             // external .srt next to the video is usually the better match: load it right away
             item.subs.firstOrNull { SubtitleParser.isOwnRendered(it) }?.let { subsChecked = true; selectOwnSub(it) }
         }
@@ -235,10 +267,33 @@ class PlayerController(
         }
     }
 
+    /** Re-apply the audio / subtitle remembered for this file (or title). */
+    private fun restoreTracks(e: VideoEngine) {
+        tracksRestored = true
+        val item = current
+        val mem = TrackMemory.forFile(item.url) ?: TrackMemory.forTitle(item.itemId) ?: return
+        fun pick(list: List<TrackOption>, id: String?, label: String?): TrackOption? =
+            list.firstOrNull { it.id == id && it.label == label } ?: list.firstOrNull { label != null && it.label == label }
+                ?: list.firstOrNull { it.id == id }
+        if (mem.audioId != null || mem.audioLabel != null) {
+            val a = pick(e.audioTracks(), mem.audioId, mem.audioLabel)
+            if (a != null && !a.selected) e.selectAudio(a.id)
+        }
+        when (val sub = mem.sub) {
+            null -> Unit
+            "off" -> { subsChecked = true; clearOwnSubs(); e.selectText(null) }
+            else -> if (!sub.startsWith("ext:")) {
+                val t = pick(e.textTracks(), sub, mem.subLabel)
+                if (t != null) { subsChecked = true; clearOwnSubs(); if (!t.selected) e.selectText(t.id) }
+            }
+        }
+    }
+
     fun tick() {
         val e = engine ?: return
         if (seekJob?.isActive != true && SystemClock.elapsedRealtime() - seekAt > 900) position = e.position
         duration = e.duration
+        if (!tracksRestored && duration > 0 && position > 1000) restoreTracks(e)
         if (!subsChecked && duration > 0 && position > 1500) ensureDefaultSubs(e)
         isPlaying = e.isPlaying
         buffering = e.isBuffering
@@ -264,7 +319,7 @@ class PlayerController(
 
     fun showControls() { controlsVisible = true; interaction++ }
 
-    fun toggleControls() { if (controlsVisible) controlsVisible = false else showControls() }
+    fun toggleControls() { if (pauseInfo) { pauseInfo = false; showControls() } else if (controlsVisible) controlsVisible = false else showControls() }
 
     fun togglePlay() {
         val e = engine ?: return
@@ -334,7 +389,11 @@ class PlayerController(
 
     fun audioOptions(): List<TrackOption> = engine?.audioTracks() ?: emptyList()
 
-    fun selectAudio(id: String) { engine?.selectAudio(id); panel = null; showControls() }
+    fun selectAudio(id: String) {
+        val label = audioOptions().firstOrNull { it.id == id }?.label
+        engine?.selectAudio(id); panel = null; showControls()
+        TrackMemory.update(current.url, current.itemId) { it.copy(audioId = id, audioLabel = label) }
+    }
 
     /** Embedded/engine tracks plus our own sync-able external files (ExoPlayer only). */
     fun subtitleOptions(): List<TrackOption> {
@@ -348,6 +407,8 @@ class PlayerController(
 
     fun selectSubtitle(id: String?) {
         val e = engine ?: return
+        val label = id?.let { i -> subtitleOptions().firstOrNull { it.id == i }?.label }
+        TrackMemory.update(current.url, current.itemId) { it.copy(sub = id ?: "off", subLabel = label) }
         when {
             id == null -> { clearOwnSubs(); e.selectText(null) }
             id.startsWith("ext:") -> selectOwnSub(id.removePrefix("ext:"))
@@ -388,7 +449,10 @@ class PlayerController(
 
     fun setPlaybackSpeed(v: Float) { speed = v; engine?.setSpeed(v); panel = null; showControls() }
 
-    fun setScale(mode: Int) { scaleMode = mode; engine?.setScale(mode); panel = null; showControls() }
+    fun setScale(mode: Int) {
+        scaleMode = mode; engine?.setScale(mode); panel = null; showControls()
+        TrackMemory.update(current.url, current.itemId) { it.copy(aspect = mode) }
+    }
 
     // ------------------------------------------------------------ keys
 
@@ -402,6 +466,11 @@ class PlayerController(
             KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { if (down) seekBy(30_000); return true }
             KeyEvent.KEYCODE_MEDIA_REWIND -> { if (down) seekBy(-30_000); return true }
             KeyEvent.KEYCODE_MEDIA_NEXT -> { if (down && hasNext) next(); return true }
+        }
+        if (pauseInfo) {
+            // any key just wakes the player up again
+            if (down && e.repeatCount == 0) { pauseInfo = false; showControls() }
+            return true
         }
         if (resumeAsk != null || error != null || panel != null || exitAsk) { if (down) interaction++; return false }
         if (controlsVisible) { if (down) interaction++; return false }
@@ -424,6 +493,7 @@ class PlayerController(
 
     private fun onBack() {
         when {
+            pauseInfo -> { pauseInfo = false; showControls() }
             exitAsk -> exitAsk = false
             panel != null -> panel = PlayerController.Panel.OPTIONS.takeIf { panel in setOf(Panel.SYNC, Panel.AUDIO_SYNC, Panel.SPEED, Panel.ASPECT, Panel.SUB_SIZE, Panel.SUB_COLOR) }
             resumeAsk != null -> activity.finish()
@@ -456,6 +526,7 @@ class PlayerController(
             } else {
                 error = message
                 controlsVisible = false
+                com.israk.dhakaflix.data.DiagLog.add("Player", "${kind.name}: $message · ${com.israk.dhakaflix.data.LibraryRepository.fileName(current.url)}")
             }
         }
     }
@@ -464,7 +535,13 @@ class PlayerController(
 
     override fun onSubtitleText(text: String?) { if (ownSubUrl == null) subtitleText = text }
 
-    fun onStop() { save(); engine?.pause() }
+    fun onStop() { save(); flushSync(); engine?.pause() }
+
+    /** Tell Simkl where we stopped, so another device can resume from here. */
+    private fun flushSync() {
+        val e = engine ?: return
+        repo.simkl.onProgress(current, e.position, e.duration, force = true)
+    }
 
     private var released = false
 
@@ -474,6 +551,7 @@ class PlayerController(
         if (released) return
         released = true
         save()
+        flushSync()
         engine?.pause()
         engine?.release()
         engine = null

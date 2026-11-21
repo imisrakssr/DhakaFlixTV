@@ -36,6 +36,7 @@ jobs:
         run: gradle assembleRelease --stacktrace
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          SIMKL_CLIENT_ID: ${{ secrets.SIMKL_CLIENT_ID }}
 
       - name: Collect APKs
         run: |

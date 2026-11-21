@@ -203,6 +203,7 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
                         cur.tagline?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = TextDim, maxLines = 1) }
                         Spacer(Modifier.height(10.dp))
                         MetaLine(cur, extra = cur.genreList.take(3))
+                        ExternalRatings(cur)
                         Spacer(Modifier.height(12.dp))
                         Text(
                             cur.overview ?: s.noMetadata, style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = .85f),
@@ -427,6 +428,39 @@ private fun EpisodeRow(v: VideoFile, tmdb: TmdbEpisode?, progress: ProgressEntit
                     ).joinToString("  ·  "),
                     color = TextDim.copy(alpha = .7f), style = MaterialTheme.typography.labelSmall,
                 )
+            }
+        }
+    }
+}
+
+
+/** IMDb / RT / Metacritic / Letterboxd chips from MDBList (only when a key is set). */
+@Composable
+private fun ExternalRatings(item: com.israk.dhakaflix.data.db.ItemEntity) {
+    val repo = com.israk.dhakaflix.DhakaFlixApp.instance.library
+    val tmdb = item.tmdbId ?: return
+    val key by com.israk.dhakaflix.DhakaFlixApp.instance.settings.mdblistKey.collectAsState()
+    if (key.isBlank()) return
+    var list by remember(tmdb) { mutableStateOf<List<com.israk.dhakaflix.data.accounts.ExtRating>>(emptyList()) }
+    LaunchedEffect(tmdb, key) { list = repo.mdblist.ratings(tmdb, item.isSeries) }
+    if (list.isEmpty()) return
+    Spacer(Modifier.height(10.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        list.take(5).forEach { r ->
+            val tint = when (r.source) {
+                "imdb" -> Color(0xFFF5C518)
+                "tomatoes" -> Color(0xFFFA320A)
+                "metacritic" -> Color(0xFF66CC33)
+                "letterboxd" -> Color(0xFF40BCF4)
+                else -> Color.White.copy(alpha = .7f)
+            }
+            Row(
+                Modifier.clip(RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = .08f)).padding(horizontal = 9.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(r.label, color = tint, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.width(6.dp))
+                Text(r.value, color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
             }
         }
     }

@@ -48,6 +48,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableLongStateOf
@@ -96,10 +97,24 @@ fun PlayerScreen(c: PlayerController) {
             delay(if (c.ownSubUrl != null) 100 else 300)
         }
     }
-    LaunchedEffect(c.controlsVisible, c.interaction, c.isPlaying, c.panel) {
+    val settings = com.israk.dhakaflix.DhakaFlixApp.instance.settings
+    val hideAfter by settings.controlsTimeout.collectAsState()
+    val pauseAfter by settings.pauseOverlay.collectAsState()
+    LaunchedEffect(c.controlsVisible, c.interaction, c.isPlaying, c.panel, hideAfter) {
         if (c.controlsVisible && c.isPlaying && c.panel == null) {
-            delay(5000)
+            delay(hideAfter.coerceIn(2, 30) * 1000L)
             c.controlsVisible = false
+        }
+    }
+    // Nuvio-style: after a while in pause, swap the controls for a "You're watching" info screen
+    LaunchedEffect(c.isPlaying, c.buffering, c.interaction, c.panel, c.resumeAsk, c.error, c.exitAsk, pauseAfter) {
+        if (c.isPlaying) c.pauseInfo = false
+        if (pauseAfter > 0 && !c.isPlaying && !c.buffering && c.panel == null && c.resumeAsk == null &&
+            c.error == null && !c.exitAsk && c.duration > 0 && !c.pauseInfo
+        ) {
+            delay(pauseAfter * 1000L)
+            c.controlsVisible = false
+            c.pauseInfo = true
         }
     }
     LaunchedEffect(c.toast) { if (c.toast != null) { delay(2500); c.toast = null } }
@@ -126,7 +141,11 @@ fun PlayerScreen(c: PlayerController) {
 
         SeekFlash(c)
 
-        Controls(c, visible = c.controlsVisible && c.resumeAsk == null && c.error == null && !c.exitAsk && c.panel == null)
+        Controls(c, visible = c.controlsVisible && !c.pauseInfo && c.resumeAsk == null && c.error == null && !c.exitAsk && c.panel == null)
+
+        AnimatedVisibility(c.pauseInfo, enter = fadeIn(androidx.compose.animation.core.tween(600)), exit = fadeOut(androidx.compose.animation.core.tween(250))) {
+            PauseInfo(c)
+        }
 
         AnimatedVisibility(
             visible = c.showUpNext && !c.controlsVisible && c.panel == null,
@@ -151,6 +170,64 @@ fun PlayerScreen(c: PlayerController) {
                     .padding(horizontal = 18.dp, vertical = 8.dp),
                 color = Color.White, style = MaterialTheme.typography.labelLarge,
             )
+        }
+    }
+}
+
+/** "You're watching" screen while paused: title, details and plot over a dark left-side shade. */
+@Composable
+private fun PauseInfo(c: PlayerController) {
+    val s = LocalStrings.current
+    val accent = LocalAccent.current
+    val m = c.meta
+    val ep = c.episodeInfo
+    var clock by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) {
+        val f = java.text.SimpleDateFormat("h:mm a", Locale.getDefault())
+        while (true) { clock = f.format(java.util.Date()); delay(15_000) }
+    }
+    Box(
+        Modifier.fillMaxSize().background(
+            Brush.horizontalGradient(0f to Color.Black.copy(alpha = .88f), 0.55f to Color.Black.copy(alpha = .55f), 1f to Color.Black.copy(alpha = .15f))
+        )
+    ) {
+        Text(clock, Modifier.align(Alignment.TopEnd).padding(top = 30.dp, end = 44.dp), color = Color.White, style = MaterialTheme.typography.titleLarge)
+        Column(Modifier.align(Alignment.CenterStart).padding(start = 56.dp, end = 56.dp).widthIn(max = 560.dp)) {
+            Text(s.youAreWatching, color = TextDim, style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                m?.displayTitle ?: c.current.title, color = Color.White, style = MaterialTheme.typography.displaySmall,
+                fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            )
+            val facts = listOfNotNull(
+                m?.displayYear?.toString(),
+                m?.rating?.takeIf { it > 0 }?.let { "★ " + com.israk.dhakaflix.ui.components.fmtRating(it) },
+                (ep?.runtime ?: m?.runtime)?.takeIf { it > 0 }?.let { "${it / 60}h ${it % 60}m".removePrefix("0h ") },
+                m?.genreList?.take(3)?.joinToString(", ")?.takeIf { it.isNotBlank() },
+            )
+            if (facts.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                Text(facts.joinToString("   ·   "), color = Color.White.copy(alpha = .85f), style = MaterialTheme.typography.bodyLarge)
+            }
+            c.current.subtitle?.let { sub ->
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    sub + (ep?.name?.let { "  ·  $it" } ?: ""), color = accent,
+                    style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
+            val plot = ep?.overview?.takeIf { it.isNotBlank() } ?: m?.overview
+            if (!plot.isNullOrBlank()) {
+                Spacer(Modifier.height(10.dp))
+                Text(plot, color = Color.White.copy(alpha = .78f), style = MaterialTheme.typography.bodyLarge, maxLines = 5, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        Row(Modifier.align(Alignment.BottomStart).padding(start = 56.dp, bottom = 40.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(AppIcons.Pause, null, tint = Color.White, modifier = Modifier.size(26.dp))
+            Spacer(Modifier.width(10.dp))
+            Text(s.paused, color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.width(16.dp))
+            Text(fmtTime(c.position) + " / " + fmtTime(c.duration), color = TextDim, style = MaterialTheme.typography.titleMedium)
         }
     }
 }

@@ -138,6 +138,9 @@ abstract class ItemDao {
     @Query("SELECT * FROM items WHERE id IN (:ids)")
     abstract suspend fun getMany(ids: List<String>): List<ItemEntity>
 
+    @Query("SELECT * FROM items WHERE tmdbId = :tmdbId AND type = :type ORDER BY isPrimary DESC, uploadedAt DESC LIMIT 1")
+    abstract suspend fun byTmdb(tmdbId: Int, type: String): ItemEntity?
+
     @Query("SELECT * FROM items WHERE id IN (:ids)")
     abstract fun observeMany(ids: List<String>): Flow<List<ItemEntity>>
 
@@ -164,6 +167,12 @@ abstract class ItemDao {
 
     @Query("SELECT COUNT(*) FROM items WHERE metaState = 0")
     abstract fun pendingCount(): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM items")
+    abstract suspend fun countForAllSources(): Int
+
+    @Query("SELECT COUNT(*) FROM items WHERE metaState = 0")
+    abstract suspend fun pendingNow(): Int
 
     @Update
     abstract suspend fun update(item: ItemEntity)
@@ -251,6 +260,12 @@ interface UserDao {
 
     @Query("SELECT itemId FROM user_state WHERE watched = 1")
     fun watchedIds(): Flow<List<String>>
+
+    @Query("SELECT * FROM user_state")
+    suspend fun all(): List<UserStateEntity>
+
+    @Query("SELECT COUNT(*) FROM user_state WHERE inWatchlist = 1")
+    suspend fun watchlistCount(): Int
 }
 
 @Dao
@@ -272,6 +287,15 @@ interface ProgressDao {
 
     @Query("DELETE FROM progress WHERE itemId = :itemId")
     suspend fun clearItem(itemId: String)
+
+    @Query("SELECT * FROM progress")
+    suspend fun all(): List<ProgressEntity>
+
+    @Query("SELECT * FROM progress WHERE itemId = :itemId ORDER BY updatedAt DESC LIMIT 1")
+    suspend fun latestFor(itemId: String): ProgressEntity?
+
+    @Query("SELECT * FROM progress WHERE itemId = :itemId AND season = :season AND episode = :episode LIMIT 1")
+    suspend fun episode(itemId: String, season: Int, episode: Int): ProgressEntity?
 }
 
 @Database(

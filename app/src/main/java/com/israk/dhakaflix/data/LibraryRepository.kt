@@ -87,6 +87,8 @@ class LibraryRepository(private val app: DhakaFlixApp) {
     private val scope = app.appScope
     val h5ai = H5aiClient(app.http)
     val tmdb = TmdbClient(app.http) { settings.tmdbKey.value.ifBlank { BuildConfig.TMDB_API_KEY } }
+    val mdblist = com.israk.dhakaflix.data.accounts.MdbList(app)
+    val simkl = com.israk.dhakaflix.data.accounts.Simkl(app)
 
     private val _sync = MutableStateFlow(SyncState())
     val sync: StateFlow<SyncState> = _sync
@@ -151,6 +153,7 @@ class LibraryRepository(private val app: DhakaFlixApp) {
             } catch (e: Exception) {
                 Log.w(TAG, "source ${src.name} failed", e)
                 failed += src.name
+                DiagLog.add("Library", "${src.name}: ${e.message ?: e.javaClass.simpleName}")
             }
         }
         db.items().recomputePrimary()
@@ -507,6 +510,8 @@ class LibraryRepository(private val app: DhakaFlixApp) {
                 )
             )
             if (completed && play.episode == null) setWatched(play.itemId, true)
+            else if (completed && play.season != null) simkl.onEpisodeDone(play.itemId, play.season, play.episode!!)
+            else simkl.onProgress(play, positionMs, durationMs, force = false)
             Unit
         }
 
@@ -515,18 +520,21 @@ class LibraryRepository(private val app: DhakaFlixApp) {
     suspend fun toggleWatchlist(id: String): Unit = withContext(Dispatchers.IO) {
         val u = db.user().get(id) ?: UserStateEntity(id)
         db.user().put(u.copy(inWatchlist = !u.inWatchlist, watchlistAt = System.currentTimeMillis()))
+        simkl.onWatchlist(id, !u.inWatchlist)
     }
 
     suspend fun setWatched(id: String, watched: Boolean): Unit = withContext(Dispatchers.IO) {
         val u = db.user().get(id) ?: UserStateEntity(id)
         db.user().put(u.copy(watched = watched, watchedAt = System.currentTimeMillis()))
         if (watched) db.progress().completeItem(id)
+        if (u.watched != watched) simkl.onWatched(id, watched)
         Unit
     }
 
     suspend fun setInWatchlist(id: String, inList: Boolean): Unit = withContext(Dispatchers.IO) {
         val u = db.user().get(id) ?: UserStateEntity(id)
         db.user().put(u.copy(inWatchlist = inList, watchlistAt = System.currentTimeMillis()))
+        if (u.inWatchlist != inList) simkl.onWatchlist(id, inList)
     }
 
     /** "Remove from My Library": out of the watchlist, history and continue watching. */

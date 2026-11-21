@@ -10,6 +10,8 @@ plugins {
 
 val tmdbKey: String = (project.findProperty("TMDB_API_KEY") as String?)
     ?: System.getenv("TMDB_API_KEY") ?: ""
+val simklId: String = (project.findProperty("SIMKL_CLIENT_ID") as String?)
+    ?: System.getenv("SIMKL_CLIENT_ID") ?: ""
 val ciRun: Int = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toIntOrNull() ?: 1
 
 android {
@@ -23,6 +25,7 @@ android {
         versionCode = ciRun
         versionName = "1.0.$ciRun"
         buildConfigField("String", "TMDB_API_KEY", "\"$tmdbKey\"")
+        buildConfigField("String", "SIMKL_CLIENT_ID", "\"$simklId\"")
     }
 
     splits {
@@ -139,6 +142,9 @@ dependencies {
 
     // Images
     implementation("io.coil-kt:coil-compose:2.7.0")
+
+    // QR codes for "set up with your phone"
+    implementation("com.google.zxing:core:3.5.3")
 
     // Player: ExoPlayer (Media3) + FFmpeg audio decoders + LibVLC fallback
     val media3 = "1.9.0"

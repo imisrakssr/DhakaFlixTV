@@ -43,7 +43,11 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
     val cw by remember { repo.continueWatching() }.collectAsState(initial = emptyList())
     val watchlist by remember { app.db.user().watchlist() }.collectAsState(initial = emptyList())
     val watched by remember { app.db.user().watched() }.collectAsState(initial = emptyList())
-    val posterW = if (isTv) 112.dp else 104.dp
+    val perRow by app.settings.postersPerRow.collectAsState()
+    val screenW = with(androidx.compose.ui.platform.LocalDensity.current) { androidx.compose.ui.platform.LocalWindowInfo.current.containerSize.width.toDp() }
+    // the left menu (TV) takes ~ the same room as the right-hand edge padding
+    val posterW = com.israk.dhakaflix.ui.components.posterWidth(screenW - if (isTv && app.settings.navPosition.collectAsState().value == "left") 96.dp else 0.dp)
+    val landW = if (perRow > 0) posterW * 1.96f else if (isTv) 220.dp else 210.dp
 
     if (cw.isEmpty() && watchlist.isEmpty() && watched.isEmpty()) {
         CenterMessage(s.libraryEmpty, Modifier.padding(top = LocalTopInset.current))
@@ -67,7 +71,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
         item {
             MediaRow(s.continueWatching, cw, key = { it.progress.fileUrl }, modifier = entryMod) { e ->
                 LandscapeCard(
-                    e.item, e.progress.label, e.progress.fraction, if (isTv) 220.dp else 210.dp,
+                    e.item, e.progress.label, e.progress.fraction, landW,
                     onClick = {
                         scope.launch {
                             val (list, idx) = repo.playlistFromProgress(e.progress)

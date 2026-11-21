@@ -34,7 +34,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
@@ -110,15 +112,16 @@ import com.israk.dhakaflix.ui.theme.TextDim
 import java.text.DateFormat
 import java.util.Date
 
-private enum class Section { LIBRARY, APPEARANCE, HOME_ROWS, CATEGORIES, TMDB, PLAYER, ABOUT }
+private enum class Section { LIBRARY, APPEARANCE, HOME_ROWS, CATEGORIES, ACCOUNTS, PLAYER, DIAGNOSTICS, ABOUT }
 
 private fun Section.title(s: Strings) = when (this) {
     Section.LIBRARY -> s.library
     Section.APPEARANCE -> s.appearance
     Section.HOME_ROWS -> s.homeRows
     Section.CATEGORIES -> s.categories
-    Section.TMDB -> "TMDB"
+    Section.ACCOUNTS -> s.accounts
     Section.PLAYER -> s.player
+    Section.DIAGNOSTICS -> s.diagnostics
     Section.ABOUT -> s.about
 }
 
@@ -127,8 +130,9 @@ private fun Section.icon(): ImageVector = when (this) {
     Section.APPEARANCE -> Icons.Filled.Star
     Section.HOME_ROWS -> Icons.Filled.Home
     Section.CATEGORIES -> AppIcons.Layers
-    Section.TMDB -> AppIcons.Movie
+    Section.ACCOUNTS -> Icons.Filled.AccountCircle
     Section.PLAYER -> Icons.Filled.PlayArrow
+    Section.DIAGNOSTICS -> Icons.Filled.Build
     Section.ABOUT -> Icons.Filled.Info
 }
 
@@ -241,6 +245,7 @@ private fun SectionItem(sec: Section, selected: Boolean, selectOnFocus: Boolean,
 @Composable
 private fun SectionContent(sec: Section) {
     val state = rememberLazyListState()
+    val tv = LocalIsTv.current
     LazyColumn(
         Modifier.fillMaxSize().dpadScrollFallback(state),
         state = state,
@@ -252,8 +257,14 @@ private fun SectionContent(sec: Section) {
             Section.APPEARANCE -> item { AppearanceCard() }
             Section.HOME_ROWS -> homeRows(this)
             Section.CATEGORIES -> item { CategoriesCard() }
-            Section.TMDB -> item { TmdbCard() }
+            Section.ACCOUNTS -> {
+                if (tv) item { PhoneSetupCard() }
+                item { TmdbCard() }
+                item { MdbListCard() }
+                item { SimklCard() }
+            }
             Section.PLAYER -> item { PlayerCard() }
+            Section.DIAGNOSTICS -> item { DiagnosticsCard() }
             Section.ABOUT -> item { AboutCard() }
         }
     }
@@ -334,7 +345,6 @@ private fun AppearanceCard() {
         Label(s.language)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             PillButton("English", onClick = { st.setLanguage("en") }, selected = lang == "en", compact = true)
-            PillButton("বাংলা", onClick = { st.setLanguage("bn") }, selected = lang == "bn", compact = true)
             PillButton("ঢাকাইয়া 😎", onClick = { st.setLanguage("dhk") }, selected = lang == "dhk", compact = true)
         }
         if (isTv) {
@@ -350,7 +360,50 @@ private fun AppearanceCard() {
             PillButton(s.sizeMedium, onClick = { st.setUiSize(1) }, selected = size == 1, compact = true)
             PillButton(s.sizeLarge, onClick = { st.setUiSize(2) }, selected = size == 2, compact = true)
         }
+        val perRow by st.postersPerRow.collectAsState()
+        Label(s.postersPerRow)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            listOf(0, 5, 6, 7, 8, 9).forEach { n ->
+                PillButton(if (n == 0) s.auto else "$n", onClick = { st.setPostersPerRow(n) }, selected = perRow == n, compact = true)
+            }
+        }
+        AppIconPicker()
     }
+}
+
+@Composable
+private fun AppIconPicker() {
+    val st = DhakaFlixApp.instance.settings
+    val s = LocalStrings.current
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val current by st.appIcon.collectAsState()
+    Label(s.appIcon)
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(vertical = 6.dp, horizontal = 4.dp)) {
+        items(com.israk.dhakaflix.data.LauncherIcons.variants.size) { i ->
+            val v = com.israk.dhakaflix.data.LauncherIcons.variants[i]
+            var f by remember { mutableStateOf(false) }
+            val res = remember(v) { ctx.resources.getIdentifier("ic_launcher_$v", "mipmap", ctx.packageName) }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(
+                    Modifier.size(if (f) 64.dp else 58.dp)
+                        .onFocusChanged { f = it.isFocused }
+                        .clip(RoundedCornerShape(16.dp))
+                        .border(3.dp, if (f) Color.White else if (current == v) LocalAccent.current else Color.Transparent, RoundedCornerShape(16.dp))
+                        .clickable {
+                            st.setAppIcon(v)
+                            com.israk.dhakaflix.data.LauncherIcons.apply(ctx, v)
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (res != 0) Image(painterResource(res), null, Modifier.fillMaxSize())
+                    if (current == v) Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp).size(18.dp))
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(com.israk.dhakaflix.data.LauncherIcons.label(v), color = if (current == v) Color.White else TextDim, style = MaterialTheme.typography.labelSmall)
+            }
+        }
+    }
+    Text(s.appIconNote, color = TextDim, style = MaterialTheme.typography.bodySmall)
 }
 
 private fun homeRows(scope: LazyListScope) {
@@ -524,6 +577,21 @@ private fun PlayerCard() {
                 }
             }
         }
+        val hideAfter by st.controlsTimeout.collectAsState()
+        val pauseAfter by st.pauseOverlay.collectAsState()
+        Card {
+            Label(s.controlsHide)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                listOf(3, 5, 8, 10, 15).forEach { n -> PillButton("${n}s", onClick = { st.setControlsTimeout(n) }, selected = hideAfter == n, compact = true) }
+            }
+            Spacer(Modifier.height(10.dp))
+            Label(s.pauseInfo)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                listOf(0, 5, 10, 20, 30).forEach { n ->
+                    PillButton(if (n == 0) s.off else "${n}s", onClick = { st.setPauseOverlay(n) }, selected = pauseAfter == n, compact = true)
+                }
+            }
+        }
         ToggleRow(s.autoPlayNext, checked = autoNext, onToggle = { st.setAutoNext(!autoNext) })
         ToggleRow(s.subtitlesByDefault, checked = subsDefault, onToggle = { st.setSubsDefault(!subsDefault) })
     }
@@ -642,6 +710,319 @@ private fun AddCategoryDialog(onDismiss: () -> Unit, onAdd: (Source) -> Unit) {
                     }
                 })
                 PillButton(s.cancel, onClick = onDismiss)
+            }
+        }
+    }
+}
+
+
+// ------------------------------------------------------------------ accounts
+
+@Composable
+private fun StatusLine(color: Color, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(12.dp).clip(CircleShape).background(color))
+        Spacer(Modifier.width(10.dp))
+        Text(label, color = Color.White, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+/** QR → phone web page on the same Wi-Fi for typing keys, backups and diagnostics. */
+@Composable
+private fun PhoneSetupCard() {
+    val app = DhakaFlixApp.instance
+    val s = LocalStrings.current
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        com.israk.dhakaflix.data.accounts.SetupServer.acquire()
+        onDispose { com.israk.dhakaflix.data.accounts.SetupServer.release() }
+    }
+    val address by com.israk.dhakaflix.data.accounts.SetupServer.address.collectAsState()
+    val event by com.israk.dhakaflix.data.accounts.SetupServer.event.collectAsState()
+    var note by remember { mutableStateOf<String?>(null) }
+    androidx.compose.runtime.LaunchedEffect(event) {
+        when (val e = event) {
+            is com.israk.dhakaflix.data.accounts.SetupServer.Event.Saved -> {
+                note = "✓ " + e.what.joinToString()
+                if ("TMDB" in e.what) { app.library.verifyTmdb(); app.library.retryMetadata() }
+                if ("MDBList" in e.what) app.library.mdblist.verify()
+                com.israk.dhakaflix.data.accounts.SetupServer.consumeEvent()
+            }
+            com.israk.dhakaflix.data.accounts.SetupServer.Event.Restored -> {
+                note = "✓ Backup restored — restarting…"
+                delay(1500)
+                val i = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)
+                    ?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                if (i != null) ctx.startActivity(i)
+                Runtime.getRuntime().exit(0)
+            }
+            null -> Unit
+        }
+    }
+    Card {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val a = address
+            if (a != null) QrCodeBox(a)
+            Spacer(Modifier.width(22.dp))
+            Column(Modifier.weight(1f)) {
+                Text(s.phoneSetup, color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                Text(s.phoneSetupHint, color = TextDim, style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(10.dp))
+                if (a != null) {
+                    Text(s.orOpen, color = TextDim, style = MaterialTheme.typography.bodySmall)
+                    Text(a, color = Color.White, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                } else Text("Wi-Fi?", color = Color(0xFFFBBF24), style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(8.dp))
+                Text(s.backupHint, color = TextDim, style = MaterialTheme.typography.bodySmall)
+                note?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, color = Color(0xFF34D399), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QrCodeBox(text: String) = com.israk.dhakaflix.ui.components.QrCode(text, size = 150.dp)
+
+/** Reusable "API key" card: status, masked key, edit / test / remove. */
+@Composable
+private fun KeyCard(
+    title: String,
+    hint: String,
+    saved: String,
+    status: Pair<Color, String>,
+    onSave: (String) -> Unit,
+    onTest: () -> Unit,
+) {
+    val s = LocalStrings.current
+    var editing by remember { mutableStateOf(false) }
+    var text by remember(saved) { mutableStateOf(saved) }
+    Card {
+        Text(title, color = Color.White, style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(4.dp))
+        Text(hint, color = TextDim, style = MaterialTheme.typography.bodySmall)
+        Spacer(Modifier.height(10.dp))
+        StatusLine(status.first, status.second)
+        if (saved.isNotBlank()) {
+            Spacer(Modifier.height(4.dp))
+            Text("••••••••" + saved.takeLast(4), color = TextDim, style = MaterialTheme.typography.bodySmall)
+        }
+        Spacer(Modifier.height(14.dp))
+        if (editing) {
+            OutlinedTextField(
+                value = text, onValueChange = { text = it }, singleLine = true,
+                label = { Text(title) }, colors = fieldColors(), modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                PillButton(s.save, primary = true, icon = Icons.Filled.Check, onClick = { onSave(text); editing = false })
+                PillButton(s.cancel, onClick = { editing = false; text = saved })
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                PillButton(s.edit, icon = Icons.Filled.Edit, primary = saved.isBlank(), onClick = { editing = true })
+                if (saved.isNotBlank()) {
+                    PillButton(s.testAgain, icon = Icons.Filled.Refresh, onClick = onTest)
+                    PillButton(s.remove, icon = Icons.Filled.Delete, onClick = { onSave(""); text = "" })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MdbListCard() {
+    val app = DhakaFlixApp.instance
+    val s = LocalStrings.current
+    val saved by app.settings.mdblistKey.collectAsState()
+    val st by app.library.mdblist.status.collectAsState()
+    val status = when (st) {
+        com.israk.dhakaflix.data.accounts.MdbList.Status.CONNECTED -> Color(0xFF34D399) to s.tmdbConnected
+        com.israk.dhakaflix.data.accounts.MdbList.Status.INVALID -> Color(0xFFF87171) to s.tmdbInvalid.replace("TMDB", "MDBList")
+        com.israk.dhakaflix.data.accounts.MdbList.Status.OFFLINE -> Color(0xFFFBBF24) to s.tmdbOffline.replace("TMDB", "MDBList")
+        com.israk.dhakaflix.data.accounts.MdbList.Status.CHECKING -> Color(0xFF93C5FD) to s.tmdbChecking
+        com.israk.dhakaflix.data.accounts.MdbList.Status.NOT_SET -> TextDim to s.tmdbNotSet
+    }
+    KeyCard("MDBList", s.mdblistHint, saved, status,
+        onSave = { app.settings.setMdblistKey(it); app.library.mdblist.verify() },
+        onTest = { app.library.mdblist.verify() })
+}
+
+@Composable
+private fun SimklCard() {
+    val app = DhakaFlixApp.instance
+    val s = LocalStrings.current
+    val simkl = app.library.simkl
+    val token by app.settings.simklToken.collectAsState()
+    val user by app.settings.simklUser.collectAsState()
+    val clientSaved by app.settings.simklClientId.collectAsState()
+    val pin by simkl.pin.collectAsState()
+    val syncing by simkl.syncing.collectAsState()
+    val error by simkl.error.collectAsState()
+    val last by app.settings.simklLastSync.collectAsState()
+    val hasClient = clientSaved.isNotBlank() || BuildConfig.SIMKL_CLIENT_ID.isNotBlank()
+    var editClient by remember { mutableStateOf(false) }
+    var clientText by remember(clientSaved) { mutableStateOf(clientSaved) }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { simkl.cancelLogin() } }
+
+    Card {
+        Text("Simkl", color = Color.White, style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(4.dp))
+        Text(s.simklHint, color = TextDim, style = MaterialTheme.typography.bodySmall)
+        Spacer(Modifier.height(12.dp))
+        val p = pin
+        when {
+            token.isNotBlank() && hasClient -> {
+                StatusLine(Color(0xFF34D399), s.signedInAs.format(user.ifBlank { "Simkl" }))
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "${s.lastSynced}: " + (if (last == 0L) s.never else DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(last))) +
+                        if (syncing) "  …" else "",
+                    color = TextDim, style = MaterialTheme.typography.bodySmall,
+                )
+                Spacer(Modifier.height(14.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    PillButton(s.syncNow, icon = Icons.Filled.Refresh, primary = true, onClick = { simkl.syncNow() })
+                    PillButton(s.signOut, onClick = { simkl.signOut() })
+                }
+            }
+            p != null -> {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    com.israk.dhakaflix.ui.components.QrCode("${p.url}/${p.code}", size = 130.dp)
+                    Spacer(Modifier.width(20.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(s.scanToSignIn.format(p.url.removePrefix("https://")), color = TextDim, style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.height(6.dp))
+                        Text(p.code, color = Color.White, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(6.dp))
+                        Text(s.waitingApproval, color = Color(0xFF93C5FD), style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.height(10.dp))
+                        PillButton(s.cancel, compact = true, onClick = { simkl.cancelLogin() })
+                    }
+                }
+            }
+            else -> {
+                StatusLine(TextDim, s.tmdbNotSet)
+                if (!hasClient) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(s.simklNeedsClient, color = Color(0xFFFBBF24), style = MaterialTheme.typography.bodySmall)
+                }
+                Spacer(Modifier.height(14.dp))
+                if (editClient) {
+                    OutlinedTextField(clientText, { clientText = it }, singleLine = true, label = { Text("Simkl Client ID") },
+                        colors = fieldColors(), modifier = Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(12.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        PillButton(s.save, primary = true, icon = Icons.Filled.Check, onClick = { app.settings.setSimklClientId(clientText); editClient = false })
+                        PillButton(s.cancel, onClick = { editClient = false; clientText = clientSaved })
+                    }
+                } else Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (hasClient) PillButton(s.signIn, primary = true, onClick = { simkl.startLogin() })
+                    PillButton("Client ID", icon = Icons.Filled.Edit, onClick = { editClient = true })
+                }
+            }
+        }
+        error?.let {
+            Spacer(Modifier.height(8.dp))
+            Text("⚠ $it", color = Color(0xFFFF8A80), style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+// ------------------------------------------------------------------ diagnostics
+
+@Composable
+private fun DiagnosticsCard() {
+    val s = LocalStrings.current
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val isTv = LocalIsTv.current
+    val scope = rememberCoroutineScope()
+    var report by remember { mutableStateOf<com.israk.dhakaflix.data.DiagReport?>(null) }
+    var running by remember { mutableStateOf(false) }
+    var errors by remember { mutableStateOf(com.israk.dhakaflix.data.DiagLog.entries()) }
+    fun run() {
+        if (running) return
+        running = true
+        scope.launch {
+            report = runCatching { com.israk.dhakaflix.data.Diagnostics.run(ctx) }.getOrNull()
+            errors = com.israk.dhakaflix.data.DiagLog.entries()
+            running = false
+        }
+    }
+    androidx.compose.runtime.LaunchedEffect(Unit) { run() }
+    val r = report
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Card {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                PillButton(if (running) s.loading else s.runAgain, icon = Icons.Filled.Refresh, primary = true, onClick = { run() })
+                PillButton(s.clearCache, icon = Icons.Filled.Delete, onClick = {
+                    scope.launch {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { ctx.cacheDir.resolve("images").deleteRecursively() }
+                        run()
+                    }
+                })
+                if (!isTv && r != null) PillButton("Share", onClick = {
+                    val i = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
+                        .putExtra(android.content.Intent.EXTRA_TEXT, r.asText())
+                    ctx.startActivity(android.content.Intent.createChooser(i, "DhakaFlix diagnostics"))
+                })
+            }
+        }
+        if (r != null) {
+            DiagSection(s.servers, r.servers.map { (h, ok, d) -> Triple(h, d, ok) })
+            DiagSection(s.network, r.network.map { Triple(it.first, it.second, null) })
+            DiagSection(s.decoders, r.codecs.map { Triple(it.first, it.second, if (it.second.startsWith("✗")) false else null) })
+            DiagSection(s.library, r.library.map { Triple(it.first, it.second, null) })
+            DiagSection(s.device, r.device.map { Triple(it.first, it.second, null) })
+        }
+        Card {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(s.recentErrors, Modifier.weight(1f), color = Color.White, style = MaterialTheme.typography.titleMedium)
+                if (errors.isNotEmpty()) PillButton(s.delete, compact = true, icon = Icons.Filled.Delete, onClick = {
+                    com.israk.dhakaflix.data.DiagLog.clear(); errors = emptyList()
+                })
+            }
+            Spacer(Modifier.height(8.dp))
+            if (errors.isEmpty()) Text(s.noErrors, color = TextDim, style = MaterialTheme.typography.bodyMedium)
+            val fmt = remember { java.text.SimpleDateFormat("dd MMM HH:mm", java.util.Locale.getDefault()) }
+            errors.take(15).forEach { e ->
+                Text(
+                    fmt.format(Date(e.at)) + "  ·  " + e.tag, color = TextDim, style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+                Text(e.msg, color = Color.White, style = MaterialTheme.typography.bodySmall, maxLines = 3)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DiagSection(title: String, rows: List<Triple<String, String, Boolean?>>) {
+    if (rows.isEmpty()) return
+    // focusable so D-pad scrolling walks through the report on TV
+    var f by remember { mutableStateOf(false) }
+    Column(
+        Modifier.widthIn(max = 760.dp).fillMaxWidth()
+            .onFocusChanged { f = it.isFocused }
+            .clip(RoundedCornerShape(20.dp))
+            .border(1.dp, if (f) Color.White.copy(alpha = .5f) else Color.Transparent, RoundedCornerShape(20.dp))
+            .glass(RoundedCornerShape(20.dp), tint = .06f)
+            .clickable { }
+            .padding(20.dp)
+    ) {
+        Text(title, color = Color.White, style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(6.dp))
+        rows.forEach { (k, v, ok) ->
+            Row(Modifier.padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (ok != null) {
+                    Box(Modifier.size(9.dp).clip(CircleShape).background(if (ok) Color(0xFF34D399) else Color(0xFFF87171)))
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(k, Modifier.width(210.dp), color = TextDim, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                Text(v, color = Color.White, style = MaterialTheme.typography.bodyMedium)
             }
         }
     }
