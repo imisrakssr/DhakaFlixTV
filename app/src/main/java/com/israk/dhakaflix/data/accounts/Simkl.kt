@@ -397,44 +397,45 @@ class Simkl(private val app: DhakaFlixApp) {
         snapUpdate("list", itemId, inList)
     }
 
+    /** Finished episode: history entry (Simkl then hides the old paused position on every device). */
     fun onEpisodeDone(itemId: String, season: Int, episode: Int) = push(itemId) { item ->
-        runCatching { post("/scrobble/stop", scrobbleBody(item, season, episode, 100.0)) }
         post("/sync/history", historyBody(listOf(item to (season to episode))))
     }
 
-    /** Movie finished: stop the scrobble so the paused position disappears on other devices. */
-    fun onMovieDone(itemId: String) = push(itemId) { item ->
-        if (!item.isSeries) runCatching { post("/scrobble/stop", scrobbleBody(item, null, null, 100.0)) }
-    }
-
-    private val started = HashSet<String>()
+    /** Finished movie: the history entry from onWatched hides its paused position everywhere. */
+    fun onMovieDone(itemId: String) = Unit
 
     /** Playback position for other devices' Continue Watching; throttled unless [force]. */
     fun onProgress(play: PlayItem, positionMs: Long, durationMs: Long, force: Boolean) {
         if (!signedIn || durationMs <= 0 || positionMs < 20_000) return
         val now = System.currentTimeMillis()
-        if (!force && now - (lastScrobble[play.url] ?: 0L) < 60_000) return
+        val last = lastScrobble[play.url] ?: 0L
+        if (!force && now - last < 90_000) return
         lastScrobble[play.url] = now
         val pct = (positionMs * 100.0 / durationMs).coerceIn(1.0, 95.0)
         push(play.itemId) { item ->
+            // Simkl locks scrobbles for 20 s per user: wait out the lock instead of getting a RATE_LIMIT 400
+            val wait = 21_000L - (System.currentTimeMillis() - lastScrobbleSent)
+            if (wait > 0) delay(wait)
+            lastScrobbleSent = System.currentTimeMillis()
             val body = scrobbleBody(item, play.season, play.episode, pct)
-            // a scrobble session starts with /start; the paused position is what other devices resume from
-            if (started.add(play.url)) runCatching { post("/scrobble/start", body) }
             runCatching { post("/scrobble/pause", body) }.onFailure {
-                // some sessions need a fresh start before they can be paused again
-                started.remove(play.url)
-                runCatching { post("/scrobble/start", body); post("/scrobble/pause", body) }.getOrThrow()
+                delay(21_000)
+                lastScrobbleSent = System.currentTimeMillis()
+                post("/scrobble/pause", body)
             }
         }
     }
 
+    @Volatile private var lastScrobbleSent = 0L
+
     private fun scrobbleBody(item: ItemEntity, season: Int?, episode: Int?, pct: Double): JsonObject = buildJsonObject {
         put("progress", Math.round(pct * 100) / 100.0)
         if (item.isSeries && season != null && episode != null) {
-            putJsonObject("show") { put("title", item.displayTitle); item.displayYear?.let { put("year", it) }; putJsonObject("ids") { put("tmdb", item.tmdbId) } }
+            putJsonObject("show") { put("title", item.displayTitle); item.displayYear?.let { put("year", it) }; putJsonObject("ids") { put("tmdb", item.tmdbId?.toString()) } }
             putJsonObject("episode") { put("season", season); put("number", episode) }
         } else {
-            putJsonObject("movie") { put("title", item.displayTitle); item.displayYear?.let { put("year", it) }; putJsonObject("ids") { put("tmdb", item.tmdbId) } }
+            putJsonObject("movie") { put("title", item.displayTitle); item.displayYear?.let { put("year", it) }; putJsonObject("ids") { put("tmdb", item.tmdbId?.toString()) } }
         }
     }
 
@@ -451,12 +452,12 @@ class Simkl(private val app: DhakaFlixApp) {
         val movies = list.filter { !it.first.isSeries }
         val shows = list.filter { it.first.isSeries }.groupBy { it.first.tmdbId }
         if (movies.isNotEmpty()) putJsonArray("movies") {
-            movies.forEach { (m, _) -> add(buildJsonObject { put("watched_at", now); putJsonObject("ids") { put("tmdb", m.tmdbId) } }) }
+            movies.forEach { (m, _) -> add(buildJsonObject { put("watched_at", now); putJsonObject("ids") { put("tmdb", m.tmdbId?.toString()) } }) }
         }
         if (shows.isNotEmpty()) putJsonArray("shows") {
             shows.forEach { (tmdb, entries) ->
                 add(buildJsonObject {
-                    putJsonObject("ids") { put("tmdb", tmdb) }
+                    putJsonObject("ids") { put("tmdb", tmdb?.toString()) }
                     val eps = entries.mapNotNull { it.second }
                     if (eps.isEmpty()) put("watched_at", now)
                     else putJsonArray("seasons") {
@@ -476,10 +477,10 @@ class Simkl(private val app: DhakaFlixApp) {
         val movies = items.filter { !it.isSeries }
         val shows = items.filter { it.isSeries }
         if (movies.isNotEmpty()) putJsonArray("movies") {
-            movies.forEach { add(buildJsonObject { put("to", to); putJsonObject("ids") { put("tmdb", it.tmdbId) } }) }
+            movies.forEach { add(buildJsonObject { put("to", to); putJsonObject("ids") { put("tmdb", it.tmdbId?.toString()) } }) }
         }
         if (shows.isNotEmpty()) putJsonArray("shows") {
-            shows.forEach { add(buildJsonObject { put("to", to); putJsonObject("ids") { put("tmdb", it.tmdbId) } }) }
+            shows.forEach { add(buildJsonObject { put("to", to); putJsonObject("ids") { put("tmdb", it.tmdbId?.toString()) } }) }
         }
     }
 
