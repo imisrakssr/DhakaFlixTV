@@ -470,7 +470,7 @@ private fun ExternalRatings(item: com.israk.dhakaflix.data.db.ItemEntity) {
                 else -> Color.White.copy(alpha = .7f)
             }
             Row(
-                Modifier.clip(RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = .08f)).padding(horizontal = 9.dp, vertical = 4.dp),
+                Modifier.clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(alpha = .55f)).padding(horizontal = 9.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(r.label, color = tint, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)

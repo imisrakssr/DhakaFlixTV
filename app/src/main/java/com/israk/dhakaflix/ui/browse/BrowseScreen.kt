@@ -21,6 +21,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -254,7 +257,7 @@ fun PosterGrid(
             items(override.size, key = { override[it].id }) { i ->
                 val item = override[i]
                 PosterCard(
-                    item = item, width = Dp.Unspecified, modifier = Modifier.fillMaxWidth(),
+                    item = item, width = Dp.Unspecified, modifier = Modifier.fillMaxWidth().rowEndGuard(gridState, item.id),
                     watched = item.id in watched, onClick = { onOpen(item.id) },
                 )
             }
@@ -269,7 +272,7 @@ fun PosterGrid(
             val item = items[i]
             if (item != null) {
                 PosterCard(
-                    item = item, width = Dp.Unspecified, modifier = Modifier.fillMaxWidth(),
+                    item = item, width = Dp.Unspecified, modifier = Modifier.fillMaxWidth().rowEndGuard(gridState, item.id),
                     watched = item.id in watched, onClick = { onOpen(item.id) },
                 )
             }
@@ -281,3 +284,15 @@ fun PosterGrid(
         }
     }
 }
+
+
+/** RIGHT on the last poster of a grid line does nothing (instead of jumping up into the menu). */
+private fun Modifier.rowEndGuard(state: androidx.compose.foundation.lazy.grid.LazyGridState, key: Any): Modifier =
+    this.onPreviewKeyEvent { e ->
+        if (e.type != androidx.compose.ui.input.key.KeyEventType.KeyDown || e.key != androidx.compose.ui.input.key.Key.DirectionRight) return@onPreviewKeyEvent false
+        val infos = state.layoutInfo.visibleItemsInfo
+        val i = infos.indexOfFirst { it.key == key }
+        if (i < 0) return@onPreviewKeyEvent false
+        val next = infos.getOrNull(i + 1)
+        next == null || next.row != infos[i].row
+    }

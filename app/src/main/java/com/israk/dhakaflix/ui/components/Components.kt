@@ -129,7 +129,7 @@ fun FocusFrame(
     Box(
         modifier
             .zIndex(if (focused) 2f else 0f)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .graphicsLayer { scaleX = scale; scaleY = scale; this.shape = shape; clip = true }
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged {
                 if (focused != it.isFocused) {
@@ -154,13 +154,15 @@ fun FocusFrame(
                 }
             })
             .border(2.5.dp, rim, shape)
-            .clip(shape)
             .then(
                 if (onLongClick == null) Modifier.clickable(onClick = onClick)
                 else Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
             ),
     ) { content(focused) }
 }
+
+/** Followed series with new episodes (provided once at the root). */
+val LocalNewEpisodes = androidx.compose.runtime.staticCompositionLocalOf<Set<String>> { emptySet() }
 
 /** TMDB title logo (like Apple TV / Netflix) with the plain title as fallback. */
 @Composable
@@ -239,8 +241,7 @@ fun PosterCard(
             onLongClick = if (menu == CardMenu.NONE) null else ({ showMenu = true }),
         ) {
             PosterImage(item, Modifier.fillMaxWidth().aspectRatio(2f / 3f))
-            val newIds by com.israk.dhakaflix.DhakaFlixApp.instance.library.newEpisodeIds.collectAsState()
-            if (item.id in newIds) {
+            if (item.id in LocalNewEpisodes.current) {
                 Text(
                     LocalStrings.current.newBadge,
                     Modifier.align(Alignment.BottomStart).padding(6.dp)
@@ -295,23 +296,23 @@ fun PosterCard(
 @Composable
 fun PosterImage(item: ItemEntity, modifier: Modifier) {
     val ctx = LocalContext.current
+    val url = item.posterUrl()
+    var loaded by remember(url) { mutableStateOf(false) }
     Box(
-        modifier.background(
-            Brush.linearGradient(listOf(Surface2, Color(0xFF0E1630)))
-        ),
+        if (loaded) modifier else modifier.background(Brush.linearGradient(listOf(Surface2, Color(0xFF0E1630)))),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
+        if (!loaded) Text(
             item.displayTitle, Modifier.padding(10.dp), color = Color.White.copy(alpha = .75f),
             style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center, maxLines = 4,
         )
-        val url = item.posterUrl()
         if (url != null) {
             AsyncImage(
                 model = ImageRequest.Builder(ctx).data(url).size(240, 360).build(),
                 contentDescription = item.displayTitle,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
+                onSuccess = { loaded = true },
             )
         }
     }
@@ -398,13 +399,17 @@ fun <T> MediaRow(
             title, Modifier.padding(start = edge, bottom = 2.dp),
             style = MaterialTheme.typography.titleMedium, color = Color.White,
         )
+        val leftNav = com.israk.dhakaflix.DhakaFlixApp.instance.settings.navPosition.collectAsState().value == "left"
         PivotScroll(enabled = LocalIsTv.current, pivot = edge) {
         LazyRow(
-            modifier = if (nav == null) Modifier else Modifier.onPreviewKeyEvent { e ->
+            modifier = Modifier.onPreviewKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (e.key) {
-                    Key.DirectionDown -> { nav.onDown(); true }
-                    Key.DirectionUp -> { nav.onUp(); true }
+                    Key.DirectionDown -> if (nav != null) { nav.onDown(); true } else false
+                    Key.DirectionUp -> if (nav != null) { nav.onUp(); true } else false
+                    // the row ends here: don't let focus escape into the top menu
+                    Key.DirectionRight -> lastIdx >= items.lastIndex
+                    Key.DirectionLeft -> lastIdx <= 0 && !leftNav
                     else -> false
                 }
             },

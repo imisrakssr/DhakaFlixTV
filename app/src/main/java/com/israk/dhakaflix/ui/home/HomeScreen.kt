@@ -246,8 +246,13 @@ fun HomeScreen(onOpen: (String) -> Unit) {
                     onInfo = { b -> onOpen(b.id) },
                     onFocus = {
                         focus.inRows = false
-                        // always show the whole banner when it has focus (no cut-off title)
-                        if (listState.firstVisibleItemIndex != 0 || listState.firstVisibleItemScrollOffset != 0) scope.launch { smoothScrollTo(0) }
+                        // always show the whole banner when it has focus (no cut-off title/logo); the
+                        // list's own bring-into-view runs right after focus, so correct after it
+                        scope.launch {
+                            delay(60)
+                            if (listState.firstVisibleItemIndex != 0 || listState.firstVisibleItemScrollOffset != 0)
+                                listState.animateScrollToItem(0)
+                        }
                     },
                     onDown = { goRow(0) },
                     onNext = { if (featured.isNotEmpty()) bannerIndex = (bannerIndex + 1) % featured.size },
@@ -412,24 +417,34 @@ private fun HomeBackdrop(focus: HomeFocus, bannerItem: ItemEntity?) {
     var shown by remember { mutableStateOf<ItemEntity?>(null) }
     // wait until the user pauses on a card before decoding a big image (keeps scrolling smooth)
     LaunchedEffect(target?.id) { delay(if (shown == null) 0 else 700); shown = target }
+    val dim by animateFloatAsState(if (focus.inRows) 0.55f else 0f, tween(500), label = "dim")
     Box(Modifier.fillMaxSize()) {
         Crossfade(targetState = shown?.backdropUrl(true), animationSpec = tween(450), label = "backdrop") { url ->
             if (url != null) {
                 AsyncImage(
                     model = ImageRequest.Builder(ctx).data(url).size(960, 540).build(),
                     contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(),
+                    // dimming happens inside the image draw: no extra full-screen layer
+                    colorFilter = if (dim > 0.01f) androidx.compose.ui.graphics.ColorFilter.tint(Bg.copy(alpha = dim), androidx.compose.ui.graphics.BlendMode.SrcAtop) else null,
                 )
             }
         }
-        val dim by animateFloatAsState(if (focus.inRows) 0.55f else 0f, tween(500), label = "dim")
-        // one draw pass for all scrims (cheaper on Mali GPUs than three stacked layers)
+        // both gradients pre-rendered once into a small bitmap and drawn as one stretched image:
+        // one full-screen fill instead of two gradient passes (the Mali-450 is fill-rate bound)
         Spacer(
             Modifier.fillMaxSize().drawWithCache {
+                val w = 480; val hh = 270
+                val bmp = androidx.compose.ui.graphics.ImageBitmap(w, hh)
                 val h = Brush.horizontalGradient(0f to Bg.copy(alpha = .92f), 0.6f to Bg.copy(alpha = .25f), 1f to Color.Transparent)
                 val v = Brush.verticalGradient(0f to Bg.copy(alpha = .5f), 0.25f to Color.Transparent, 0.6f to Bg.copy(alpha = .75f), 1f to Bg)
+                androidx.compose.ui.graphics.drawscope.CanvasDrawScope().draw(
+                    this, layoutDirection, androidx.compose.ui.graphics.Canvas(bmp), androidx.compose.ui.geometry.Size(w.toFloat(), hh.toFloat()),
+                ) { drawRect(h); drawRect(v) }
                 onDrawBehind {
-                    drawRect(h); drawRect(v)
-                    if (dim > 0f) drawRect(Bg.copy(alpha = dim))
+                    drawImage(
+                        bmp, dstSize = androidx.compose.ui.unit.IntSize(size.width.toInt(), size.height.toInt()),
+                        filterQuality = androidx.compose.ui.graphics.FilterQuality.Low,
+                    )
                 }
             }
         )

@@ -265,7 +265,8 @@ private fun MainScaffold(tab: Tab, currentTab: () -> Tab, onTab: (Tab) -> Unit, 
             if (it) FocusMemory.restoreId = null // a new page must never pull focus out of the menu
             if (!it) railActive = false
         }
-        Box(Modifier.fillMaxSize().background(Bg)) {
+        // (the activity root already paints the background once)
+        Box(Modifier.fillMaxSize()) {
             if (left) {
                 Box(
                     Modifier.fillMaxSize().padding(start = 76.dp)

@@ -57,6 +57,8 @@ class MainActivity : ComponentActivity() {
         }
 
         val tv = isTvDevice(this)
+        // Compose paints the whole screen itself: drop the window background (one less full-screen fill per frame)
+        window.decorView.post { window.setBackgroundDrawable(null) }
         setContent {
             val accent by app.settings.accent.collectAsState()
             val lang by app.settings.language.collectAsState()
@@ -65,7 +67,8 @@ class MainActivity : ComponentActivity() {
             val strings = remember(lang) { stringsFor(lang) }
             ScaledDensity(isTv = tv, uiSize = uiSize) {
                 DhakaFlixTheme(accentIndex = accent, isTv = tv, edge = edgeFor(tv, width)) {
-                    CompositionLocalProvider(LocalStrings provides strings) {
+                    val newEpisodes by app.library.newEpisodeIds.collectAsState()
+                    CompositionLocalProvider(LocalStrings provides strings, com.israk.dhakaflix.ui.components.LocalNewEpisodes provides newEpisodes) {
                         var splashDone by rememberSaveable { mutableStateOf(false) }
                         Box(Modifier.fillMaxSize().background(Bg)) {
                             Crossfade(targetState = splashDone, animationSpec = tween(450), label = "splash") { done ->
