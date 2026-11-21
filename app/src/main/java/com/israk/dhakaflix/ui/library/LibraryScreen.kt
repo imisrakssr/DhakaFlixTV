@@ -52,10 +52,23 @@ import com.israk.dhakaflix.ui.theme.LocalStrings
 import com.israk.dhakaflix.ui.theme.TextDim
 import kotlinx.coroutines.launch
 
-/** Which part of My Library the grid shows. */
-private enum class Shelf { WATCH_LATER, CONTINUE, WATCHED }
+private enum class Shelf { CONTINUE, WATCHLIST, WATCHED }
 
-/** My Library as a poster grid (same look as Movies / Series) with filters on top. */
+/** Category + sort for one shelf. */
+private fun List<ItemEntity>.filtered(type: String?, sort: SortMode): List<ItemEntity> {
+    val f = if (type == null) this else filter { it.type == type }
+    return when (sort) {
+        SortMode.LATEST -> f // already newest first
+        SortMode.YEAR -> f.sortedByDescending { it.displayYear ?: 0 }
+        SortMode.AZ -> f.sortedBy { it.displayTitle.lowercase() }
+        SortMode.RATING -> f.sortedByDescending { it.rating ?: 0.0 }
+    }
+}
+
+/**
+ * My Library as poster-grid catalogs (same cards as Movies / Series):
+ * Continue Watching, then My Watchlist and Watched, each with its own filters.
+ */
 @Composable
 fun LibraryScreen(onOpen: (String) -> Unit) {
     val app = DhakaFlixApp.instance
@@ -70,44 +83,48 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
     val watchlist by remember { app.db.user().watchlist() }.collectAsState(initial = emptyList())
     val watched by remember { app.db.user().watched() }.collectAsState(initial = emptyList())
 
-    var shelf by rememberSaveable { mutableStateOf(Shelf.WATCH_LATER) }
-    var type by rememberSaveable { mutableStateOf<String?>(null) }   // null = all, "MOVIE", "SERIES"
-    var sort by rememberSaveable { mutableStateOf(SortMode.LATEST) }
+    var wlType by rememberSaveable { mutableStateOf<String?>(null) }
+    var wlSort by rememberSaveable { mutableStateOf(SortMode.LATEST) }
+    var wType by rememberSaveable { mutableStateOf<String?>(null) }
+    var wSort by rememberSaveable { mutableStateOf(SortMode.LATEST) }
+    val wlShown = remember(watchlist, wlType, wlSort) { watchlist.filtered(wlType, wlSort) }
+    val wShown = remember(watched, wType, wSort) { watched.filtered(wType, wSort) }
 
-    // continue-watching entries keep their file so OK resumes playback like before
-    val cwByItem = remember(cw) { cw.associateBy { it.item.id } }
-    val base: List<ItemEntity> = when (shelf) {
-        Shelf.WATCH_LATER -> watchlist
-        Shelf.CONTINUE -> cw.map { it.item }
-        Shelf.WATCHED -> watched
-    }
-    val shown = remember(base, type, sort) {
-        val f = if (type == null) base else base.filter { it.type == type }
-        when (sort) {
-            SortMode.LATEST -> f // already newest first
-            SortMode.YEAR -> f.sortedByDescending { it.displayYear ?: 0 }
-            SortMode.AZ -> f.sortedBy { it.displayTitle.lowercase() }
-            SortMode.RATING -> f.sortedByDescending { it.rating ?: 0.0 }
-        }
-    }
-
-    val specs = listOf(
-        FilterSpec(
-            s.library,
-            listOf<Pair<String?, String>>(
-                Shelf.WATCH_LATER.name to "${s.myWatchlist} (${watchlist.size})",
-                Shelf.CONTINUE.name to "${s.continueWatching} (${cw.size})",
-                Shelf.WATCHED.name to "${s.history} (${watched.size})",
-            ),
-            shelf.name, highlight = false,
-        ) { shelf = Shelf.valueOf(it!!) },
-        FilterSpec(s.category, listOf<Pair<String?, String>>(null to s.all, "MOVIE" to s.movies, "SERIES" to s.series), type) { type = it },
-        FilterSpec(s.sort, SortMode.entries.map { it.name to sortLabel(it, s) }, sort.name, highlight = false) { sort = SortMode.valueOf(it!!) },
+    fun specs(type: String?, sort: SortMode, onType: (String?) -> Unit, onSort: (SortMode) -> Unit) = listOf(
+        FilterSpec(s.category, listOf<Pair<String?, String>>(null to s.all, "MOVIE" to s.movies, "SERIES" to s.series), type) { onType(it) },
+        FilterSpec(s.sort, SortMode.entries.map { it.name to sortLabel(it, s) }, sort.name, highlight = false) { onSort(SortMode.valueOf(it!!)) },
     )
+
+    if (cw.isEmpty() && watchlist.isEmpty() && watched.isEmpty()) {
+        com.israk.dhakaflix.ui.components.CenterMessage(s.libraryEmpty, Modifier.padding(top = LocalTopInset.current))
+        return
+    }
 
     val cell: Dp = if (isTv) 112.dp else 104.dp
     val gridState = rememberLazyGridState()
     com.israk.dhakaflix.ui.ReportScroll { gridState.firstVisibleItemIndex > 0 }
+    val entry = Modifier.entryFocus()
+
+    @Composable
+    fun Card(shelf: Shelf, item: ItemEntity, focusFirst: Boolean) {
+        val key = "${shelf.name}:${item.id}"
+        val mod = Modifier.fillMaxWidth().lineEndGuard(gridState, key).then(if (focusFirst) entry else Modifier)
+        when (shelf) {
+            Shelf.CONTINUE -> PosterCard(
+                item = item, width = Dp.Unspecified, modifier = mod, menu = CardMenu.CONTINUE,
+                onClick = {
+                    val p = cw.firstOrNull { it.item.id == item.id }?.progress
+                    if (p == null) onOpen(item.id) else scope.launch {
+                        val (list, idx) = repo.playlistFromProgress(p)
+                        PlayerActivity.start(ctx, list, idx, PlayerActivity.MODE_ASK)
+                    }
+                },
+            )
+            Shelf.WATCHLIST -> PosterCard(item = item, width = Dp.Unspecified, modifier = mod, menu = CardMenu.LIBRARY, onClick = { onOpen(item.id) })
+            Shelf.WATCHED -> PosterCard(item = item, width = Dp.Unspecified, modifier = mod, watched = true, menu = CardMenu.LIBRARY, onClick = { onOpen(item.id) })
+        }
+    }
+
     CalmVerticalScroll(topMargin = LocalTopInset.current + 12.dp, bottomMargin = 64.dp) {
         LazyVerticalGrid(
             columns = app.settings.postersPerRow.collectAsState().value.let { n -> if (n > 0) GridCells.Fixed(n) else GridCells.Adaptive(cell) },
@@ -117,50 +134,57 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(if (isTv) 20.dp else 12.dp),
             verticalArrangement = Arrangement.spacedBy(if (isTv) 22.dp else 16.dp),
         ) {
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(s.library, style = MaterialTheme.typography.headlineMedium, color = Color.White)
+            item(span = { GridItemSpan(maxLineSpan) }, key = "title") {
+                Text(s.library, style = MaterialTheme.typography.headlineMedium, color = Color.White)
+            }
+
+            // ---- Continue Watching (no filters)
+            if (cw.isNotEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }, key = "h:cw") { SectionTitle(s.continueWatching, cw.size) }
+                items(cw.size, key = { "${Shelf.CONTINUE.name}:${cw[it].item.id}" }) { i -> Card(Shelf.CONTINUE, cw[i].item, i == 0) }
+            }
+
+            // ---- My Watchlist
+            item(span = { GridItemSpan(maxLineSpan) }, key = "h:wl") {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    SectionTitle(s.myWatchlist, watchlist.size)
                     FilterBar(
-                        specs,
-                        onClear = if (type != null) ({ type = null }) else null,
-                        firstModifier = Modifier.entryFocus(),
+                        specs(wlType, wlSort, { wlType = it }, { wlSort = it }),
+                        onClear = if (wlType != null) ({ wlType = null }) else null,
+                        firstModifier = if (cw.isEmpty()) entry else Modifier,
                     )
                 }
             }
-            items(shown.size, key = { "${shelf.name}:${shown[it].id}" }) { i ->
-                val item = shown[i]
-                when (shelf) {
-                    Shelf.CONTINUE -> PosterCard(
-                        item = item, width = Dp.Unspecified, modifier = Modifier.fillMaxWidth().lineEndGuard(gridState, "${shelf.name}:${item.id}"),
-                        menu = CardMenu.CONTINUE,
-                        onClick = {
-                            val p = cwByItem[item.id]?.progress
-                            if (p == null) onOpen(item.id) else scope.launch {
-                                val (list, idx) = repo.playlistFromProgress(p)
-                                PlayerActivity.start(ctx, list, idx, PlayerActivity.MODE_ASK)
-                            }
-                        },
-                    )
-                    Shelf.WATCHED -> PosterCard(
-                        item = item, width = Dp.Unspecified, modifier = Modifier.fillMaxWidth().lineEndGuard(gridState, "${shelf.name}:${item.id}"),
-                        watched = true, menu = CardMenu.LIBRARY, onClick = { onOpen(item.id) },
-                    )
-                    Shelf.WATCH_LATER -> PosterCard(
-                        item = item, width = Dp.Unspecified, modifier = Modifier.fillMaxWidth().lineEndGuard(gridState, "${shelf.name}:${item.id}"),
-                        menu = CardMenu.LIBRARY, onClick = { onOpen(item.id) },
+            items(wlShown.size, key = { "${Shelf.WATCHLIST.name}:${wlShown[it].id}" }) { i -> Card(Shelf.WATCHLIST, wlShown[i], false) }
+            if (wlShown.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }, key = "e:wl") { EmptyLine(if (watchlist.isEmpty()) s.libraryEmpty else s.noResults) }
+
+            // ---- Watched
+            item(span = { GridItemSpan(maxLineSpan) }, key = "h:w") {
+                Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    SectionTitle(s.history, watched.size)
+                    FilterBar(
+                        specs(wType, wSort, { wType = it }, { wSort = it }),
+                        onClear = if (wType != null) ({ wType = null }) else null,
                     )
                 }
             }
-            if (shown.isEmpty()) {
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    Text(
-                        if (base.isEmpty()) s.libraryEmpty else s.noResults,
-                        Modifier.padding(vertical = 40.dp), color = TextDim, style = MaterialTheme.typography.titleMedium,
-                    )
-                }
-            }
+            items(wShown.size, key = { "${Shelf.WATCHED.name}:${wShown[it].id}" }) { i -> Card(Shelf.WATCHED, wShown[i], false) }
+            if (wShown.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }, key = "e:w") { EmptyLine(if (watched.isEmpty()) s.libraryEmpty else s.noResults) }
         }
     }
+}
+
+@Composable
+private fun SectionTitle(text: String, count: Int) {
+    Text(
+        "$text  ·  $count", Modifier.padding(top = 10.dp),
+        style = MaterialTheme.typography.titleLarge, color = Color.White,
+    )
+}
+
+@Composable
+private fun EmptyLine(text: String) {
+    Text(text, Modifier.padding(vertical = 16.dp), color = TextDim, style = MaterialTheme.typography.titleMedium)
 }
 
 /** RIGHT on the last poster of a grid line does nothing (instead of jumping up into the menu). */
