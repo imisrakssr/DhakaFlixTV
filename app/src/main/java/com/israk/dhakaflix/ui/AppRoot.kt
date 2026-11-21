@@ -155,10 +155,13 @@ fun AppRoot(onExit: () -> Unit) {
     val holder = rememberSaveableStateHolder()
     val open: (String) -> Unit = { stack.add(it) }
 
-    BackHandler(enabled = stack.isNotEmpty()) {
-        val id = stack.removeAt(stack.lastIndex)
-        holder.removeState("detail:$id:${stack.size}")
+    val goBack: () -> Unit = {
+        if (stack.isNotEmpty()) {
+            val id = stack.removeAt(stack.lastIndex)
+            holder.removeState("detail:$id:${stack.size}")
+        }
     }
+    BackHandler(enabled = stack.isNotEmpty()) { goBack() }
 
     // the remote's search / mic key: jump to Search (SearchScreen starts listening)
     LaunchedEffect(Unit) {
@@ -179,7 +182,7 @@ fun AppRoot(onExit: () -> Unit) {
         } else {
             holder.SaveableStateProvider("detail:${target.first}:${target.second}") {
                 val autoPlay = target.first.startsWith("play:")
-                DetailScreen(target.first.removePrefix("play:"), onOpen = open, autoPlay = autoPlay)
+                DetailScreen(target.first.removePrefix("play:"), onOpen = open, autoPlay = autoPlay, onBack = goBack)
             }
         }
     }

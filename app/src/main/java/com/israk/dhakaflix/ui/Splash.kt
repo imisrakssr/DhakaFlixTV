@@ -51,24 +51,40 @@ fun SplashScreen(onDone: () -> Unit) {
         onDone()
     }
 
+    // colours follow the app icon picked in Settings (same palettes as ci/logo.py)
+    val variant = com.israk.dhakaflix.DhakaFlixApp.instance.settings.appIcon.value
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    fun res(name: String, fallback: Int): Int =
+        ctx.resources.getIdentifier("${name}_$variant", "drawable", ctx.packageName).takeIf { it != 0 } ?: fallback
+    val markRes = remember(variant) { res("logo_mark", R.drawable.logo_mark) }
+    val wordRes = remember(variant) { res("logo_wordmark", R.drawable.logo_wordmark) }
+    val glowColor = when (variant) {
+        "sunset" -> Color(0xFFFF7A28)
+        "emerald" -> Color(0xFF10C878)
+        "royal" -> Color(0xFF8C50FF)
+        "crimson" -> Color(0xFFE50914)
+        "gold" -> Color(0xFFFFBA28)
+        "mono" -> Color(0xFFBEC8DC)
+        else -> Color(0xFF2E9BFF)
+    }
     Box(
         Modifier.fillMaxSize().background(Bg),
         contentAlignment = Alignment.Center,
     ) {
         Box(
             Modifier.size(520.dp).graphicsLayer { alpha = glow.value * 0.9f; scaleX = 0.6f + glow.value * 0.5f; scaleY = scaleX }
-                .background(Brush.radialGradient(listOf(Color(0x552E9BFF), Color(0x0022D3EE))))
+                .background(Brush.radialGradient(listOf(glowColor.copy(alpha = 0x55 / 255f), glowColor.copy(alpha = 0f))))
         )
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             Image(
-                painterResource(R.drawable.logo_mark), null,
+                painterResource(markRes), null,
                 Modifier.size(120.dp).graphicsLayer {
                     scaleX = logoScale.value; scaleY = logoScale.value; alpha = logoAlpha.value
                 },
             )
             Spacer(Modifier.height(20.dp))
             Image(
-                painterResource(R.drawable.logo_wordmark), "DhakaFlix",
+                painterResource(wordRes), "DhakaFlix",
                 Modifier.height(36.dp).graphicsLayer { alpha = word.value; translationY = (1f - word.value) * 30f },
             )
             Spacer(Modifier.height(36.dp))

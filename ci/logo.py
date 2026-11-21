@@ -124,4 +124,8 @@ for name, pal in PALETTES.items():
 # in-app assets
 mark(256).save(f"{RES}/drawable-xhdpi/logo_mark.png")
 wordmark_img(96).save(f"{RES}/drawable-xhdpi/logo_wordmark.png")
+# splash screen follows the app icon chosen in Settings
+for name, pal in PALETTES.items():
+    mark(256, pal[0], pal[1]).save(f"{RES}/drawable-xhdpi/logo_mark_{name}.png")
+    wordmark_img(96, pal[0], pal[1]).save(f"{RES}/drawable-xhdpi/logo_wordmark_{name}.png")
 print("done")

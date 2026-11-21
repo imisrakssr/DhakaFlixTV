@@ -549,12 +549,16 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         val u = db.user().get(id) ?: UserStateEntity(id)
         db.user().put(u.copy(inWatchlist = false, watched = false))
         db.progress().completeItem(id)
+        simkl.onContinueRemoved(id)
         // tell Simkl too, or the next sync puts it straight back
         if (u.watched) simkl.onWatched(id, false)
         if (u.inWatchlist) simkl.onWatchlist(id, false)
     }
 
-    suspend fun removeFromContinue(itemId: String): Unit = withContext(Dispatchers.IO) { db.progress().completeItem(itemId) }
+    suspend fun removeFromContinue(itemId: String): Unit = withContext(Dispatchers.IO) {
+        db.progress().completeItem(itemId)
+        simkl.onContinueRemoved(itemId)
+    }
 
     // ---------------------------------------------------------------- flows
 

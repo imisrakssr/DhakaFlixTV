@@ -25,6 +25,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
@@ -92,7 +93,7 @@ import kotlinx.coroutines.launch
 private data class PlayPlan(val list: List<PlayItem>, val index: Int, val resumeAt: Long?, val label: String?)
 
 @Composable
-fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false) {
+fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false, onBack: () -> Unit = {}) {
     val app = DhakaFlixApp.instance
     val repo = app.library
     val s = LocalStrings.current
@@ -204,6 +205,12 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
             contentPadding = PaddingValues(start = edge, end = edge, top = if (isTv) 44.dp else 210.dp, bottom = 60.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            item(key = "back") {
+                // same as the remote's BACK: returns to the exact card / row you came from
+                Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                    PillButton(s.back, icon = Icons.AutoMirrored.Filled.ArrowBack, compact = true, onClick = onBack)
+                }
+            }
             item(key = "header") {
                 Row {
                     if (isTv) {

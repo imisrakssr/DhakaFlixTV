@@ -318,6 +318,8 @@ class Simkl(private val app: DhakaFlixApp) {
     /** Continue Watching from other devices (Simkl keeps paused positions). */
     private suspend fun pullPlayback() {
         val arr = runCatching { getJson("/sync/playback") }.getOrNull() as? JsonArray ?: return
+        val cwTomb = tombs("cw_removed")
+        if (cwTomb.entries.removeAll { System.currentTimeMillis() - it.value > 60L * 24 * 3600_000 }) saveTombs(cwTomb, "cw_removed")
         for (el in arr.take(50)) {
             val o = el as? JsonObject ?: continue
             val pct = o["progress"]?.jsonPrimitive?.doubleOrNull ?: continue
@@ -327,6 +329,12 @@ class Simkl(private val app: DhakaFlixApp) {
             val isEpisode = o.str("type") == "episode" || ep != null
             val media = (if (isEpisode) o.obj("show") ?: o.obj("anime") else o.obj("movie")) ?: continue
             val item = match(media, isEpisode) ?: continue
+            // removed from Continue Watching here after this pause: keep it gone, and clear it on Simkl
+            val removedAt = cwTomb[item.id]
+            if (removedAt != null && removedAt >= pausedAt) {
+                o.int("id")?.let { pid -> runCatching { delete("/sync/playback/$pid") } }
+                continue
+            }
             val season = ep?.int("season") ?: ep?.int("tvdb_season")
             val number = ep?.int("number") ?: ep?.int("episode") ?: ep?.int("tvdb_number")
             if (isEpisode && (season == null || number == null)) continue
@@ -438,6 +446,13 @@ class Simkl(private val app: DhakaFlixApp) {
             if (u?.watched != true) post("/sync/history/remove", historyBody(listOf(item to null)))
         }
         snapUpdate("list", itemId, inList)
+    }
+
+    /** Removed from Continue Watching on this device: Simkl's old paused position must not bring it back. */
+    fun onContinueRemoved(itemId: String) {
+        val tomb = tombs("cw_removed")
+        tomb[itemId] = System.currentTimeMillis()
+        saveTombs(tomb, "cw_removed")
     }
 
     /** Finished episode: history entry (Simkl then hides the old paused position on every device). */
@@ -562,6 +577,11 @@ class Simkl(private val app: DhakaFlixApp) {
             val b = r.body?.string().orEmpty()
             if (b.isBlank()) null else runCatching { json.parseToJsonElement(b) }.getOrNull()
         }
+    }
+
+    private suspend fun delete(path: String) = withContext(Dispatchers.IO) {
+        ensureFresh()
+        app.http.newCall(builder(path, true).delete().build()).execute().use { }
     }
 
     private fun JsonObject.str(k: String): String? = (this[k] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull
