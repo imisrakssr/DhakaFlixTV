@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+
 package com.israk.dhakaflix.ui.home
 
 import androidx.compose.animation.AnimatedContent
