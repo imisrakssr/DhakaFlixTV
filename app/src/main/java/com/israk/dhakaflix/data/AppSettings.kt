@@ -80,6 +80,10 @@ class AppSettings(ctx: Context) {
         _simklToken.value = token; _simklUser.value = user
         prefs.edit().putString("simkl_token", token).putString("simkl_user", user).apply()
     }
+    /** Simkl profile picture (shown top-right when signed in). */
+    private val _simklAvatar = MutableStateFlow(prefs.getString("simkl_avatar", "") ?: "")
+    val simklAvatar: StateFlow<String> = _simklAvatar
+    fun setSimklAvatar(url: String) { _simklAvatar.value = url; prefs.edit().putString("simkl_avatar", url).apply() }
     /** AUTH V2: refresh token + access-token expiry (ms). */
     val simklRefresh: String get() = prefs.getString("simkl_refresh", "") ?: ""
     val simklExpiresAt: Long get() = prefs.getLong("simkl_expires", 0L)

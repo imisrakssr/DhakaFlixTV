@@ -18,6 +18,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -95,5 +97,18 @@ fun SplashScreen(onDone: () -> Unit) {
                 fontWeight = FontWeight.Medium, letterSpacing = 1.sp,
             )
         }
+    }
+}
+
+
+/** Logo mark + wordmark drawables in the app-icon colours picked in Settings (live). */
+@Composable
+fun rememberBrandLogos(): Pair<Int, Int> {
+    val variant by com.israk.dhakaflix.DhakaFlixApp.instance.settings.appIcon.collectAsState()
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    return remember(variant) {
+        val mark = ctx.resources.getIdentifier("logo_mark_$variant", "drawable", ctx.packageName).takeIf { it != 0 } ?: R.drawable.logo_mark
+        val word = ctx.resources.getIdentifier("logo_wordmark_$variant", "drawable", ctx.packageName).takeIf { it != 0 } ?: R.drawable.logo_wordmark
+        mark to word
     }
 }

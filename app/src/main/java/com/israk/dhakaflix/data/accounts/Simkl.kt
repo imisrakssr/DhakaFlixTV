@@ -130,10 +130,12 @@ class Simkl(private val app: DhakaFlixApp) {
 
     private suspend fun finishLogin(token: String) {
         settings.setSimklAccount(token, "")
-        val name = runCatching {
-            (post("/users/settings", JsonObject(emptyMap())) as? JsonObject)?.obj("user")?.str("name")
-        }.getOrNull() ?: "Simkl"
+        val user = runCatching {
+            (post("/users/settings", JsonObject(emptyMap())) as? JsonObject)?.obj("user")
+        }.getOrNull()
+        val name = user?.str("name") ?: "Simkl"
         settings.setSimklAccount(token, name)
+        settings.setSimklAvatar(user?.str("avatar").orEmpty())
         _pin.value = null
         syncNow(firstTime = true)
     }
@@ -174,6 +176,7 @@ class Simkl(private val app: DhakaFlixApp) {
     fun signOut() {
         cancelLogin()
         settings.setSimklAccount("", "")
+        settings.setSimklAvatar("")
         settings.setSimklRefresh("", 0)
         settings.setSimklLastSync(0)
     }
@@ -202,6 +205,9 @@ class Simkl(private val app: DhakaFlixApp) {
             _syncing.value = true
             _error.value = null
             try {
+                if (settings.simklAvatar.value.isBlank()) runCatching {
+                    (post("/users/settings", JsonObject(emptyMap())) as? JsonObject)?.obj("user")?.str("avatar")
+                }.getOrNull()?.takeIf { it.isNotBlank() }?.let { settings.setSimklAvatar(it) }
                 pull()
                 pushMissing(firstTime || settings.simklLastSync.value == 0L)
                 lastPull = System.currentTimeMillis()

@@ -15,6 +15,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -415,10 +416,15 @@ private fun TvTopBar(nav: NavHandle, visible: Boolean, locked: Boolean) {
             .graphicsLayer { alpha = shown; translationY = -(1f - shown) * 40f }
             .background(Brush.verticalGradient(listOf(Bg.copy(alpha = .85f), Bg.copy(alpha = 0f)))),
     ) {
-        Image(
-            painterResource(R.drawable.logo_wordmark), "DhakaFlix",
-            Modifier.align(Alignment.CenterStart).padding(start = LocalEdge.current).height(18.dp),
-        )
+        val (brandMark, brandWord) = rememberBrandLogos()
+        Row(
+            Modifier.align(Alignment.CenterStart).padding(start = LocalEdge.current),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Image(painterResource(brandMark), null, Modifier.size(28.dp))
+            Spacer(Modifier.width(8.dp))
+            Image(painterResource(brandWord), "DhakaFlix", Modifier.height(18.dp))
+        }
         Row(
             Modifier.align(Alignment.Center)
                 .glass(RoundedCornerShape(50), tint = 0.08f)
@@ -431,7 +437,40 @@ private fun TvTopBar(nav: NavHandle, visible: Boolean, locked: Boolean) {
                 TabPill(t.label(s), t == tab, nav.requesters.getValue(t), !locked, isCurrent = { nav.currentTab() == t }, redirect = nav::focusCurrent) { nav.onTab(t) }
             }
         }
-        Box(Modifier.align(Alignment.CenterEnd).padding(end = LocalEdge.current)) { SyncIndicator() }
+        Row(
+            Modifier.align(Alignment.CenterEnd).padding(end = LocalEdge.current),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SyncIndicator()
+            Spacer(Modifier.width(12.dp))
+            SimklAvatar()
+        }
+    }
+}
+
+/** Signed-in Simkl account picture with a thin accent ring (display only, not focusable). */
+@Composable
+private fun SimklAvatar() {
+    val settings = DhakaFlixApp.instance.settings
+    val token by settings.simklToken.collectAsState()
+    val user by settings.simklUser.collectAsState()
+    val avatar by settings.simklAvatar.collectAsState()
+    if (token.isBlank()) return
+    val url = avatar.let { if (it.startsWith("//")) "https:$it" else it }
+    Box(
+        Modifier.size(36.dp)
+            .border(1.5.dp, LocalAccent.current, androidx.compose.foundation.shape.CircleShape)
+            .padding(3.dp)
+            .clip(androidx.compose.foundation.shape.CircleShape)
+            .background(Color.White.copy(alpha = .10f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(user.take(1).uppercase(), color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+        if (url.isNotBlank()) coil.compose.AsyncImage(
+            model = url, contentDescription = user,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+        )
     }
 }
 
@@ -490,7 +529,7 @@ private fun LeftRail(nav: NavHandle, active: Boolean, onPick: (Tab) -> Unit) {
                 .padding(vertical = 14.dp, horizontal = 8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Image(painterResource(R.drawable.logo_mark), "DhakaFlix", Modifier.padding(start = 6.dp, bottom = 14.dp).size(32.dp))
+            Image(painterResource(rememberBrandLogos().first), "DhakaFlix", Modifier.padding(start = 6.dp, bottom = 14.dp).size(32.dp))
             Tab.entries.forEach { t ->
                 RailItem(t.icon(), t.label(s), t == tab, expanded, nav.requesters.getValue(t), active, isCurrent = { nav.currentTab() == t }, redirect = nav::focusCurrent) { onPick(t) }
             }
