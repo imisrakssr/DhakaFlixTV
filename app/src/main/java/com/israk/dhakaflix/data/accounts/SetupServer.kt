@@ -261,7 +261,7 @@ a{color:#7fb2ff}ol{padding-left:20px;margin:6px 0;color:#b8c0d0}code{background:
 <small>IMDb / Rotten Tomatoes / Metacritic ratings. Free at <a href="https://mdblist.com/preferences/">mdblist.com/preferences</a></small>
 <label>Simkl Client ID</label><input type=text name=simkl autocomplete=off placeholder="${state(st.simklClientId.value)}">
 <small>Sync across devices. One-time: <ol><li>Open <a href="https://simkl.com/settings/developer/new/">simkl.com/settings/developer/new</a></li>
-<li>Name: <code>DhakaFlix TV</code>, Redirect URI: <code>urn:ietf:wg:oauth:2.0:oob</code></li><li>Copy the <b>Client ID</b> here, then press <b>Sign in</b> on the TV.</li></ol></small>
+<li>Name: <code>DhakaFlix TV</code>, Redirect URL: <code>dhakaflix://auth/simkl</code></li><li>Copy the <b>Client ID</b> here, then press <b>Sign in</b> on the TV.</li></ol></small>
 <button type=submit>Save to TV</button></form>
 <div class=card><h2>Backup &amp; restore</h2><p class=sub style="margin:0">Settings, watchlist, history and progress.</p>
 <a class=btn href="/$token/backup">Download backup</a>

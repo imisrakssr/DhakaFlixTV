@@ -71,7 +71,7 @@ class Simkl(private val app: DhakaFlixApp) {
         loginJob?.cancel()
         _error.value = null
         loginJob = app.appScope.launch(Dispatchers.IO) {
-            val start = runCatching { getJson("/oauth/pin?client_id=$clientId&redirect=urn:ietf:wg:oauth:2.0:oob", auth = false) }
+            val start = runCatching { getJson("/oauth/pin?client_id=$clientId", auth = false) }
                 .getOrElse { _error.value = it.message; return@launch } as? JsonObject ?: return@launch
             val code = start.str("user_code") ?: run { _error.value = "Simkl: no code"; return@launch }
             val url = start.str("verification_url") ?: "https://simkl.com/pin"
