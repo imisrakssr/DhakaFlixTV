@@ -59,6 +59,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -129,7 +133,7 @@ fun FocusFrame(
     Box(
         modifier
             .zIndex(if (focused) 2f else 0f)
-            .graphicsLayer { scaleX = scale; scaleY = scale; this.shape = shape; clip = true }
+            .graphicsLayer { scaleX = scale; scaleY = scale }
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged {
                 if (focused != it.isFocused) {
@@ -154,6 +158,7 @@ fun FocusFrame(
                 }
             })
             .border(2.5.dp, rim, shape)
+            .clip(shape)
             .then(
                 if (onLongClick == null) Modifier.clickable(onClick = onClick)
                 else Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
@@ -161,8 +166,53 @@ fun FocusFrame(
     ) { content(focused) }
 }
 
+/**
+ * One-line title that slowly scrolls when it doesn't fit and [active] (the focused card).
+ * Home-made instead of Modifier.basicMarquee: the animation is a plain coroutine that stops the
+ * moment the card leaves the row, and the movement is applied at placement time, never in a layer.
+ */
+@Composable
+fun MarqueeText(
+    text: String,
+    active: Boolean,
+    style: androidx.compose.ui.text.TextStyle,
+    color: Color,
+    fontWeight: FontWeight? = null,
+    modifier: Modifier = Modifier,
+) {
+    if (!active) {
+        Text(text, modifier, maxLines = 1, overflow = TextOverflow.Ellipsis, style = style, color = color, fontWeight = fontWeight)
+        return
+    }
+    var boxW by remember { mutableIntStateOf(0) }
+    var textW by remember { mutableIntStateOf(0) }
+    val shift = remember(text) { androidx.compose.animation.core.Animatable(0f) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    LaunchedEffect(text, boxW, textW) {
+        shift.snapTo(0f)
+        val over = textW - boxW
+        if (boxW == 0 || over <= 0) return@LaunchedEffect
+        val pxPerSec = with(density) { 40.dp.toPx() }
+        while (true) {
+            kotlinx.coroutines.delay(900)
+            shift.animateTo(-over.toFloat(), androidx.compose.animation.core.tween(((over / pxPerSec) * 1000).toInt().coerceAtLeast(600), easing = androidx.compose.animation.core.LinearEasing))
+            kotlinx.coroutines.delay(1200)
+            shift.snapTo(0f)
+        }
+    }
+    Box(modifier.fillMaxWidth().clipToBounds().onSizeChanged { boxW = it.width }) {
+        Text(
+            text, maxLines = 1, softWrap = false, style = style, color = color, fontWeight = fontWeight,
+            modifier = Modifier
+                .wrapContentWidth(Alignment.Start, unbounded = true)
+                .onSizeChanged { textW = it.width }
+                .offset { androidx.compose.ui.unit.IntOffset(shift.value.toInt(), 0) },
+        )
+    }
+}
+
 /** Followed series with new episodes (provided once at the root). */
-val LocalNewEpisodes = androidx.compose.runtime.staticCompositionLocalOf<Set<String>> { emptySet() }
+val LocalNewEpisodes = androidx.compose.runtime.compositionLocalOf<Set<String>> { emptySet() }
 
 /** TMDB title logo (like Apple TV / Netflix) with the plain title as fallback. */
 @Composable
@@ -275,10 +325,8 @@ fun PosterCard(
             val titleAlpha by animateFloatAsState(if (!isTv || focused) 1f else 0f, label = "title")
             Spacer(Modifier.height(8.dp))
             Column(Modifier.graphicsLayer { alpha = titleAlpha }) {
-            Text(
-                item.displayTitle, maxLines = 1,
-                overflow = if (focused) TextOverflow.Clip else TextOverflow.Ellipsis,
-                modifier = if (focused) Modifier.basicMarquee(iterations = Int.MAX_VALUE, initialDelayMillis = 800, velocity = 40.dp) else Modifier,
+            MarqueeText(
+                item.displayTitle, active = focused,
                 style = MaterialTheme.typography.labelLarge,
                 color = if (focused) Color.White else TextDim,
                 fontWeight = if (focused) FontWeight.SemiBold else FontWeight.Normal,
@@ -358,11 +406,7 @@ fun LandscapeCard(
                     )
                 )
                 Column(Modifier.align(Alignment.BottomStart).padding(10.dp)) {
-                    Text(
-                        item.displayTitle, color = Color.White, style = MaterialTheme.typography.titleSmall, maxLines = 1, fontWeight = FontWeight.SemiBold,
-                        overflow = if (focused) TextOverflow.Clip else TextOverflow.Ellipsis,
-                        modifier = if (focused) Modifier.basicMarquee(iterations = Int.MAX_VALUE, initialDelayMillis = 800, velocity = 40.dp) else Modifier,
-                    )
+                    MarqueeText(item.displayTitle, active = focused, style = MaterialTheme.typography.titleSmall, color = Color.White, fontWeight = FontWeight.SemiBold)
                     if (label != null) Text(label, color = TextDim, style = MaterialTheme.typography.labelSmall, maxLines = 1)
                     Spacer(Modifier.height(6.dp))
                     ProgressLine(progress)

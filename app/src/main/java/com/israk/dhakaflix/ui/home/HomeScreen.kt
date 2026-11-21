@@ -232,6 +232,7 @@ fun HomeScreen(onOpen: (String) -> Unit) {
         val bannerH: Dp = if (isTv) maxHeight * 0.82f - topInset else 460.dp
         if (isTv) HomeBackdrop(focus, bannerItem)
 
+        androidx.compose.runtime.CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides OnlyIfNeeded) {
         LazyColumn(
             Modifier.fillMaxSize(),
             state = listState,
@@ -286,6 +287,24 @@ fun HomeScreen(onOpen: (String) -> Unit) {
                     }
                 }
             }
+        }
+        }
+    }
+}
+
+/**
+ * Android TV's default makes vertical lists keep the focused item ~30% from the top, which pushed the
+ * banner up (cut-off logo) and fought the row glide below. Home positions rows itself, so the list
+ * only scrolls when the focused thing is actually outside the screen.
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+private val OnlyIfNeeded = object : androidx.compose.foundation.gestures.BringIntoViewSpec {
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
+        val end = offset + size
+        return when {
+            offset >= 0f && end <= containerSize -> 0f
+            offset < 0f || size > containerSize -> offset
+            else -> end - containerSize
         }
     }
 }
