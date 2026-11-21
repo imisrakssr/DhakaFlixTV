@@ -207,7 +207,7 @@ private fun MainScaffold(tab: Tab, currentTab: () -> Tab, onTab: (Tab) -> Unit, 
     fun focusNav() {
         navLock.value = false
         if (left) railActive = true
-        scope.launch { delay(40); runCatching { requesters.getValue(currentTab()).requestFocus() } }
+        scope.launch { delay(40); NavGate.open { runCatching { requesters.getValue(currentTab()).requestFocus() } } }
     }
 
     BackHandler {
@@ -266,10 +266,11 @@ private fun MainScaffold(tab: Tab, currentTab: () -> Tab, onTab: (Tab) -> Unit, 
                     }
                 }
                 if (!ok) focusNav()
-            } else runCatching { requesters.getValue(tab).requestFocus() }
+            } else NavGate.open { runCatching { requesters.getValue(tab).requestFocus() } }
         }
         val nav = NavHandle(currentTab, onTab, requesters, entry) {
             navFocused = it
+            NavGate.inNav = it
             if (it) FocusMemory.restoreId = null // a new page must never pull focus out of the menu
             if (!it) railActive = false
         }
@@ -342,6 +343,24 @@ private fun MainScaffold(tab: Tab, currentTab: () -> Tab, onTab: (Tab) -> Unit, 
             }
         }
     }
+}
+
+/**
+ * The menu can only be entered on purpose: UP (top bar), LEFT (left rail), BACK, or by the app itself.
+ * Without this, RIGHT/LEFT at the end of any row, button strip or grid line "escaped" into the menu
+ * and switched tabs.
+ */
+object NavGate {
+    @Volatile var inNav = false
+    @Volatile var forced = false
+    /** keyCode of the last D-pad key pressed (set by MainActivity). */
+    @Volatile var lastDir = 0
+    fun allow(leftRail: Boolean): Boolean =
+        inNav || forced || lastDir == android.view.KeyEvent.KEYCODE_DPAD_UP ||
+            (leftRail && lastDir == android.view.KeyEvent.KEYCODE_DPAD_LEFT)
+
+    /** Focus something in the menu from code. */
+    inline fun <T> open(block: () -> T): T { forced = true; try { return block() } finally { forced = false } }
 }
 
 /** Everything the TV navigation (top bar or left rail) needs. */
@@ -433,7 +452,7 @@ private fun TabPill(
         text,
         Modifier
             .focusRequester(fr)
-            .focusProperties { canFocus = focusable }
+            .focusProperties { canFocus = focusable && NavGate.allow(leftRail = false) }
             .onFocusChanged {
                 focused = it.isFocused
                 if (it.isFocused && !isCurrent()) redirect()
@@ -494,7 +513,7 @@ private fun RailItem(
     Row(
         Modifier.fillMaxWidth()
             .focusRequester(fr)
-            .focusProperties { canFocus = focusable }
+            .focusProperties { canFocus = focusable && NavGate.allow(leftRail = true) }
             .onFocusChanged {
                 focused = it.isFocused
                 if (it.isFocused && !isCurrent()) redirect()

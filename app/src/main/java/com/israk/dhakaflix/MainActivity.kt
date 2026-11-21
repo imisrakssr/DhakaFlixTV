@@ -83,6 +83,11 @@ class MainActivity : ComponentActivity() {
 
     override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
         com.israk.dhakaflix.ui.AppEvents.lastInput = android.os.SystemClock.elapsedRealtime()
+        if (event.action == android.view.KeyEvent.ACTION_DOWN) when (event.keyCode) {
+            android.view.KeyEvent.KEYCODE_DPAD_UP, android.view.KeyEvent.KEYCODE_DPAD_DOWN,
+            android.view.KeyEvent.KEYCODE_DPAD_LEFT, android.view.KeyEvent.KEYCODE_DPAD_RIGHT ->
+                com.israk.dhakaflix.ui.NavGate.lastDir = event.keyCode
+        }
         // any key just wakes the screensaver up
         if (com.israk.dhakaflix.ui.AppEvents.screensaverOn.value) {
             if (event.action == android.view.KeyEvent.ACTION_UP) com.israk.dhakaflix.ui.AppEvents.screensaverOn.value = false

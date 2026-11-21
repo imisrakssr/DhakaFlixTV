@@ -277,8 +277,9 @@ fun PosterCard(
     var focused by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     if (showMenu) ItemMenu(item, menu) { showMenu = false }
-    LaunchedEffect(item.id) {
-        if (FocusMemory.restoreId == item.id) {
+    // only the one card that should get focus back pays for an effect (not every card in every row)
+    if (FocusMemory.restoreId == item.id) {
+        LaunchedEffect(item.id) {
             FocusMemory.restoreId = null
             runCatching { fr.requestFocus() }
         }
@@ -320,22 +321,27 @@ fun PosterCard(
             }
         }
         if (showTitle) {
-            // Apple-TV style: on TV the title only appears under the focused poster
+            // Apple-TV style: on TV the title only appears under the focused poster. Unfocused cards
+            // keep the space but build no text at all (fast left/right scrolling has far less to do).
             val isTv = LocalIsTv.current
-            val titleAlpha by animateFloatAsState(if (!isTv || focused) 1f else 0f, label = "title")
             Spacer(Modifier.height(8.dp))
-            Column(Modifier.graphicsLayer { alpha = titleAlpha }) {
-            MarqueeText(
-                item.displayTitle, active = focused,
-                style = MaterialTheme.typography.labelLarge,
-                color = if (focused) Color.White else TextDim,
-                fontWeight = if (focused) FontWeight.SemiBold else FontWeight.Normal,
-            )
-            Text(
-                listOfNotNull(item.displayYear?.toString(), item.rating?.takeIf { it > 0 }?.let { "★ " + fmtRating(it) })
-                    .joinToString("  ·  "),
-                style = MaterialTheme.typography.labelSmall, color = TextDim.copy(alpha = .7f), maxLines = 1,
-            )
+            if (isTv && !focused) {
+                Spacer(Modifier.height(40.dp))
+            } else {
+                // fixed height on TV so the row never jumps when focus moves
+                Column(if (isTv) Modifier.height(40.dp) else Modifier) {
+                    MarqueeText(
+                        item.displayTitle, active = focused,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (focused) Color.White else TextDim,
+                        fontWeight = if (focused) FontWeight.SemiBold else FontWeight.Normal,
+                    )
+                    Text(
+                        listOfNotNull(item.displayYear?.toString(), item.rating?.takeIf { it > 0 }?.let { "★ " + fmtRating(it) })
+                            .joinToString("  ·  "),
+                        style = MaterialTheme.typography.labelSmall, color = TextDim.copy(alpha = .7f), maxLines = 1,
+                    )
+                }
             }
         }
     }

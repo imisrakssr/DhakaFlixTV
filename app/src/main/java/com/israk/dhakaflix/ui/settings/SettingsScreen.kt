@@ -63,6 +63,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.FocusDirection
@@ -156,7 +158,13 @@ fun SettingsScreen() {
         androidx.compose.runtime.LaunchedEffect(inPane) { navLock?.value = inPane }
         androidx.compose.runtime.DisposableEffect(Unit) { onDispose { navLock?.value = false } }
         Row(Modifier.fillMaxSize().padding(start = edge, end = edge, top = top + 6.dp)) {
-            Column(Modifier.width(240.dp).fillMaxHeight()) {
+            // the section list scrolls (9 entries don't fit under the menu on a 1080p TV);
+            // focusing an entry brings it into view, so Diagnostics / About are always reachable
+            Column(
+                Modifier.width(240.dp).fillMaxHeight()
+                    .verticalScroll(rememberScrollState())
+                    .padding(bottom = 40.dp)
+            ) {
                 Text(s.settings, style = MaterialTheme.typography.headlineMedium, color = Color.White)
                 Spacer(Modifier.height(14.dp))
                 Section.entries.forEachIndexed { i, sec ->
