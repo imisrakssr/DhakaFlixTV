@@ -211,7 +211,7 @@ fun SettingsScreen() {
         if (cur == null) {
             LazyColumn(
                 Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = edge, end = edge, top = top + 8.dp, bottom = 40.dp),
+                contentPadding = PaddingValues(start = edge, end = edge, top = top + 8.dp, bottom = 40.dp + com.israk.dhakaflix.ui.LocalBottomInset.current),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 item { Text(s.settings, style = MaterialTheme.typography.headlineMedium, color = Color.White) }
@@ -265,7 +265,7 @@ private fun SectionContent(sec: Section) {
     LazyColumn(
         Modifier.fillMaxSize().dpadScrollFallback(state),
         state = state,
-        contentPadding = PaddingValues(top = if (LocalIsTv.current) 52.dp else 8.dp, bottom = 80.dp),
+        contentPadding = PaddingValues(top = if (LocalIsTv.current) 52.dp else 8.dp, bottom = 80.dp + com.israk.dhakaflix.ui.LocalBottomInset.current),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         when (sec) {

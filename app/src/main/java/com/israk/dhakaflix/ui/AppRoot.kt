@@ -17,6 +17,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -113,6 +115,9 @@ import kotlinx.coroutines.delay
 
 /** Space reserved at the top of each tab for the floating TV tab bar. */
 val LocalTopInset = compositionLocalOf { 0.dp }
+
+/** Space the phone's floating tab bar takes at the bottom (0 on TV). Scroll lists add it to their bottom padding. */
+val LocalBottomInset = compositionLocalOf { 0.dp }
 
 /** First focusable element of the current tab; the nav bar jumps here on D-pad down/right. */
 val LocalEntryFocus = compositionLocalOf<FocusRequester?> { null }
@@ -323,27 +328,54 @@ private fun MainScaffold(tab: Tab, currentTab: () -> Tab, onTab: (Tab) -> Unit, 
     } else {
         val s = LocalStrings.current
         val accent = LocalAccent.current
-        Scaffold(
-            containerColor = Bg,
-            bottomBar = {
-                NavigationBar(containerColor = Surface1) {
-                    Tab.entries.forEach { t ->
-                        NavigationBarItem(
-                            selected = t == tab, onClick = { onTab(t) },
-                            icon = { Icon(t.icon(), null) },
-                            label = { Text(t.label(s), maxLines = 1) },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = Color.White, selectedTextColor = accent,
-                                indicatorColor = accent.copy(alpha = .35f),
-                                unselectedIconColor = TextDim, unselectedTextColor = TextDim,
-                            ),
-                        )
-                    }
-                }
-            },
-        ) { pad ->
-            Box(Modifier.fillMaxSize().padding(pad)) {
-                CompositionLocalProvider(LocalTopInset provides 12.dp) { content() }
+        // phone: content runs full screen behind a floating glass tab bar
+        Box(Modifier.fillMaxSize().background(Bg)) {
+            CompositionLocalProvider(LocalTopInset provides 12.dp, LocalBottomInset provides 96.dp) { content() }
+            PhoneTabBar(
+                tab = tab, onTab = onTab, labels = { it.label(s) },
+                modifier = Modifier.align(Alignment.BottomCenter)
+                    .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.navigationBars)
+                    .padding(start = 14.dp, end = 14.dp, bottom = 12.dp),
+            )
+        }
+    }
+}
+
+/** Floating pill tab bar for phones: dark glass, thin light rim, the current tab sits in a lighter pill. */
+@Composable
+private fun PhoneTabBar(tab: Tab, onTab: (Tab) -> Unit, labels: (Tab) -> String, modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(50)
+    val accent = LocalAccent.current
+    Row(
+        modifier
+            .fillMaxWidth()
+            .height(66.dp)
+            .clip(shape)
+            .background(Brush.verticalGradient(listOf(Color(0xF2262A33), Color(0xF2101217))))
+            .border(1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = .22f), Color.White.copy(alpha = .05f))), shape)
+            .padding(5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Tab.entries.forEach { t ->
+            val selected = t == tab
+            val bg by animateColorAsState(if (selected) Color.White.copy(alpha = .14f) else Color.Transparent, tween(220), label = "tabBg")
+            Column(
+                Modifier.weight(1f).fillMaxHeight()
+                    .clip(shape)
+                    .background(bg)
+                    .clickable { onTab(t) },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Icon(t.icon(), labels(t), tint = if (selected) Color.White else TextDim, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    labels(t), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    color = if (selected) Color.White else TextDim,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                )
+                if (selected) Box(Modifier.padding(top = 2.dp).size(width = 14.dp, height = 2.dp).clip(shape).background(accent))
             }
         }
     }

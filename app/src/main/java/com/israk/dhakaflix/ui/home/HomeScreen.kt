@@ -273,7 +273,7 @@ fun HomeScreen(onOpen: (String) -> Unit) {
         LazyColumn(
             Modifier.fillMaxSize(),
             state = listState,
-            contentPadding = PaddingValues(top = if (isTv) topInset else 0.dp, bottom = 80.dp),
+            contentPadding = PaddingValues(top = if (isTv) topInset else 0.dp, bottom = 80.dp + com.israk.dhakaflix.ui.LocalBottomInset.current),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             item(key = "banner") {
