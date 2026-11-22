@@ -210,7 +210,7 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
         LazyColumn(
             Modifier.fillMaxSize().dpadScrollFallback(detailList),
             state = detailList,
-            contentPadding = PaddingValues(start = edge, end = edge, top = if (isTv) 64.dp else 210.dp, bottom = 60.dp),
+            contentPadding = PaddingValues(start = edge, end = edge, top = if (isTv) 44.dp else 210.dp, bottom = 60.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             item(key = "header") {
@@ -361,12 +361,11 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
                 Text(cur.rawName, color = TextDim.copy(alpha = .5f), style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 16.dp))
             }
         }
-        // fixed in the top-left corner; same as the remote's BACK (returns to the exact card / row you came from)
-        PillButton(
+        // phone only: Back button fixed in the top-left corner (TV uses the remote's BACK, as in v1.0.21)
+        if (!isTv) PillButton(
             s.back, icon = Icons.AutoMirrored.Filled.ArrowBack, compact = true, onClick = onBack,
-            modifier = Modifier.align(Alignment.TopStart).padding(start = 20.dp, top = if (isTv) 14.dp else 36.dp)
-                // phone: dark backing so it stays readable over bright posters
-                .then(if (isTv) Modifier else Modifier.clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = .55f))),
+            modifier = Modifier.align(Alignment.TopStart).padding(start = 20.dp, top = 36.dp)
+                .clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = .55f)),
         )
     }
 
@@ -477,7 +476,10 @@ private fun ExternalRatings(item: com.israk.dhakaflix.data.db.ItemEntity) {
     if (list.isEmpty()) return
     Spacer(Modifier.height(10.dp))
     // one line of chips; on a narrow phone it scrolls sideways instead of squashing the last chip
-    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(
+        if (com.israk.dhakaflix.ui.theme.LocalIsTv.current) Modifier else Modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         list.take(5).forEach { r ->
             val tint = when (r.source) {
                 "imdb" -> Color(0xFFF5C518)
