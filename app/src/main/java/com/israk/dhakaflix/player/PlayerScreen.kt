@@ -208,17 +208,11 @@ private fun PauseInfo(c: PlayerController) {
     val B = com.israk.dhakaflix.ui.components.Bangla
     var clock by remember { mutableStateOf("") }
     var date by remember { mutableStateOf("") }
-    var endsAt by remember { mutableStateOf("") }
     LaunchedEffect(bn) {
         while (true) {
             val now = java.util.Date()
             clock = B.clock(now, bn)
             date = B.date(now, bn)
-            val left = (c.duration - c.position).coerceAtLeast(0)
-            endsAt = if (c.duration > 0) {
-                val t = B.clock(java.util.Date(now.time + left), bn)
-                if (bn) "শেষ হইবো $t" else "Ends at $t"
-            } else ""
             delay(15_000)
         }
     }
@@ -272,10 +266,7 @@ private fun PauseInfo(c: PlayerController) {
             Text(s.paused, color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.width(16.dp))
             Text((fmtTime(c.position) + " / " + fmtTime(c.duration)).let { if (bn) B.digits(it) else it }, color = TextDim, style = MaterialTheme.typography.titleMedium)
-            if (endsAt.isNotEmpty()) {
-                Spacer(Modifier.width(14.dp))
-                Text(endsAt, color = TextDim.copy(alpha = .8f), style = MaterialTheme.typography.labelMedium)
-            }
+
         }
         // after a while the overlay dims down (easier on the eyes and the panel); any key brings it back
         val dim = remember { androidx.compose.animation.core.Animatable(0f) }
@@ -370,9 +361,22 @@ private fun Controls(c: PlayerController, visible: Boolean) {
                 Icon(Icons.Filled.ArrowBack, null, tint = Color.White, modifier = Modifier.size(28.dp).clickable { c.exit() })
                 Spacer(Modifier.width(16.dp))
             }
-            Column {
+            Column(Modifier.weight(1f)) {
                 Text(item.title, style = MaterialTheme.typography.headlineSmall, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold)
                 item.subtitle?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = TextDim, maxLines = 1) }
+            }
+            // top right: the time now, and when this will end
+            val bn = com.israk.dhakaflix.ui.components.isDhakaiya()
+            val B = com.israk.dhakaflix.ui.components.Bangla
+            var now by remember { mutableStateOf(java.util.Date()) }
+            LaunchedEffect(Unit) { while (true) { now = java.util.Date(); delay(5_000) } }
+            Spacer(Modifier.width(20.dp))
+            Column(horizontalAlignment = Alignment.End) {
+                Text(B.clock(now, bn), style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.SemiBold)
+                if (c.duration > 0) {
+                    val end = B.clock(java.util.Date(now.time + (c.duration - c.position).coerceAtLeast(0)), bn)
+                    Text(if (bn) "শেষ হইবো $end" else "Ends at $end", style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                }
             }
         }
         }
