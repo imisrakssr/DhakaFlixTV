@@ -330,7 +330,8 @@ private fun MainScaffold(tab: Tab, currentTab: () -> Tab, onTab: (Tab) -> Unit, 
         val accent = LocalAccent.current
         // phone: content runs full screen behind a floating glass tab bar
         Box(Modifier.fillMaxSize().background(Bg)) {
-            CompositionLocalProvider(LocalTopInset provides 12.dp, LocalBottomInset provides 96.dp) { content() }
+            // same breathing room above every page title (Home's banner ignores it and runs to the top)
+            CompositionLocalProvider(LocalTopInset provides 56.dp, LocalBottomInset provides 96.dp) { content() }
             PhoneTabBar(
                 tab = tab, onTab = onTab, labels = { it.label(s) },
                 modifier = Modifier.align(Alignment.BottomCenter)

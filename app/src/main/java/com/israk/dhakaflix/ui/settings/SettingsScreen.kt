@@ -670,6 +670,23 @@ private fun AboutCard() {
 @Composable
 private fun SyncRow(title: String, valueMs: Long, step: Long, onChange: (Long?) -> Unit) {
     val s = LocalStrings.current
+    if (!LocalIsTv.current) {
+        // phone: title on its own line so −, value, + and Reset all fit
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(title, color = Color.White, style = MaterialTheme.typography.bodyLarge)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PillButton("−", compact = true, onClick = { onChange(valueMs - step) })
+                Text(
+                    String.format(java.util.Locale.US, "%+.2f s", valueMs / 1000.0),
+                    Modifier.width(80.dp), color = Color.White, style = MaterialTheme.typography.titleMedium,
+                    textAlign = TextAlign.Center, fontWeight = FontWeight.Bold,
+                )
+                PillButton("+", compact = true, onClick = { onChange(valueMs + step) })
+                PillButton(s.resetDefault, compact = true, onClick = { onChange(null) })
+            }
+        }
+        return
+    }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(title, Modifier.width(170.dp), color = Color.White, style = MaterialTheme.typography.bodyLarge)
         PillButton("−", compact = true, onClick = { onChange(valueMs - step) })
