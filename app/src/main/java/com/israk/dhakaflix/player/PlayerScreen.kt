@@ -204,17 +204,43 @@ private fun PauseInfo(c: PlayerController) {
     val accent = LocalAccent.current
     val m = c.meta
     val ep = c.episodeInfo
+    val bn = com.israk.dhakaflix.ui.components.isDhakaiya()
+    val B = com.israk.dhakaflix.ui.components.Bangla
     var clock by remember { mutableStateOf("") }
-    LaunchedEffect(Unit) {
-        val f = java.text.SimpleDateFormat("h:mm a", Locale.getDefault())
-        while (true) { clock = f.format(java.util.Date()); delay(15_000) }
+    var ampm by remember { mutableStateOf("") }
+    var date by remember { mutableStateOf("") }
+    LaunchedEffect(bn) {
+        while (true) {
+            val now = java.util.Date()
+            val cal = java.util.Calendar.getInstance()
+            if (bn) {
+                // Dhakaiya: Bengali digits, day and month names, and the time of day in words
+                val h = cal.get(java.util.Calendar.HOUR_OF_DAY)
+                clock = B.digits(java.text.SimpleDateFormat("h:mm", Locale.US).format(now))
+                ampm = when (h) { in 4..11 -> "সকাল"; in 12..15 -> "দুপুর"; in 16..17 -> "বিকাল"; in 18..19 -> "সন্ধ্যা"; else -> "রাত" }
+                date = B.digits(java.text.SimpleDateFormat("EEEE, d MMMM", B.locale).format(now))
+            } else {
+                clock = java.text.SimpleDateFormat("h:mm", Locale.US).format(now)
+                ampm = java.text.SimpleDateFormat("a", Locale.US).format(now)
+                date = java.text.SimpleDateFormat("EEEE, d MMMM", Locale.US).format(now)
+            }
+            delay(15_000)
+        }
     }
     Box(
         Modifier.fillMaxSize().background(
             Brush.horizontalGradient(0f to Color.Black.copy(alpha = .88f), 0.55f to Color.Black.copy(alpha = .55f), 1f to Color.Black.copy(alpha = .15f))
         )
     ) {
-        Text(clock, Modifier.align(Alignment.TopEnd).padding(top = 30.dp, end = 44.dp), color = Color.White, style = MaterialTheme.typography.titleLarge)
+        // big clock with the day and date
+        Column(Modifier.align(Alignment.TopEnd).padding(top = 28.dp, end = 44.dp), horizontalAlignment = Alignment.End) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(clock, color = Color.White, style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Light)
+                Spacer(Modifier.width(8.dp))
+                Text(ampm, Modifier.padding(bottom = 8.dp), color = Color.White.copy(alpha = .8f), style = MaterialTheme.typography.titleLarge)
+            }
+            Text(date, color = Color.White.copy(alpha = .75f), style = MaterialTheme.typography.titleMedium)
+        }
         Column(Modifier.align(Alignment.CenterStart).padding(start = 56.dp, end = 56.dp).widthIn(max = 560.dp)) {
             Text(s.youAreWatching, color = TextDim, style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(6.dp))
@@ -227,10 +253,10 @@ private fun PauseInfo(c: PlayerController) {
                 fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis,
             )
             val facts = listOfNotNull(
-                m?.displayYear?.toString(),
-                m?.rating?.takeIf { it > 0 }?.let { "★ " + com.israk.dhakaflix.ui.components.fmtRating(it) },
-                (ep?.runtime ?: m?.runtime)?.takeIf { it > 0 }?.let { "${it / 60}h ${it % 60}m".removePrefix("0h ") },
-                m?.genreList?.take(3)?.joinToString(", ")?.takeIf { it.isNotBlank() },
+                m?.displayYear?.toString()?.let { if (bn) B.digits(it) else it },
+                m?.rating?.takeIf { it > 0 }?.let { "★ " + com.israk.dhakaflix.ui.components.fmtRating(it).let { r -> if (bn) B.digits(r) else r } },
+                (ep?.runtime ?: m?.runtime)?.takeIf { it > 0 }?.let { if (bn) B.runtime(it) else "${it / 60}h ${it % 60}m".removePrefix("0h ") },
+                m?.genreList?.take(3)?.map { if (bn) B.genre(it) else it }?.joinToString(", ")?.takeIf { it.isNotBlank() },
             )
             if (facts.isNotEmpty()) {
                 Spacer(Modifier.height(10.dp))
@@ -239,11 +265,11 @@ private fun PauseInfo(c: PlayerController) {
             c.current.subtitle?.let { sub ->
                 Spacer(Modifier.height(14.dp))
                 Text(
-                    sub + (ep?.name?.let { "  ·  $it" } ?: ""), color = accent,
+                    (if (bn) B.digits(sub) else sub) + (ep?.name?.let { "  ·  $it" } ?: ""), color = accent,
                     style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
-            val plot = ep?.overview?.takeIf { it.isNotBlank() } ?: m?.overview
+            val plot = ep?.overview?.takeIf { it.isNotBlank() } ?: m?.let { com.israk.dhakaflix.ui.components.localOverview(it) }
             if (!plot.isNullOrBlank()) {
                 Spacer(Modifier.height(10.dp))
                 Text(plot, color = Color.White.copy(alpha = .78f), style = MaterialTheme.typography.bodyLarge, maxLines = 5, overflow = TextOverflow.Ellipsis)
@@ -254,7 +280,7 @@ private fun PauseInfo(c: PlayerController) {
             Spacer(Modifier.width(10.dp))
             Text(s.paused, color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.width(16.dp))
-            Text(fmtTime(c.position) + " / " + fmtTime(c.duration), color = TextDim, style = MaterialTheme.typography.titleMedium)
+            Text((fmtTime(c.position) + " / " + fmtTime(c.duration)).let { if (bn) B.digits(it) else it }, color = TextDim, style = MaterialTheme.typography.titleMedium)
         }
         // after a while the overlay dims down (easier on the eyes and the panel); any key brings it back
         val dim = remember { androidx.compose.animation.core.Animatable(0f) }

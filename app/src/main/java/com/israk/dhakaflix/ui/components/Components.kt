@@ -217,19 +217,25 @@ val LocalNewEpisodes = androidx.compose.runtime.compositionLocalOf<Set<String>> 
 /** TMDB title logo (like Apple TV / Netflix) with the plain title as fallback. */
 @Composable
 fun TitleOrLogo(item: ItemEntity, maxHeight: Dp, style: androidx.compose.ui.text.TextStyle, maxLines: Int = 2) {
-    var logo by remember(item.id) { mutableStateOf<String?>(null) }
-    LaunchedEffect(item.id) { logo = com.israk.dhakaflix.DhakaFlixApp.instance.library.discovery.logoUrl(item) }
+    val bn = isDhakaiya()
+    var logo by remember(item.id, bn) { mutableStateOf<String?>(null) }
+    LaunchedEffect(item.id, bn) {
+        val d = com.israk.dhakaflix.DhakaFlixApp.instance.library.discovery
+        // Dhakaiya: Bengali logo, else the Bengali title as text, else the English logo
+        logo = if (bn) d.logoUrlBangla(item) else d.logoUrl(item)
+    }
+    val title = localTitle(item)
     val l = logo
     if (l != null) {
         coil.compose.AsyncImage(
-            model = l, contentDescription = item.displayTitle,
+            model = l, contentDescription = title,
             // phone: keep big logos inside the screen width
             modifier = if (LocalIsTv.current) Modifier.heightIn(max = maxHeight).widthIn(max = 440.dp)
             else Modifier.heightIn(max = minOf(maxHeight, 84.dp)).fillMaxWidth(0.72f),
             contentScale = androidx.compose.ui.layout.ContentScale.Fit, alignment = Alignment.CenterStart,
         )
     } else {
-        Text(item.displayTitle, style = style, color = Color.White, fontWeight = FontWeight.Bold, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
+        Text(title, style = style, color = Color.White, fontWeight = FontWeight.Bold, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -590,18 +596,21 @@ fun <T> ChipRow(
 
 @Composable
 fun MetaLine(item: ItemEntity, extra: List<String> = emptyList()) {
+    val bn = isDhakaiya()
     val parts = buildList {
-        item.displayYear?.let { add(it.toString()) }
-        item.runtime?.takeIf { it > 0 }?.let { add("${it / 60}h ${it % 60}m".removePrefix("0h ")) }
-        item.quality?.let { add(it) }
-        item.tags?.split(',')?.filter { it.contains("Audio", true) }?.forEach { add(it) }
-        addAll(extra)
+        item.displayYear?.let { add(if (bn) Bangla.digits(it.toString()) else it.toString()) }
+        item.runtime?.takeIf { it > 0 }?.let { add(if (bn) Bangla.runtime(it) else "${it / 60}h ${it % 60}m".removePrefix("0h ")) }
+        item.quality?.let { add(if (bn) Bangla.digits(it) else it) }
+        item.tags?.split(',')?.filter { it.contains("Audio", true) }?.forEach {
+            add(if (bn && it.trim().equals("Dual Audio", true)) "ডুয়াল অডিও" else it)
+        }
+        addAll(if (bn) extra.map { Bangla.genre(it) } else extra)
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
         item.rating?.takeIf { it > 0 }?.let {
             Icon(Icons.Filled.Star, null, tint = Color(0xFFFFC53D), modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(4.dp))
-            Text(fmtRating(it), color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+            Text(if (bn) Bangla.digits(fmtRating(it)) else fmtRating(it), color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.width(12.dp))
         }
         Text(parts.joinToString("   ·   "), color = TextDim, style = MaterialTheme.typography.labelLarge, maxLines = 1)

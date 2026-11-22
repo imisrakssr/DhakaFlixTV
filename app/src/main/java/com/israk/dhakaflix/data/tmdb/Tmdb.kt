@@ -45,6 +45,16 @@ data class TmdbImage(@SerialName("file_path") val filePath: String, @SerialName(
                      @SerialName("vote_average") val vote: Double? = null)
 
 @Serializable
+data class TmdbTranslationData(val title: String? = null, val name: String? = null, val overview: String? = null)
+
+@Serializable
+data class TmdbTranslation(@SerialName("iso_639_1") val lang: String? = null, @SerialName("iso_3166_1") val country: String? = null,
+                           val data: TmdbTranslationData? = null)
+
+@Serializable
+data class TmdbTranslations(val translations: List<TmdbTranslation> = emptyList())
+
+@Serializable
 data class TmdbImageSet(val logos: List<TmdbImage> = emptyList())
 
 @Serializable
@@ -141,8 +151,15 @@ class TmdbClient(private val http: OkHttpClient, private val key: () -> String) 
     suspend fun details(tv: Boolean, id: Int): TmdbDetails =
         json.decodeFromString(TmdbDetails.serializer(), get(if (tv) "tv/$id" else "movie/$id", mapOf("append_to_response" to "credits")))
 
-    suspend fun season(tvId: Int, season: Int): TmdbSeason =
-        json.decodeFromString(TmdbSeason.serializer(), get("tv/$tvId/season/$season", emptyMap()))
+    suspend fun season(tvId: Int, season: Int, lang: String = "en-US"): TmdbSeason =
+        json.decodeFromString(TmdbSeason.serializer(), get("tv/$tvId/season/$season", emptyMap(), lang))
+
+    /** Bengali title / plot from TMDB's community translations (null when nobody translated it). */
+    suspend fun bengali(tv: Boolean, id: Int): TmdbTranslationData? {
+        val all = json.decodeFromString(TmdbTranslations.serializer(), get(if (tv) "tv/$id/translations" else "movie/$id/translations", emptyMap()))
+        return all.translations.firstOrNull { it.lang == "bn" && it.country == "BD" }?.data
+            ?: all.translations.firstOrNull { it.lang == "bn" }?.data
+    }
 
     suspend fun recommendations(tv: Boolean, id: Int, page: Int = 1): List<TmdbResult> =
         json.decodeFromString(TmdbPage.serializer(), get(if (tv) "tv/$id/recommendations" else "movie/$id/recommendations", mapOf("page" to "$page"))).results
@@ -156,20 +173,20 @@ class TmdbClient(private val http: OkHttpClient, private val key: () -> String) 
     suspend fun videos(tv: Boolean, id: Int): List<TmdbVideo> =
         json.decodeFromString(TmdbVideos.serializer(), get(if (tv) "tv/$id/videos" else "movie/$id/videos", emptyMap())).results
 
-    suspend fun logos(tv: Boolean, id: Int): List<TmdbImage> =
-        json.decodeFromString(TmdbImageSet.serializer(), get(if (tv) "tv/$id/images" else "movie/$id/images", mapOf("include_image_language" to "en,null"))).logos
+    suspend fun logos(tv: Boolean, id: Int, langs: String = "en,null"): List<TmdbImage> =
+        json.decodeFromString(TmdbImageSet.serializer(), get(if (tv) "tv/$id/images" else "movie/$id/images", mapOf("include_image_language" to langs))).logos
 
     fun castToJson(cast: List<TmdbCast>): String = json.encodeToString(castSer, cast)
     fun castFromJson(s: String?): List<TmdbCast> =
         if (s.isNullOrBlank()) emptyList() else runCatching { json.decodeFromString(castSer, s) }.getOrDefault(emptyList())
 
-    private suspend fun get(path: String, params: Map<String, String>): String = withContext(Dispatchers.IO) {
+    private suspend fun get(path: String, params: Map<String, String>, lang: String = "en-US"): String = withContext(Dispatchers.IO) {
         val k = key().trim()
         if (k.isEmpty()) throw IOException("TMDB key missing")
         val bearer = k.startsWith("eyJ")
         val url = "https://api.themoviedb.org/3/$path".toHttpUrl().newBuilder().apply {
             params.forEach { (a, b) -> addQueryParameter(a, b) }
-            addQueryParameter("language", "en-US")
+            addQueryParameter("language", lang)
             if (!bearer) addQueryParameter("api_key", k)
         }.build()
         val req = Request.Builder().url(url).apply {

@@ -400,7 +400,7 @@ private fun FeaturedBanner(
                     MetaLine(cur, extra = cur.genreList.take(3))
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        cur.overview ?: "", style = MaterialTheme.typography.bodyMedium, color = TextDim,
+                        com.israk.dhakaflix.ui.components.localOverview(cur) ?: "", style = MaterialTheme.typography.bodyMedium, color = TextDim,
                         maxLines = 2, overflow = TextOverflow.Ellipsis,
                     )
                     Spacer(Modifier.height(18.dp))

@@ -230,7 +230,7 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
                         ExternalRatings(cur)
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            cur.overview ?: s.noMetadata, style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = .85f),
+                            com.israk.dhakaflix.ui.components.localOverview(cur) ?: s.noMetadata, style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = .85f),
                             maxLines = if (isTv) 5 else 8, overflow = TextOverflow.Ellipsis,
                         )
                         Spacer(Modifier.height(20.dp))
@@ -447,19 +447,20 @@ private fun EpisodeRow(v: VideoFile, tmdb: TmdbEpisode?, progress: ProgressEntit
             Column(Modifier.weight(1f)) {
                 val label = LibraryRepository.episodeLabel(v.season, v.episode)
                 Text(
-                    listOfNotNull(label, tmdb?.name).joinToString("  ·  ").ifEmpty { v.name },
+                    listOfNotNull(label?.let { com.israk.dhakaflix.ui.components.localDigits(it) }, tmdb?.name).joinToString("  ·  ").ifEmpty { v.name },
                     color = Color.White, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold,
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
                 tmdb?.overview?.takeIf { it.isNotBlank() }?.let {
                     Text(it, color = TextDim, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
+                val bn = com.israk.dhakaflix.ui.components.isDhakaiya()
                 Text(
                     listOfNotNull(
-                        if (v.size > 0) String.format("%.2f GB", v.size / 1073741824.0) else null,
-                        if (v.subs.isNotEmpty()) "CC" else null,
-                        tmdb?.runtime?.let { "$it min" },
-                    ).joinToString("  ·  "),
+                        if (v.size > 0) String.format(java.util.Locale.US, "%.2f GB", v.size / 1073741824.0) else null,
+                        if (v.subs.isNotEmpty()) (if (bn) "সাবটাইটেল" else "CC") else null,
+                        tmdb?.runtime?.let { if (bn) "$it মিনিট" else "$it min" },
+                    ).joinToString("  ·  ").let { if (bn) com.israk.dhakaflix.ui.components.Bangla.digits(it) else it },
                     color = TextDim.copy(alpha = .7f), style = MaterialTheme.typography.labelSmall,
                 )
             }

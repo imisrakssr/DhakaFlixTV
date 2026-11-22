@@ -402,9 +402,20 @@ class LibraryRepository(private val app: DhakaFlixApp) {
     }
 
     suspend fun tmdbSeason(tmdbId: Int, season: Int): Map<Int, TmdbEpisode> = withContext(Dispatchers.IO) {
-        val k = "$tmdbId:$season"
-        seasonCache[k] ?: runCatching { tmdb.season(tmdbId, season).episodes.associateBy { it.episodeNumber } }
-            .getOrDefault(emptyMap()).also { if (it.isNotEmpty()) seasonCache[k] = it }
+        val bn = app.settings.language.value == "dhk"
+        val k = "$tmdbId:$season" + if (bn) ":bn" else ""
+        seasonCache[k]?.let { return@withContext it }
+        val en = runCatching { tmdb.season(tmdbId, season).episodes.associateBy { it.episodeNumber } }.getOrDefault(emptyMap())
+        val out = if (!bn || en.isEmpty()) en else {
+            // Dhakaiya: Bengali episode names/plots where someone translated them, English otherwise
+            val b = runCatching { tmdb.season(tmdbId, season, "bn-BD").episodes.associateBy { it.episodeNumber } }.getOrDefault(emptyMap())
+            en.mapValues { (n, e) ->
+                val be = b[n]
+                fun bangla(s: String?) = s?.takeIf { it.isNotBlank() && it.any { ch -> ch in '\u0980'..'\u09FF' } }
+                e.copy(name = bangla(be?.name) ?: e.name, overview = bangla(be?.overview) ?: e.overview)
+            }
+        }
+        out.also { if (it.isNotEmpty()) seasonCache[k] = it }
     }
 
     // --------------------------------------------------------------- folders

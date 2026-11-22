@@ -98,6 +98,47 @@ class Discovery(private val app: DhakaFlixApp) {
     }
 
     /** Transparent title-logo image (TMDB), or null when there's none. Cached on disk. */
+    /** Bengali title and plot for Dhakaiya mode (null parts = no translation; callers fall back to English). */
+    data class Bangla(val title: String?, val overview: String?)
+    private val banglaMem = HashMap<String, Bangla>()
+
+    suspend fun bangla(item: ItemEntity): Bangla = withContext(Dispatchers.IO) {
+        val none = Bangla(null, null)
+        val id = item.tmdbId ?: return@withContext none
+        val k = (if (item.isSeries) "tv:" else "mv:") + id
+        banglaMem[k]?.let { return@withContext it }
+        prefs.getString("bn:$k", null)?.let { s ->
+            val i = s.indexOf('\u0001')
+            return@withContext Bangla(s.substring(0, i).ifBlank { null }, s.substring(i + 1).ifBlank { null }).also { banglaMem[k] = it }
+        }
+        if (!tmdb.hasKey) return@withContext none
+        val d = runCatching { tmdb.bengali(item.isSeries, id) }.getOrElse { return@withContext none }
+        val b = Bangla((d?.title ?: d?.name)?.trim()?.ifBlank { null }, d?.overview?.trim()?.ifBlank { null })
+        prefs.edit().putString("bn:$k", (b.title ?: "") + "\u0001" + (b.overview ?: "")).apply()
+        banglaMem[k] = b
+        b
+    }
+
+    /** Dhakaiya mode: a Bengali logo if TMDB has one; otherwise null when a Bengali title exists (shown as
+     *  text), else the usual English logo. */
+    suspend fun logoUrlBangla(item: ItemEntity): String? = withContext(Dispatchers.IO) {
+        val id = item.tmdbId ?: return@withContext null
+        val k = "bn" + (if (item.isSeries) "tv:" else "mv:") + id
+        if (logoMem.containsKey(k)) return@withContext logoMem[k]
+        if (prefs.contains("logo:$k")) return@withContext prefs.getString("logo:$k", null)?.ifBlank { null }.also { logoMem[k] = it }
+        if (!tmdb.hasKey) return@withContext null
+        val bnLogo = runCatching { tmdb.logos(item.isSeries, id, "bn").filter { it.lang == "bn" }.maxByOrNull { it.vote ?: 0.0 }?.filePath }
+            .getOrElse { return@withContext null }
+        val url = when {
+            bnLogo != null -> TmdbImages.url(bnLogo, "w500")
+            bangla(item).title != null -> null
+            else -> logoUrl(item)
+        }
+        prefs.edit().putString("logo:$k", url ?: "").apply()
+        logoMem[k] = url
+        url
+    }
+
     suspend fun logoUrl(item: ItemEntity): String? = withContext(Dispatchers.IO) {
         val id = item.tmdbId ?: return@withContext null
         val k = (if (item.isSeries) "tv:" else "mv:") + id
