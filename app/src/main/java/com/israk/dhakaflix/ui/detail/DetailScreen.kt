@@ -477,7 +477,7 @@ private fun ExternalRatings(item: com.israk.dhakaflix.data.db.ItemEntity) {
     Spacer(Modifier.height(10.dp))
     // one line of chips; on a narrow phone it scrolls sideways instead of squashing the last chip
     Row(
-        if (com.israk.dhakaflix.ui.theme.LocalIsTv.current) Modifier else Modifier.horizontalScroll(rememberScrollState()),
+        Modifier.horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         list.take(5).forEach { r ->
