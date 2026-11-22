@@ -2,6 +2,8 @@
 
 package com.israk.dhakaflix.ui.home
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
@@ -263,7 +265,8 @@ fun HomeScreen(onOpen: (String) -> Unit) {
         val posterW = com.israk.dhakaflix.ui.components.posterWidth(maxWidth)
         val landW = if (com.israk.dhakaflix.DhakaFlixApp.instance.settings.postersPerRow.collectAsState().value > 0) posterW * 1.96f
             else if (isTv) 220.dp else 210.dp
-        val bannerH: Dp = if (isTv) maxHeight * 0.82f - topInset else 460.dp
+        // phone: never taller than ~80% of the screen (landscape phones are only ~400dp high)
+        val bannerH: Dp = if (isTv) maxHeight * 0.82f - topInset else minOf(460.dp, maxHeight * 0.8f)
         if (isTv) HomeBackdrop(focus, bannerItem)
 
         androidx.compose.runtime.CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides OnlyIfNeeded) {
@@ -408,19 +411,21 @@ private fun FeaturedBanner(
                 val inList = user?.inWatchlist == true
                 Row(
                     Modifier
+                        // phone: buttons scroll sideways instead of cutting off the last label
+                        .then(if (!isTv) Modifier.horizontalScroll(rememberScrollState()) else Modifier)
                         .onFocusChanged { if (it.hasFocus) onFocus() }
                         .onPreviewKeyEvent { e ->
                             if (e.type == KeyEventType.KeyDown && e.key == Key.DirectionDown) { onDown(); true } else false
                         },
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(if (isTv) 12.dp else 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    PillButton(s.play, onClick = { onPlay(item) }, icon = Icons.Filled.PlayArrow, primary = true, focusRequester = playFr)
-                    PillButton(s.moreInfo, onClick = { onInfo(item) }, icon = Icons.Filled.Info)
+                    PillButton(s.play, onClick = { onPlay(item) }, icon = Icons.Filled.PlayArrow, primary = true, focusRequester = playFr, compact = !isTv)
+                    PillButton(s.moreInfo, onClick = { onInfo(item) }, icon = Icons.Filled.Info, compact = !isTv)
                     PillButton(
                         if (inList) s.inWatchlist else s.addToWatchlist,
                         onClick = { scope.launch { app.library.toggleWatchlist(item.id) } },
-                        icon = if (inList) Icons.Filled.Check else Icons.Filled.Add, selected = inList,
+                        icon = if (inList) Icons.Filled.Check else Icons.Filled.Add, selected = inList, compact = !isTv,
                     )
                     if (count > 1) {
                         Spacer(Modifier.width(10.dp))
