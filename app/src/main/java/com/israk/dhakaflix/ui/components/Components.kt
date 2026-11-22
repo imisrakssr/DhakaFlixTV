@@ -223,7 +223,9 @@ fun TitleOrLogo(item: ItemEntity, maxHeight: Dp, style: androidx.compose.ui.text
     if (l != null) {
         coil.compose.AsyncImage(
             model = l, contentDescription = item.displayTitle,
-            modifier = Modifier.heightIn(max = maxHeight).widthIn(max = 440.dp),
+            // phone: keep big logos inside the screen width
+            modifier = if (LocalIsTv.current) Modifier.heightIn(max = maxHeight).widthIn(max = 440.dp)
+            else Modifier.heightIn(max = minOf(maxHeight, 84.dp)).fillMaxWidth(0.72f),
             contentScale = androidx.compose.ui.layout.ContentScale.Fit, alignment = Alignment.CenterStart,
         )
     } else {

@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.israk.dhakaflix.ui.settings
 
 import androidx.activity.compose.BackHandler
@@ -326,7 +328,7 @@ private fun LibraryCard() {
         Spacer(Modifier.height(8.dp))
         Text(s.autoRefreshNote, color = TextDim, style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.height(14.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             PillButton(s.refreshLibrary, onClick = { repo.startSync(false) }, icon = Icons.Filled.Refresh, primary = true)
             PillButton(s.fullRescan, onClick = { repo.startSync(true) })
         }
@@ -343,26 +345,26 @@ private fun AppearanceCard() {
     val size by st.uiSize.collectAsState()
     Card {
         Label(s.language)
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             PillButton("English", onClick = { st.setLanguage("en") }, selected = lang == "en", compact = true)
             PillButton("ঢাকাইয়া 😎", onClick = { st.setLanguage("dhk") }, selected = lang == "dhk", compact = true)
         }
         if (isTv) {
             Label(s.navigation)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 PillButton(s.navTop, onClick = { st.setNavPosition("top") }, selected = nav == "top", compact = true)
                 PillButton(s.navLeft, onClick = { st.setNavPosition("left") }, selected = nav == "left", compact = true)
             }
         }
         Label(s.uiSize)
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             PillButton(s.sizeSmall, onClick = { st.setUiSize(0) }, selected = size == 0, compact = true)
             PillButton(s.sizeMedium, onClick = { st.setUiSize(1) }, selected = size == 1, compact = true)
             PillButton(s.sizeLarge, onClick = { st.setUiSize(2) }, selected = size == 2, compact = true)
         }
         val perRow by st.postersPerRow.collectAsState()
         Label(s.postersPerRow)
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(0, 5, 6, 7, 8, 9).forEach { n ->
                 PillButton(if (n == 0) s.auto else "$n", onClick = { st.setPostersPerRow(n) }, selected = perRow == n, compact = true)
             }
@@ -370,7 +372,7 @@ private fun AppearanceCard() {
         AppIconPicker()
         val saver by st.screensaver.collectAsState()
         Label(s.screensaver)
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(0, 2, 5, 10, 15).forEach { n ->
                 PillButton(if (n == 0) s.off else s.minutesShort.format(n), onClick = { st.setScreensaver(n) }, selected = saver == n, compact = true)
             }
@@ -499,7 +501,7 @@ private fun CategoriesCard() {
                 })
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 6.dp)) {
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
             PillButton(s.addCategory, onClick = { showAdd = true }, icon = Icons.Filled.Add)
             PillButton(s.resetDefaults, onClick = { st.resetSources() })
             PillButton(s.refreshLibrary, onClick = { app.library.startSync(false) }, icon = Icons.Filled.Refresh)
@@ -555,7 +557,7 @@ private fun TmdbCard() {
                 label = { Text(s.tmdbKey) }, colors = fieldColors(), modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 PillButton(s.save, primary = true, icon = Icons.Filled.Check, onClick = {
                     app.settings.setTmdbKey(text)
                     editing = false
@@ -565,7 +567,7 @@ private fun TmdbCard() {
                 if (effective.isNotBlank()) PillButton(s.cancel, onClick = { editing = false; text = saved })
             }
         } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 PillButton(s.edit, icon = Icons.Filled.Edit, primary = true, onClick = { editing = true })
                 PillButton(s.testAgain, icon = Icons.Filled.Refresh, onClick = { repo.verifyTmdb() })
                 if (saved.isNotBlank()) PillButton(s.remove, icon = Icons.Filled.Delete, onClick = {
@@ -586,7 +588,7 @@ private fun PlayerCard() {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Card {
             Label(s.playerEngine)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 PillButton(s.engineAuto, onClick = { st.setEngine("auto") }, selected = engine == "auto", compact = true)
                 PillButton("ExoPlayer", onClick = { st.setEngine("exo") }, selected = engine == "exo", compact = true)
                 PillButton("LibVLC", onClick = { st.setEngine("vlc") }, selected = engine == "vlc", compact = true)
@@ -604,14 +606,14 @@ private fun PlayerCard() {
         val subColor by st.subColor.collectAsState()
         Card {
             Label(s.subtitleSize)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(s.sizeSmall, s.sizeMedium, s.sizeLarge, "XL").forEachIndexed { i, l ->
                     PillButton(l, onClick = { st.setSubSize(i) }, selected = subSize == i, compact = true)
                 }
             }
             Spacer(Modifier.height(10.dp))
             Label(s.subtitleColor)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 com.israk.dhakaflix.data.AppSettings.SUB_COLORS.forEachIndexed { i, (_, name) ->
                     PillButton(name, onClick = { st.setSubColor(i) }, selected = subColor == i, compact = true)
                 }
@@ -621,12 +623,12 @@ private fun PlayerCard() {
         val pauseAfter by st.pauseOverlay.collectAsState()
         Card {
             Label(s.controlsHide)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(3, 5, 8, 10, 15).forEach { n -> PillButton("${n}s", onClick = { st.setControlsTimeout(n) }, selected = hideAfter == n, compact = true) }
             }
             Spacer(Modifier.height(10.dp))
             Label(s.pauseInfo)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(0, 5, 10, 20, 30).forEach { n ->
                     PillButton(if (n == 0) s.off else "${n}s", onClick = { st.setPauseOverlay(n) }, selected = pauseAfter == n, compact = true)
                 }
@@ -740,7 +742,7 @@ private fun RenameDialog(current: String, onDismiss: () -> Unit, onReset: () -> 
         ) {
             Text(current, style = MaterialTheme.typography.titleLarge, color = Color.White)
             OutlinedTextField(name, { name = it }, label = { Text(s.name) }, singleLine = true, colors = fieldColors(), modifier = Modifier.fillMaxWidth())
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 PillButton(s.save, primary = true, onClick = { if (name.isNotBlank()) onSave(name.trim()) })
                 PillButton(s.resetDefaults, onClick = onReset)
                 PillButton(s.cancel, onClick = onDismiss)
@@ -764,11 +766,11 @@ private fun AddCategoryDialog(onDismiss: () -> Unit, onAdd: (Source) -> Unit) {
             Text(s.addCategory, style = MaterialTheme.typography.titleLarge, color = Color.White)
             OutlinedTextField(name, { name = it }, label = { Text(s.name) }, singleLine = true, colors = fieldColors(), modifier = Modifier.fillMaxWidth())
             OutlinedTextField(url, { url = it }, label = { Text(s.url) }, singleLine = true, colors = fieldColors(), modifier = Modifier.fillMaxWidth())
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 PillButton(s.movies, onClick = { type = MediaType.MOVIE }, selected = type == MediaType.MOVIE, compact = true)
                 PillButton(s.series, onClick = { type = MediaType.SERIES }, selected = type == MediaType.SERIES, compact = true)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 PillButton(s.save, primary = true, onClick = {
                     val u = url.trim().let { if (it.endsWith("/")) it else "$it/" }
                     if (name.isNotBlank() && u.startsWith("http")) {
@@ -883,12 +885,12 @@ private fun KeyCard(
                 label = { Text(title) }, colors = fieldColors(), modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 PillButton(s.save, primary = true, icon = Icons.Filled.Check, onClick = { onSave(text); editing = false })
                 PillButton(s.cancel, onClick = { editing = false; text = saved })
             }
         } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 PillButton(s.edit, icon = Icons.Filled.Edit, primary = saved.isBlank(), onClick = { editing = true })
                 if (saved.isNotBlank()) {
                     PillButton(s.testAgain, icon = Icons.Filled.Refresh, onClick = onTest)
@@ -950,7 +952,7 @@ private fun SimklCard() {
                     color = TextDim, style = MaterialTheme.typography.bodySmall,
                 )
                 Spacer(Modifier.height(14.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     PillButton(s.syncNow, icon = Icons.Filled.Refresh, primary = true, onClick = { simkl.syncNow() })
                     PillButton(s.signOut, onClick = { simkl.signOut() })
                 }
@@ -981,11 +983,11 @@ private fun SimklCard() {
                     OutlinedTextField(clientText, { clientText = it }, singleLine = true, label = { Text("Simkl Client ID") },
                         colors = fieldColors(), modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(12.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         PillButton(s.save, primary = true, icon = Icons.Filled.Check, onClick = { app.settings.setSimklClientId(clientText); editClient = false })
                         PillButton(s.cancel, onClick = { editClient = false; clientText = clientSaved })
                     }
-                } else Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                } else androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (hasClient) PillButton(s.signIn, primary = true, onClick = { simkl.startLogin() })
                     PillButton("Client ID", icon = Icons.Filled.Edit, onClick = { editClient = true })
                 }
@@ -1022,7 +1024,7 @@ private fun DiagnosticsCard() {
     val r = report
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Card {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 PillButton(if (running) s.loading else s.runAgain, icon = Icons.Filled.Refresh, primary = true, onClick = { run() })
                 PillButton(s.clearCache, icon = Icons.Filled.Delete, onClick = {
                     scope.launch {

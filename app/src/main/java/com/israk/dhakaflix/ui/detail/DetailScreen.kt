@@ -356,7 +356,9 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
         // fixed in the top-left corner; same as the remote's BACK (returns to the exact card / row you came from)
         PillButton(
             s.back, icon = Icons.AutoMirrored.Filled.ArrowBack, compact = true, onClick = onBack,
-            modifier = Modifier.align(Alignment.TopStart).padding(start = 20.dp, top = if (isTv) 14.dp else 36.dp),
+            modifier = Modifier.align(Alignment.TopStart).padding(start = 20.dp, top = if (isTv) 14.dp else 36.dp)
+                // phone: dark backing so it stays readable over bright posters
+                .then(if (isTv) Modifier else Modifier.clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = .55f))),
         )
     }
 
@@ -466,7 +468,8 @@ private fun ExternalRatings(item: com.israk.dhakaflix.data.db.ItemEntity) {
     LaunchedEffect(tmdb, key) { list = repo.mdblist.ratings(tmdb, item.isSeries) }
     if (list.isEmpty()) return
     Spacer(Modifier.height(10.dp))
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    // one line of chips; on a narrow phone it scrolls sideways instead of squashing the last chip
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         list.take(5).forEach { r ->
             val tint = when (r.source) {
                 "imdb" -> Color(0xFFF5C518)
@@ -479,9 +482,9 @@ private fun ExternalRatings(item: com.israk.dhakaflix.data.db.ItemEntity) {
                 Modifier.clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(alpha = .55f)).padding(horizontal = 9.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(r.label, color = tint, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                Text(r.label, color = tint, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                 Spacer(Modifier.width(6.dp))
-                Text(r.value, color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                Text(r.value, color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
             }
         }
     }
