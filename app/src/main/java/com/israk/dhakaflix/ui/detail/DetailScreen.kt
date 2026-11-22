@@ -175,9 +175,17 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
     var trailerKey by remember(id) { mutableStateOf<String?>(null) }
     LaunchedEffect(cur.tmdbId) { trailerKey = repo.discovery.trailerKey(cur) }
     var showTrailer by remember(id) { mutableStateOf(false) }
+    // A YouTube WebView behind the page is far too heavy for 1-2 GB sticks (Mi TV Stick: the whole
+    // page froze, 96% janky frames, WebView ran out of GPU memory). Only bigger boxes get it;
+    // the Trailer button still works everywhere.
+    val roomForTrailer = remember {
+        val am = ctx.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        val mi = android.app.ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }
+        !am.isLowRamDevice && mi.totalMem > 2_500L * 1024 * 1024
+    }
     LaunchedEffect(trailerKey, bgTrailers) {
         showTrailer = false
-        if (trailerKey != null && bgTrailers && isTv) { delay(2500); showTrailer = true }
+        if (trailerKey != null && bgTrailers && isTv && roomForTrailer) { delay(2500); showTrailer = true }
     }
 
     Box(Modifier.fillMaxSize().background(Bg)) {
