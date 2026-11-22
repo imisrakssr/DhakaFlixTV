@@ -162,7 +162,7 @@ val Dhakaiya = Strings(
     loading = "আনতাছি, খাড়া…", folderError = "ফোল্ডারটা খোলে না, সার্ভার মনে হয় ঘুমায় 😪",
     minutes = "মিনিট", season = "সিজন", noMetadata = "কাহিনি কেউ কয় নাই।", remove = "সরা", back = "পিছে যা",
     fit = "ফিট", zoom = "জুম", stretch = "টাইনা লম্বা", searchTmdb = "TMDB-তে খোঁজ", upNext = "এরপরে আইতাছে",
-    greeting = "আইজকা মুড কেমুন, ইসরাক? 🍿",
+    greeting = "আইজকা মুড কেমুন, ইশরাক? 🍿",
     navigation = "মেনু কই থাকব", navTop = "উপরে", navLeft = "বাম সাইডে",
     uiSize = "সাইজ (বড়-ছোট)", sizeSmall = "ছোট্ট", sizeMedium = "মাঝারি", sizeLarge = "দামড়া",
     tmdbConnected = "কানেক্ট হইছে, জব্বর! ✅", tmdbInvalid = "চাবি ভুল মামা ❌", tmdbOffline = "TMDB-তে যাইতে পারতাছি না, নেট দেখ", tmdbChecking = "চেক করতাছি…", tmdbNotSet = "চাবি দেস নাই এহনো",
