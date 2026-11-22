@@ -18,7 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -334,7 +334,7 @@ private fun MainScaffold(tab: Tab, currentTab: () -> Tab, onTab: (Tab) -> Unit, 
             PhoneTabBar(
                 tab = tab, onTab = onTab, labels = { it.label(s) },
                 modifier = Modifier.align(Alignment.BottomCenter)
-                    .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.navigationBars)
+                    .navigationBarsPadding()
                     .padding(start = 14.dp, end = 14.dp, bottom = 12.dp),
             )
         }
