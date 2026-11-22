@@ -243,6 +243,7 @@ fun PosterGrid(
     val watched = remember(watchedIds) { watchedIds.toHashSet() }
     val cell: Dp = if (isTv) 112.dp else 104.dp
     val gridState = rememberLazyGridState()
+    com.israk.dhakaflix.ui.OnTabReselect { gridState.animateScrollToItem(0) }
     com.israk.dhakaflix.ui.ReportScroll { gridState.firstVisibleItemIndex > 0 }
     com.israk.dhakaflix.ui.components.CalmVerticalScroll(topMargin = LocalTopInset.current + 12.dp, bottomMargin = 64.dp) {
     LazyVerticalGrid(

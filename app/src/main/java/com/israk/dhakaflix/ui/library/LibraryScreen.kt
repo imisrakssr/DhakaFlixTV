@@ -108,6 +108,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
     val landW = if (perRow > 0) posterW * 1.96f else if (isTv) 220.dp else 210.dp
     val cell: Dp = if (isTv) 112.dp else 104.dp
     val gridState = rememberLazyGridState()
+    com.israk.dhakaflix.ui.OnTabReselect { gridState.animateScrollToItem(0) }
     com.israk.dhakaflix.ui.ReportScroll { gridState.firstVisibleItemIndex > 0 }
     val entry = Modifier.entryFocus()
 

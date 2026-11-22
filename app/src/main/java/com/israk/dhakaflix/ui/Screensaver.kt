@@ -53,6 +53,18 @@ object AppEvents {
     var voiceHandled = 0
     var navHandled = 0
     val screensaverOn = MutableStateFlow(false)
+    /** Bumped when the tab that is already open is picked again: the page scrolls back to the top. */
+    val scrollTop = MutableStateFlow(0)
+}
+
+/** Runs [toTop] when the current tab is picked again in the menu. */
+@Composable
+fun OnTabReselect(toTop: suspend () -> Unit) {
+    val tick by AppEvents.scrollTop.collectAsState()
+    val seen = androidx.compose.runtime.remember { intArrayOf(tick) }
+    LaunchedEffect(tick) {
+        if (tick != seen[0]) { seen[0] = tick; runCatching { toTop() } }
+    }
 }
 
 /** Slow Ken-Burns slideshow of backdrops with the time, after a few idle minutes. */

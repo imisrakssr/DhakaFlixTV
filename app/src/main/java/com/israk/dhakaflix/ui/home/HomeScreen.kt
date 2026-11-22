@@ -199,6 +199,7 @@ fun HomeScreen(onOpen: (String) -> Unit) {
     }
 
     val listState = rememberLazyListState()
+    com.israk.dhakaflix.ui.OnTabReselect { listState.animateScrollToItem(0) }
     com.israk.dhakaflix.ui.ReportScroll { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 140 }
     val bannerFr = LocalEntryFocus.current ?: remember { FocusRequester() }
     val rowFrs = remember { HashMap<String, FocusRequester>() }

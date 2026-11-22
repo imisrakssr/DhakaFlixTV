@@ -184,7 +184,7 @@ fun AppRoot(onExit: () -> Unit) {
         label = "nav",
     ) { target ->
         if (target == null) {
-            holder.SaveableStateProvider("main") { MainScaffold(tab, { tab }, { tab = it }, open, onExit) }
+            holder.SaveableStateProvider("main") { MainScaffold(tab, { tab }, { t -> if (t == tab) AppEvents.scrollTop.value++ else tab = t }, open, onExit) }
         } else {
             holder.SaveableStateProvider("detail:${target.first}:${target.second}") {
                 val autoPlay = target.first.startsWith("play:")

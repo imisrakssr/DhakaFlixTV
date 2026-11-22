@@ -209,6 +209,8 @@ fun SettingsScreen() {
     } else {
         var section by rememberSaveable { mutableStateOf<Section?>(null) }
         BackHandler(enabled = section != null) { section = null }
+        // phone: tapping Settings again goes back to the top-level list
+        com.israk.dhakaflix.ui.OnTabReselect { section = null }
         val cur = section
         if (cur == null) {
             LazyColumn(
@@ -263,6 +265,7 @@ private fun SectionItem(sec: Section, selected: Boolean, selectOnFocus: Boolean,
 @Composable
 private fun SectionContent(sec: Section) {
     val state = rememberLazyListState()
+    com.israk.dhakaflix.ui.OnTabReselect { state.animateScrollToItem(0) }
     val tv = LocalIsTv.current
     LazyColumn(
         Modifier.fillMaxSize().dpadScrollFallback(state),
