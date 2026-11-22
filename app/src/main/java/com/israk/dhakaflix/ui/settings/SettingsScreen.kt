@@ -103,6 +103,7 @@ import com.israk.dhakaflix.ui.components.dpadScrollFallback
 import com.israk.dhakaflix.ui.components.glass
 import com.israk.dhakaflix.ui.entryFocus
 import com.israk.dhakaflix.ui.home.rowTitle
+import com.israk.dhakaflix.ui.home.defaultRowTitle
 import com.israk.dhakaflix.ui.theme.Accents
 import com.israk.dhakaflix.ui.theme.LocalAccent
 import com.israk.dhakaflix.ui.theme.LocalEdge
@@ -337,26 +338,10 @@ private fun AppearanceCard() {
     val st = DhakaFlixApp.instance.settings
     val s = LocalStrings.current
     val isTv = LocalIsTv.current
-    val accent by st.accent.collectAsState()
     val lang by st.language.collectAsState()
     val nav by st.navPosition.collectAsState()
     val size by st.uiSize.collectAsState()
     Card {
-        Label(s.accentColor)
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(vertical = 6.dp, horizontal = 4.dp)) {
-            itemsIndexed(Accents) { i, a ->
-                var f by remember { mutableStateOf(false) }
-                Box(
-                    Modifier.size(if (f) 44.dp else 38.dp)
-                        .onFocusChanged { f = it.isFocused }
-                        .clip(CircleShape)
-                        .background(a.color)
-                        .border(3.dp, if (f) Color.White else Color.Transparent, CircleShape)
-                        .clickable { st.setAccent(i) },
-                    contentAlignment = Alignment.Center,
-                ) { if (accent == i) Icon(Icons.Filled.Check, null, tint = Color.White) }
-            }
-        }
         Label(s.language)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             PillButton("English", onClick = { st.setLanguage("en") }, selected = lang == "en", compact = true)
@@ -443,6 +428,15 @@ private fun HomeRowsEditor() {
     val s = LocalStrings.current
     val rows by st.homeRows.collectAsState()
     val sources by st.sources.collectAsState()
+    val names by st.rowNames.collectAsState()
+    var renaming by remember { mutableStateOf<String?>(null) }
+    renaming?.let { key ->
+        RenameDialog(
+            current = names[key] ?: defaultRowTitle(key, s, sources),
+            onDismiss = { renaming = null },
+            onReset = { st.setRowName(key, null); renaming = null },
+        ) { st.setRowName(key, it); renaming = null }
+    }
     val allRows = remember(rows, sources) {
         val keys = rows.map { it.key }.toSet()
         rows + sources.filter { it.enabled && RowKeys.source(it.id) !in keys }.map { HomeRow(RowKeys.source(it.id), false) }
@@ -450,10 +444,12 @@ private fun HomeRowsEditor() {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         allRows.forEachIndexed { i, row ->
             ToggleRow(
-                title = rowTitle(row.key, s, sources),
+                title = names[row.key] ?: rowTitle(row.key, s, sources),
                 checked = row.enabled,
                 onToggle = { st.setHomeRows(allRows.toMutableList().also { it[i] = row.copy(enabled = !row.enabled) }) },
                 trailing = {
+                    PillButton("", icon = Icons.Filled.Edit, compact = true, onClick = { renaming = row.key })
+                    Spacer(Modifier.width(8.dp))
                     PillButton("", icon = Icons.Filled.KeyboardArrowUp, compact = true, onClick = {
                         if (i > 0) st.setHomeRows(allRows.toMutableList().also { l -> val t = l[i - 1]; l[i - 1] = l[i]; l[i] = t })
                     })
@@ -474,16 +470,33 @@ private fun CategoriesCard() {
     val s = LocalStrings.current
     val sources by st.sources.collectAsState()
     var showAdd by remember { mutableStateOf(false) }
+    var renaming by remember { mutableStateOf<String?>(null) }
+    renaming?.let { id ->
+        val src = sources.firstOrNull { it.id == id }
+        if (src == null) renaming = null else RenameDialog(
+            current = src.name,
+            onDismiss = { renaming = null },
+            onReset = {
+                val def = com.israk.dhakaflix.data.Defaults.sources.firstOrNull { it.id == id }?.name
+                if (def != null) st.setSources(sources.map { if (it.id == id) it.copy(name = def) else it })
+                renaming = null
+            },
+        ) { n -> st.setSources(sources.map { if (it.id == id) it.copy(name = n) else it }); renaming = null }
+    }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         sources.forEachIndexed { i, src ->
             val sub = (if (src.type == MediaType.MOVIE) s.movies else s.series) + " · " + android.net.Uri.decode(src.url)
             val toggle = { st.setSources(sources.toMutableList().also { it[i] = src.copy(enabled = !src.enabled) }) }
             if (src.custom) {
                 ToggleRow(title = src.name, subtitle = sub, checked = src.enabled, onToggle = toggle, trailing = {
+                    PillButton("", icon = Icons.Filled.Edit, compact = true, onClick = { renaming = src.id })
+                    Spacer(Modifier.width(8.dp))
                     PillButton("", icon = Icons.Filled.Delete, compact = true, onClick = { st.setSources(sources.filterNot { it.id == src.id }) })
                 })
             } else {
-                ToggleRow(title = src.name, subtitle = sub, checked = src.enabled, onToggle = toggle)
+                ToggleRow(title = src.name, subtitle = sub, checked = src.enabled, onToggle = toggle, trailing = {
+                    PillButton("", icon = Icons.Filled.Edit, compact = true, onClick = { renaming = src.id })
+                })
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 6.dp)) {
@@ -713,6 +726,28 @@ private fun fieldColors() = OutlinedTextFieldDefaults.colors(
     focusedTextColor = Color.White, unfocusedTextColor = Color.White, cursorColor = LocalAccent.current,
     focusedLabelColor = LocalAccent.current, unfocusedLabelColor = TextDim,
 )
+
+/** Small dialog to rename a home row or a server category. */
+@Composable
+private fun RenameDialog(current: String, onDismiss: () -> Unit, onReset: () -> Unit, onSave: (String) -> Unit) {
+    val s = LocalStrings.current
+    var name by remember { mutableStateOf(current) }
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Column(
+            Modifier.widthIn(max = 560.dp).fillMaxWidth().padding(24.dp)
+                .clip(RoundedCornerShape(20.dp)).background(Color(0xFF15181F)).padding(22.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(current, style = MaterialTheme.typography.titleLarge, color = Color.White)
+            OutlinedTextField(name, { name = it }, label = { Text(s.name) }, singleLine = true, colors = fieldColors(), modifier = Modifier.fillMaxWidth())
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                PillButton(s.save, primary = true, onClick = { if (name.isNotBlank()) onSave(name.trim()) })
+                PillButton(s.resetDefaults, onClick = onReset)
+                PillButton(s.cancel, onClick = onDismiss)
+            }
+        }
+    }
+}
 
 @Composable
 private fun AddCategoryDialog(onDismiss: () -> Unit, onAdd: (Source) -> Unit) {

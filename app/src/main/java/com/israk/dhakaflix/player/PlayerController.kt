@@ -102,8 +102,11 @@ class PlayerController(
     val showSkipIntro: Boolean
         get() {
             val w = introWindow ?: return false
-            return !introSkipped && current.episode != null && position in (w.first - 1500)..(w.second - 4000)
+            return !introSkipped && isEpisode && position in (w.first - 1500)..(w.second - 4000)
         }
+
+    /** Series episode (also when the file name didn't give an episode number). */
+    private val isEpisode: Boolean get() = current.episode != null || meta?.isSeries == true
 
     fun skipIntro() {
         val w = introWindow ?: return
@@ -343,7 +346,9 @@ class PlayerController(
         isPlaying = e.isPlaying
         buffering = e.isBuffering
         if (ownSubUrl != null) subtitleText = SubtitleParser.at(cues, position, subDelay)
-        if (settings.autoSkipIntro.value && showSkipIntro && position > (introWindow?.first ?: 0)) { skipIntro(); toast = "⏭ " + "Intro" }
+        // auto skip: only while actually playing (not while the user is scrubbing) and once per episode
+        if (settings.autoSkipIntro.value && isPlaying && seekJob?.isActive != true && showSkipIntro &&
+            position >= (introWindow?.first ?: 0) - 1500) { skipIntro(); toast = "⏭ Intro skipped" }
         if (sleepAt > 0 && SystemClock.elapsedRealtime() >= sleepAt) {
             sleepAt = 0
             e.pause(); isPlaying = false
@@ -410,12 +415,20 @@ class PlayerController(
 
     /** A 30 s – 3 min jump forward in the first 10 minutes of an episode is almost always "skip the intro". */
     private fun learnIntro(from: Long, to: Long) {
-        if (current.episode == null || from < 0 || from > 10 * 60_000L) return
+        if (!isEpisode || from < 0 || from > 12 * 60_000L) return
         val d = to - from
-        if (d !in 30_000L..180_000L) return
+        if (d !in 20_000L..240_000L) return
+        val first = introWindow == null
         introWindow = from to to
         introSkipped = true
         introStore.edit().putString(current.itemId, "$from,$to").apply()
+        if (first) toast = "⏭ Intro saved for this series"
+    }
+
+    fun toggleAutoSkipIntro() {
+        val v = !settings.autoSkipIntro.value
+        settings.setAutoSkipIntro(v)
+        toast = "⏭ Auto skip intro: " + if (v) "On" else "Off"
     }
 
     fun seekToFraction(f: Float) {
@@ -536,8 +549,14 @@ class PlayerController(
             KeyEvent.KEYCODE_MEDIA_NEXT -> { if (down && hasNext) next(); return true }
         }
         if (pauseInfo) {
-            // any key just wakes the player up again
-            if (down && e.repeatCount == 0) { pauseInfo = false; showControls() }
+            // OK resumes straight away; any other key just wakes the player up again
+            if (down && e.repeatCount == 0) {
+                pauseInfo = false
+                when (e.keyCode) {
+                    KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> { if (!isPlaying) togglePlay() else showControls() }
+                    else -> showControls()
+                }
+            }
             return true
         }
         if (resumeAsk != null || error != null || panel != null || exitAsk) { if (down) interaction++; return false }

@@ -252,6 +252,13 @@ private fun PauseInfo(c: PlayerController) {
             Spacer(Modifier.width(16.dp))
             Text(fmtTime(c.position) + " / " + fmtTime(c.duration), color = TextDim, style = MaterialTheme.typography.titleMedium)
         }
+        // after a while the overlay dims down (easier on the eyes and the panel); any key brings it back
+        val dim = remember { androidx.compose.animation.core.Animatable(0f) }
+        LaunchedEffect(Unit) {
+            delay(45_000)
+            dim.animateTo(0.65f, androidx.compose.animation.core.tween(4_000))
+        }
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = dim.value)))
     }
 }
 
@@ -519,7 +526,9 @@ private fun SidePanel(c: PlayerController) {
             PlayerController.Panel.SUB_COLOR -> OptionList(
                 com.israk.dhakaflix.data.AppSettings.SUB_COLORS.mapIndexed { i, (_, name) -> Opt(i.toString(), "●  $name", i == c.subColor) }
             ) { id -> id?.toIntOrNull()?.let { c.setSubtitleColor(it) } }
-            PlayerController.Panel.OPTIONS -> OptionList(
+            PlayerController.Panel.OPTIONS -> {
+                val autoSkip by com.israk.dhakaflix.DhakaFlixApp.instance.settings.autoSkipIntro.collectAsState()
+                OptionList(
                 listOf(
                     Opt("sync", s.subtitleSync + "  (" + String.format(Locale.US, "%+.1fs", c.subDelay / 1000.0) + ")", false, chevron = true),
                     Opt("subsize", s.subtitleSize + "  (" + listOf(s.sizeSmall, s.sizeMedium, s.sizeLarge, "XL")[c.subSize.coerceIn(0, 3)] + ")", false, chevron = true),
@@ -529,6 +538,7 @@ private fun SidePanel(c: PlayerController) {
                     Opt("aspect", s.aspect, false, chevron = true),
                     Opt("engine", s.switchEngine + "  (" + (if (c.kind == EngineKind.EXO) "ExoPlayer" else "LibVLC") + ")", false),
                     Opt("night", s.nightMode + "  ·  " + s.nightModeHint, c.nightMode),
+                    Opt("autoskip", s.autoSkipIntro, autoSkip),
                     Opt("sleep", s.sleepTimer + "  (" + when {
                         c.sleepEndOfEpisode -> s.endOfEpisode
                         c.sleepAt > 0 -> s.sleepIn.format(s.minutesShort.format(((c.sleepAt - SystemClock.elapsedRealtime()) / 60_000L + 1).toInt()))
@@ -547,8 +557,10 @@ private fun SidePanel(c: PlayerController) {
                     "engine" -> { c.panel = null; c.switchEngine() }
                     "vlc" -> { c.panel = null; c.openInVlc() }
                     "night" -> c.toggleNightMode()
+                    "autoskip" -> c.toggleAutoSkipIntro()
                     "sleep" -> c.panel = PlayerController.Panel.SLEEP
                 }
+            }
             }
         }
     }

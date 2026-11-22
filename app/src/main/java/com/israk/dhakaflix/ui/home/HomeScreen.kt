@@ -102,7 +102,10 @@ import com.israk.dhakaflix.ui.theme.TextDim
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-fun rowTitle(key: String, s: Strings, sources: List<Source>): String = when {
+fun rowTitle(key: String, s: Strings, sources: List<Source>): String =
+    DhakaFlixApp.instance.settings.rowNames.value[key] ?: defaultRowTitle(key, s, sources)
+
+fun defaultRowTitle(key: String, s: Strings, sources: List<Source>): String = when {
     key == RowKeys.CONTINUE -> s.continueWatching
     key == RowKeys.LATEST -> s.latestUploads
     key == RowKeys.LATEST_MOVIES -> s.latestMovies
@@ -132,6 +135,7 @@ fun HomeScreen(onOpen: (String) -> Unit) {
 
     val rows by app.settings.homeRows.collectAsState()
     val sources by app.settings.sources.collectAsState()
+    val rowNames by app.settings.rowNames.collectAsState()
     val count by remember { repo.itemCount }.collectAsState(initial = -1)
     val sync by repo.sync.collectAsState()
     val watchedIds by remember { app.db.user().watchedIds() }.collectAsState(initial = emptyList())
@@ -154,10 +158,10 @@ fun HomeScreen(onOpen: (String) -> Unit) {
     }
     val visible = enabledRows.mapNotNull { r ->
         if (r.key == RowKeys.CONTINUE) {
-            if (cw.isEmpty()) null else HomeRowData(r.key, s.continueWatching, cw, emptyList())
+            if (cw.isEmpty()) null else HomeRowData(r.key, rowNames[r.key] ?: s.continueWatching, cw, emptyList())
         } else {
             val items = rowItems[r.key].orEmpty()
-            val title = if (r.key == RowKeys.BECAUSE) s.becauseYouWatched.format(because?.seedTitle ?: "…") else rowTitle(r.key, s, sources)
+            val title = rowNames[r.key] ?: if (r.key == RowKeys.BECAUSE) s.becauseYouWatched.format(because?.seedTitle ?: "…") else rowTitle(r.key, s, sources)
             if (items.isEmpty()) null else HomeRowData(r.key, title, emptyList(), items)
         }
     }

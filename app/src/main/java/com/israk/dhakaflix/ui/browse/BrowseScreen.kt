@@ -233,6 +233,7 @@ fun PosterGrid(
     emptyText: String,
     override: List<ItemEntity>? = null,
     overrideTitle: String? = null,
+    onClearOverride: (() -> Unit)? = null,
     header: LazyGridScope.() -> Unit,
 ) {
     val app = DhakaFlixApp.instance
@@ -256,7 +257,16 @@ fun PosterGrid(
         if (override != null) {
             if (overrideTitle != null && override.isNotEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
-                    Text(overrideTitle, color = Color.White, style = MaterialTheme.typography.titleMedium)
+                    androidx.compose.foundation.layout.Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    ) {
+                        Text(overrideTitle, Modifier.weight(1f), color = Color.White, style = MaterialTheme.typography.titleMedium)
+                        if (onClearOverride != null) com.israk.dhakaflix.ui.components.PillButton(
+                            LocalStrings.current.clearFilters, icon = androidx.compose.material.icons.Icons.Filled.Close,
+                            compact = true, onClick = onClearOverride,
+                        )
+                    }
                 }
             }
             items(override.size, key = { override[it].id }) { i ->

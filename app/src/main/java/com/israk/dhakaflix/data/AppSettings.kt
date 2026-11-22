@@ -183,6 +183,20 @@ class AppSettings(ctx: Context) {
     }
     fun resetSources() = setSources(Defaults.sources)
 
+    /** Custom names for home rows (row key -> name). Empty = built-in name. */
+    private val _rowNames = MutableStateFlow(
+        (prefs.getString("row_names", "") ?: "").split('\n').mapNotNull { l ->
+            val i = l.indexOf('\t'); if (i <= 0) null else l.substring(0, i) to l.substring(i + 1)
+        }.toMap()
+    )
+    val rowNames: StateFlow<Map<String, String>> = _rowNames
+    fun setRowName(key: String, name: String?) {
+        val m = _rowNames.value.toMutableMap()
+        if (name.isNullOrBlank()) m.remove(key) else m[key] = name.trim().replace('\n', ' ').replace('\t', ' ')
+        _rowNames.value = m
+        prefs.edit().putString("row_names", m.entries.joinToString("\n") { "${it.key}\t${it.value}" }).apply()
+    }
+
     private fun loadSources(): List<Source> {
         val s = prefs.getString("sources", null) ?: return Defaults.sources
         return runCatching { json.decodeFromString(sourceSer, s) }.getOrNull()?.takeIf { it.isNotEmpty() } ?: Defaults.sources

@@ -32,6 +32,7 @@ class PlayerActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        window.decorView.keepScreenOn = true
         hideSystemBars()
 
         val app = application as DhakaFlixApp
@@ -46,11 +47,11 @@ class PlayerActivity : ComponentActivity() {
         val tv = MainActivity.isTvDevice(this)
 
         setContent {
-            val accent by app.settings.accent.collectAsState()
+            val appIcon by app.settings.appIcon.collectAsState()
             val lang by app.settings.language.collectAsState()
             val uiSize by app.settings.uiSize.collectAsState()
             ScaledDensity(isTv = tv, uiSize = uiSize) {
-                DhakaFlixTheme(accentIndex = accent, isTv = tv, edge = edgeFor(tv, LocalConfiguration.current.screenWidthDp)) {
+                DhakaFlixTheme(appIcon = appIcon, isTv = tv, edge = edgeFor(tv, LocalConfiguration.current.screenWidthDp)) {
                     CompositionLocalProvider(LocalStrings provides stringsFor(lang)) {
                         PlayerScreen(c)
                     }
@@ -79,7 +80,22 @@ class PlayerActivity : ComponentActivity() {
         return super.dispatchKeyEvent(event)
     }
 
+    /** Keeps the TV's own screensaver away while the player is open, paused or not. */
+    private var wake: android.os.PowerManager.WakeLock? = null
+
+    @Suppress("DEPRECATION")
+    override fun onResume() {
+        super.onResume()
+        if (wake == null) wake = runCatching {
+            (getSystemService(POWER_SERVICE) as android.os.PowerManager)
+                .newWakeLock(android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK, "dhakaflix:player")
+                .apply { setReferenceCounted(false) }
+        }.getOrNull()
+        runCatching { wake?.acquire(6 * 3600_000L) }
+    }
+
     override fun onPause() {
+        runCatching { if (wake?.isHeld == true) wake?.release() }
         super.onPause()
         // stop sound the moment the player is closed, don't wait for onDestroy
         if (isFinishing) { ctrl?.release(); ctrl = null }

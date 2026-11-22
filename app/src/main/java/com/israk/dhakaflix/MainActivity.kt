@@ -60,13 +60,19 @@ class MainActivity : ComponentActivity() {
         // Compose paints the whole screen itself: drop the window background (one less full-screen fill per frame)
         window.decorView.post { window.setBackgroundDrawable(null) }
         setContent {
-            val accent by app.settings.accent.collectAsState()
+            val appIcon by app.settings.appIcon.collectAsState()
+            // with the app's own screensaver on, keep the TV's screensaver from taking over while we're open
+            val saverMin by app.settings.screensaver.collectAsState()
+            androidx.compose.runtime.LaunchedEffect(saverMin) {
+                if (saverMin > 0) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
             val lang by app.settings.language.collectAsState()
             val uiSize by app.settings.uiSize.collectAsState()
             val width = LocalConfiguration.current.screenWidthDp
             val strings = remember(lang) { stringsFor(lang) }
             ScaledDensity(isTv = tv, uiSize = uiSize) {
-                DhakaFlixTheme(accentIndex = accent, isTv = tv, edge = edgeFor(tv, width)) {
+                DhakaFlixTheme(appIcon = appIcon, isTv = tv, edge = edgeFor(tv, width)) {
                     val newEpisodes by app.library.newEpisodeIds.collectAsState()
                     CompositionLocalProvider(LocalStrings provides strings, com.israk.dhakaflix.ui.components.LocalNewEpisodes provides newEpisodes) {
                         var splashDone by rememberSaveable { mutableStateOf(false) }

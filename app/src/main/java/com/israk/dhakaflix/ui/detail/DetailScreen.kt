@@ -202,15 +202,9 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
         LazyColumn(
             Modifier.fillMaxSize().dpadScrollFallback(detailList),
             state = detailList,
-            contentPadding = PaddingValues(start = edge, end = edge, top = if (isTv) 44.dp else 210.dp, bottom = 60.dp),
+            contentPadding = PaddingValues(start = edge, end = edge, top = if (isTv) 64.dp else 210.dp, bottom = 60.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            item(key = "back") {
-                // same as the remote's BACK: returns to the exact card / row you came from
-                Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
-                    PillButton(s.back, icon = Icons.AutoMirrored.Filled.ArrowBack, compact = true, onClick = onBack)
-                }
-            }
             item(key = "header") {
                 Row {
                     if (isTv) {
@@ -359,6 +353,11 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
                 Text(cur.rawName, color = TextDim.copy(alpha = .5f), style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 16.dp))
             }
         }
+        // fixed in the top-left corner; same as the remote's BACK (returns to the exact card / row you came from)
+        PillButton(
+            s.back, icon = Icons.AutoMirrored.Filled.ArrowBack, compact = true, onClick = onBack,
+            modifier = Modifier.align(Alignment.TopStart).padding(start = 20.dp, top = if (isTv) 14.dp else 36.dp),
+        )
     }
 
     if (showFix) FixMatchDialog(cur, onDismiss = { showFix = false })

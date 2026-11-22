@@ -34,6 +34,17 @@ val Accents = listOf(
     AccentOption("Lime", Color(0xFF84CC16)),
 )
 
+/** The accent colour follows the app icon picked in Settings (same palettes as ci/logo.py). */
+fun iconAccent(appIcon: String): Color = when (appIcon) {
+    "sunset" -> Color(0xFFFF7A28)
+    "emerald" -> Color(0xFF10B981)
+    "royal" -> Color(0xFF8C50FF)
+    "crimson" -> Color(0xFFE5323B)
+    "gold" -> Color(0xFFE0A21B)
+    "mono" -> Color(0xFF8A94A8)
+    else -> Color(0xFF2E9BFF)
+}
+
 val Bg = Color(0xFF07080B)
 val Surface1 = Color(0xFF12141A)
 val Surface2 = Color(0xFF1B1E26)
@@ -77,8 +88,8 @@ private val AppTypography = Typography(
 )
 
 @Composable
-fun DhakaFlixTheme(accentIndex: Int, isTv: Boolean, edge: Dp, content: @Composable () -> Unit) {
-    val target = Accents[accentIndex.coerceIn(0, Accents.lastIndex)].color
+fun DhakaFlixTheme(appIcon: String, isTv: Boolean, edge: Dp, content: @Composable () -> Unit) {
+    val target = iconAccent(appIcon)
     val accent by animateColorAsState(target, tween(600), label = "accent")
     val scheme = darkColorScheme(
         primary = accent,

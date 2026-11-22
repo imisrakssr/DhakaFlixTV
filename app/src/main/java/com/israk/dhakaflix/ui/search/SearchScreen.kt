@@ -109,6 +109,7 @@ fun SearchScreen(onOpen: (String) -> Unit) {
         emptyText = if (showRecent) s.searchEmptyHint else s.noResults,
         override = if (showRecent) recent else null,
         overrideTitle = s.recentSearches,
+        onClearOverride = { app.settings.clearRecentSearch() },
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
