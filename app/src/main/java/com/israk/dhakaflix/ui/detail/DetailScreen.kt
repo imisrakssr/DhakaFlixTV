@@ -447,7 +447,7 @@ private fun EpisodeRow(v: VideoFile, tmdb: TmdbEpisode?, progress: ProgressEntit
             Column(Modifier.weight(1f)) {
                 val label = LibraryRepository.episodeLabel(v.season, v.episode)
                 Text(
-                    listOfNotNull(label?.let { com.israk.dhakaflix.ui.components.localDigits(it) }, tmdb?.name).joinToString("  ·  ").ifEmpty { v.name },
+                    listOfNotNull(label, tmdb?.name).joinToString("  ·  ").ifEmpty { v.name },
                     color = Color.White, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold,
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )

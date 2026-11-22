@@ -407,12 +407,13 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         seasonCache[k]?.let { return@withContext it }
         val en = runCatching { tmdb.season(tmdbId, season).episodes.associateBy { it.episodeNumber } }.getOrDefault(emptyMap())
         val out = if (!bn || en.isEmpty()) en else {
-            // Dhakaiya: Bengali episode names/plots where someone translated them, English otherwise
+            // Dhakaiya: Bengali episode plots where someone translated them, English otherwise
             val b = runCatching { tmdb.season(tmdbId, season, "bn-BD").episodes.associateBy { it.episodeNumber } }.getOrDefault(emptyMap())
             en.mapValues { (n, e) ->
                 val be = b[n]
                 fun bangla(s: String?) = s?.takeIf { it.isNotBlank() && it.any { ch -> ch in '\u0980'..'\u09FF' } }
-                e.copy(name = bangla(be?.name) ?: e.name, overview = bangla(be?.overview) ?: e.overview)
+                // episode names stay in English; only the plot is translated
+                e.copy(overview = bangla(be?.overview) ?: e.overview)
             }
         }
         out.also { if (it.isNotEmpty()) seasonCache[k] = it }

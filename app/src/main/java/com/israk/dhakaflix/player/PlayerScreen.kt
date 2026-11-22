@@ -207,23 +207,18 @@ private fun PauseInfo(c: PlayerController) {
     val bn = com.israk.dhakaflix.ui.components.isDhakaiya()
     val B = com.israk.dhakaflix.ui.components.Bangla
     var clock by remember { mutableStateOf("") }
-    var ampm by remember { mutableStateOf("") }
     var date by remember { mutableStateOf("") }
+    var endsAt by remember { mutableStateOf("") }
     LaunchedEffect(bn) {
         while (true) {
             val now = java.util.Date()
-            val cal = java.util.Calendar.getInstance()
-            if (bn) {
-                // Dhakaiya: Bengali digits, day and month names, and the time of day in words
-                val h = cal.get(java.util.Calendar.HOUR_OF_DAY)
-                clock = B.digits(java.text.SimpleDateFormat("h:mm", Locale.US).format(now))
-                ampm = when (h) { in 4..11 -> "সকাল"; in 12..15 -> "দুপুর"; in 16..17 -> "বিকাল"; in 18..19 -> "সন্ধ্যা"; else -> "রাত" }
-                date = B.digits(java.text.SimpleDateFormat("EEEE, d MMMM", B.locale).format(now))
-            } else {
-                clock = java.text.SimpleDateFormat("h:mm", Locale.US).format(now)
-                ampm = java.text.SimpleDateFormat("a", Locale.US).format(now)
-                date = java.text.SimpleDateFormat("EEEE, d MMMM", Locale.US).format(now)
-            }
+            clock = B.clock(now, bn)
+            date = B.date(now, bn)
+            val left = (c.duration - c.position).coerceAtLeast(0)
+            endsAt = if (c.duration > 0) {
+                val t = B.clock(java.util.Date(now.time + left), bn)
+                if (bn) "শেষ হইবো $t" else "Ends at $t"
+            } else ""
             delay(15_000)
         }
     }
@@ -234,11 +229,7 @@ private fun PauseInfo(c: PlayerController) {
     ) {
         // big clock with the day and date
         Column(Modifier.align(Alignment.TopEnd).padding(top = 28.dp, end = 44.dp), horizontalAlignment = Alignment.End) {
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(clock, color = Color.White, style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Light)
-                Spacer(Modifier.width(8.dp))
-                Text(ampm, Modifier.padding(bottom = 8.dp), color = Color.White.copy(alpha = .8f), style = MaterialTheme.typography.titleLarge)
-            }
+            Text(clock, color = Color.White, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Light)
             Text(date, color = Color.White.copy(alpha = .75f), style = MaterialTheme.typography.titleMedium)
         }
         Column(Modifier.align(Alignment.CenterStart).padding(start = 56.dp, end = 56.dp).widthIn(max = 560.dp)) {
@@ -265,7 +256,7 @@ private fun PauseInfo(c: PlayerController) {
             c.current.subtitle?.let { sub ->
                 Spacer(Modifier.height(14.dp))
                 Text(
-                    (if (bn) B.digits(sub) else sub) + (ep?.name?.let { "  ·  $it" } ?: ""), color = accent,
+                    sub + (ep?.name?.let { "  ·  $it" } ?: ""), color = accent,
                     style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
@@ -281,6 +272,10 @@ private fun PauseInfo(c: PlayerController) {
             Text(s.paused, color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.width(16.dp))
             Text((fmtTime(c.position) + " / " + fmtTime(c.duration)).let { if (bn) B.digits(it) else it }, color = TextDim, style = MaterialTheme.typography.titleMedium)
+            if (endsAt.isNotEmpty()) {
+                Spacer(Modifier.width(14.dp))
+                Text(endsAt, color = TextDim.copy(alpha = .8f), style = MaterialTheme.typography.labelMedium)
+            }
         }
         // after a while the overlay dims down (easier on the eyes and the panel); any key brings it back
         val dim = remember { androidx.compose.animation.core.Animatable(0f) }

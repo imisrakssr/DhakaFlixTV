@@ -476,9 +476,31 @@ private fun TvTopBar(nav: NavHandle, visible: Boolean, locked: Boolean) {
         ) {
             SyncIndicator()
             Spacer(Modifier.width(12.dp))
+            TopClock()
+            Spacer(Modifier.width(14.dp))
             SimklAvatar()
         }
     }
+}
+
+/** Small clock in the top bar, next to the profile picture (follows the app language). */
+@Composable
+private fun TopClock() {
+    val bn = com.israk.dhakaflix.ui.components.isDhakaiya()
+    var now by remember { mutableStateOf(java.util.Date()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            now = java.util.Date()
+            // wake up right after the minute changes
+            kotlinx.coroutines.delay(60_000L - System.currentTimeMillis() % 60_000L + 200L)
+        }
+    }
+    Text(
+        com.israk.dhakaflix.ui.components.Bangla.clock(now, bn),
+        color = Color.White.copy(alpha = .9f),
+        // same type as the menu pills so it sits on the same line
+        style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold,
+    )
 }
 
 /** Signed-in Simkl account picture with a thin accent ring (display only, not focusable). */

@@ -39,6 +39,24 @@ object Bangla {
     )
 
     fun genre(name: String): String = genres[name] ?: name
+
+    fun partOfDay(hour: Int): String = when (hour) {
+        in 4..11 -> "সকাল"; in 12..15 -> "দুপুর"; in 16..17 -> "বিকাল"; in 18..19 -> "সন্ধ্যা"; else -> "রাত"
+    }
+
+    /** "বিকাল ৪:১৫" in Dhakaiya, "4:15 PM" otherwise. */
+    fun clock(time: java.util.Date, bn: Boolean): String {
+        val hm = java.text.SimpleDateFormat("h:mm", Locale.US).format(time)
+        if (!bn) return hm + " " + java.text.SimpleDateFormat("a", Locale.US).format(time)
+        val h = java.util.Calendar.getInstance().apply { this.time = time }.get(java.util.Calendar.HOUR_OF_DAY)
+        return partOfDay(h) + " " + digits(hm)
+    }
+
+    /** "২২ এ নভেম্বর, রবিবার" in Dhakaiya, "Sunday, 22 November" otherwise. */
+    fun date(time: java.util.Date, bn: Boolean): String =
+        if (bn) digits(java.text.SimpleDateFormat("d", Locale.US).format(time)) + " এ " +
+            java.text.SimpleDateFormat("MMMM", locale).format(time) + ", " + java.text.SimpleDateFormat("EEEE", locale).format(time)
+        else java.text.SimpleDateFormat("EEEE, d MMMM", Locale.US).format(time)
 }
 
 /** True while the app language is Dhakaiya. */

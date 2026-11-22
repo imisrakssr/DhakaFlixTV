@@ -217,14 +217,10 @@ val LocalNewEpisodes = androidx.compose.runtime.compositionLocalOf<Set<String>> 
 /** TMDB title logo (like Apple TV / Netflix) with the plain title as fallback. */
 @Composable
 fun TitleOrLogo(item: ItemEntity, maxHeight: Dp, style: androidx.compose.ui.text.TextStyle, maxLines: Int = 2) {
-    val bn = isDhakaiya()
-    var logo by remember(item.id, bn) { mutableStateOf<String?>(null) }
-    LaunchedEffect(item.id, bn) {
-        val d = com.israk.dhakaflix.DhakaFlixApp.instance.library.discovery
-        // Dhakaiya: Bengali logo, else the Bengali title as text, else the English logo
-        logo = if (bn) d.logoUrlBangla(item) else d.logoUrl(item)
-    }
-    val title = localTitle(item)
+    // titles always stay in English (logo or text), whatever the app language
+    var logo by remember(item.id) { mutableStateOf<String?>(null) }
+    LaunchedEffect(item.id) { logo = com.israk.dhakaflix.DhakaFlixApp.instance.library.discovery.logoUrl(item) }
+    val title = item.displayTitle
     val l = logo
     if (l != null) {
         coil.compose.AsyncImage(
