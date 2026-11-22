@@ -158,6 +158,9 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
     }
 
     val progressByUrl = remember(progress) { progress.associateBy { it.fileUrl } }
+    // episodes Simkl marks as watched (from any device), even before this device has a progress entry
+    val epVersion by app.library.simkl.watchedEpisodesVersion.collectAsState()
+    val simklEps = remember(cur.id, epVersion) { app.library.simkl.watchedEpisodes(cur.id) }
     val plan: PlayPlan? = remember(cur, content, episodes, progress) {
         buildPlan(cur, content, episodes, progressByUrl, progress.firstOrNull(), app.library)
     }
@@ -301,6 +304,7 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
                 itemsIndexed(episodes, key = { _, v -> v.url }) { i, v ->
                     EpisodeRow(
                         v = v, tmdb = v.episode?.let { tmdbEps[it] }, progress = progressByUrl[v.url],
+                        watched = v.season != null && v.episode != null && (v.season to v.episode) in simklEps,
                         onClick = { play(PlayPlan(repo.playlistFor(cur, episodes), i, null, null), PlayerActivity.MODE_ASK) },
                     )
                 }
@@ -415,7 +419,7 @@ private fun Section(title: String) {
 }
 
 @Composable
-private fun EpisodeRow(v: VideoFile, tmdb: TmdbEpisode?, progress: ProgressEntity?, onClick: () -> Unit) {
+private fun EpisodeRow(v: VideoFile, tmdb: TmdbEpisode?, progress: ProgressEntity?, watched: Boolean = false, onClick: () -> Unit) {
     val ctx = LocalContext.current
     val isTv = LocalIsTv.current
     FocusFrame(onClick = onClick, focusedScale = 1.02f, shape = RoundedCornerShape(14.dp), modifier = Modifier.widthIn(max = 900.dp).fillMaxWidth()) { focused ->
@@ -430,12 +434,12 @@ private fun EpisodeRow(v: VideoFile, tmdb: TmdbEpisode?, progress: ProgressEntit
                 } else {
                     Icon(Icons.Filled.PlayArrow, null, tint = TextDim, modifier = Modifier.align(Alignment.Center).size(32.dp))
                 }
-                if (progress?.completed == true) {
+                if (progress?.completed == true || watched) {
                     Box(Modifier.align(Alignment.TopEnd).padding(6.dp).size(22.dp).background(LocalAccent.current, CircleShape), contentAlignment = Alignment.Center) {
                         Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(15.dp))
                     }
                 }
-                if (progress != null && !progress.completed) {
+                if (progress != null && !progress.completed && !watched) {
                     ProgressLine(progress.fraction, Modifier.align(Alignment.BottomCenter).padding(6.dp))
                 }
             }

@@ -258,7 +258,24 @@ class Simkl(private val app: DhakaFlixApp) {
         pullPlayback()
     }
 
+    /** Episodes Simkl says are watched, per series (shown as a check on the episode even when the file
+     *  isn't listed yet). Kept as "s:e" strings under the item id. */
+    private val epStore = app.settings.store("simkl_watched_eps")
+    private val _epVersion = kotlinx.coroutines.flow.MutableStateFlow(0)
+    val watchedEpisodesVersion: kotlinx.coroutines.flow.StateFlow<Int> = _epVersion
+    fun watchedEpisodes(itemId: String): Set<Pair<Int, Int>> =
+        (epStore.getStringSet(itemId, emptySet()) ?: emptySet()).mapNotNull { s ->
+            val i = s.indexOf(':'); if (i <= 0) null else s.substring(0, i).toIntOrNull()?.let { a -> s.substring(i + 1).toIntOrNull()?.let { a to it } }
+        }.toSet()
+    private fun saveWatchedEpisodes(all: Map<String, Set<Pair<Int, Int>>>) {
+        val e = epStore.edit().clear()
+        all.forEach { (id, eps) -> e.putStringSet(id, eps.map { "${it.first}:${it.second}" }.toSet()) }
+        e.apply()
+        _epVersion.value++
+    }
+
     private suspend fun applyRemote(r: Remote) {
+        saveWatchedEpisodes(r.episodes)
         val prevWatched = snap.getStringSet("watched", emptySet()) ?: emptySet()
         val prevList = snap.getStringSet("list", emptySet()) ?: emptySet()
         val firstPull = !snap.contains("watched")

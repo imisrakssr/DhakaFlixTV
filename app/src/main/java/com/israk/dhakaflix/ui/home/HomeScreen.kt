@@ -311,6 +311,7 @@ fun HomeScreen(onOpen: (String) -> Unit) {
                     MediaRow(row.title, row.items, key = { it.id }, nav = nav, modifier = Modifier.onFocusChanged { if (it.hasFocus) focusedRow[0] = row.key }) { item ->
                         com.israk.dhakaflix.ui.components.Top10Card(
                             rank = row.items.indexOf(item) + 1, item = item, width = posterW,
+                            watched = item.id in watchedSet,
                             onClick = { onOpen(item.id) },
                             onFocused = { focus.inRows = true; focus.item = item },
                         )

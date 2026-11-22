@@ -235,7 +235,7 @@ fun TitleOrLogo(item: ItemEntity, maxHeight: Dp, style: androidx.compose.ui.text
 
 /** Netflix-style "Top 10" card: a huge outlined rank number tucked behind the poster. */
 @Composable
-fun Top10Card(rank: Int, item: ItemEntity, width: Dp, onClick: () -> Unit, onFocused: () -> Unit) {
+fun Top10Card(rank: Int, item: ItemEntity, width: Dp, onClick: () -> Unit, onFocused: () -> Unit, watched: Boolean = false) {
     val density = androidx.compose.ui.platform.LocalDensity.current
     val numSize = with(density) { (width * 1.05f).toSp() }
     Box(Modifier.width(width * (if (rank >= 10) 1.75f else 1.45f))) {
@@ -248,7 +248,7 @@ fun Top10Card(rank: Int, item: ItemEntity, width: Dp, onClick: () -> Unit, onFoc
                 drawStyle = androidx.compose.ui.graphics.drawscope.Stroke(width = with(density) { 3.dp.toPx() }),
             ),
         )
-        PosterCard(item, width, onClick = onClick, modifier = Modifier.align(Alignment.TopEnd), onFocused = onFocused)
+        PosterCard(item, width, onClick = onClick, modifier = Modifier.align(Alignment.TopEnd), onFocused = onFocused, watched = watched)
     }
 }
 
