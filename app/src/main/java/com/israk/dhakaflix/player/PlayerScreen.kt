@@ -218,8 +218,12 @@ private fun PauseInfo(c: PlayerController) {
         Column(Modifier.align(Alignment.CenterStart).padding(start = 56.dp, end = 56.dp).widthIn(max = 560.dp)) {
             Text(s.youAreWatching, color = TextDim, style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(6.dp))
-            Text(
-                m?.displayTitle ?: c.current.title, color = Color.White, style = MaterialTheme.typography.displaySmall,
+            // the title's logo, like the Home hero (plain bold text when there is no logo)
+            if (m != null) com.israk.dhakaflix.ui.components.TitleOrLogo(
+                m, maxHeight = 110.dp,
+                style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
+            ) else Text(
+                c.current.title, color = Color.White, style = MaterialTheme.typography.displaySmall,
                 fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis,
             )
             val facts = listOfNotNull(
