@@ -227,8 +227,12 @@ abstract class ItemDao {
     )
     abstract suspend fun otherServerMatches(type: String, titles: List<String>, year: Int?): List<ItemEntity>
 
-    @Query("SELECT DISTINCT year FROM items WHERE year IS NOT NULL ORDER BY year DESC")
+    /** Years that really have titles (shown cards only, sane range). */
+    @Query("SELECT DISTINCT year FROM items WHERE isPrimary = 1 AND year BETWEEN 1900 AND 2100 ORDER BY year DESC")
     abstract fun years(): Flow<List<Int>>
+
+    @Query("SELECT DISTINCT year FROM items WHERE isPrimary = 1 AND type = :type AND year BETWEEN 1900 AND 2100 ORDER BY year DESC")
+    abstract fun yearsFor(type: String): Flow<List<Int>>
 
     @Query("UPDATE items SET metaState = 0 WHERE metaState = 2")
     abstract suspend fun retryNotFound()

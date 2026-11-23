@@ -58,6 +58,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -117,7 +118,8 @@ fun BrowseScreen(type: MediaType, onOpen: (String) -> Unit) {
     val s = LocalStrings.current
     val allSources by app.settings.sources.collectAsState()
     val sources = remember(allSources, type) { allSources.filter { it.type == type && it.enabled && !com.israk.dhakaflix.data.Defaults.isOtherServer(it.id) } }
-    val years by remember { app.db.items().years() }.collectAsState(initial = emptyList())
+    // only years this tab actually has (Movies or Series)
+    val years by remember(type) { app.db.items().yearsFor(type.name) }.collectAsState(initial = emptyList())
 
     var sort by rememberSaveable { mutableStateOf(SortMode.LATEST) }
     var genre by rememberSaveable { mutableStateOf<String?>(null) }
@@ -171,19 +173,39 @@ fun FilterBar(specs: List<FilterSpec>, onClear: (() -> Unit)?, firstModifier: Mo
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        val tv = LocalIsTv.current
         specs.forEachIndexed { i, sp ->
-            PillButton(
-                sp.title + ":  " + sp.selectedLabel,
-                icon = Icons.Filled.KeyboardArrowDown, compact = true,
-                selected = sp.highlight && sp.selected != null,
-                modifier = if (i == 0) firstModifier else Modifier,
-                onClick = { open = i },
-            )
+            Box {
+                PillButton(
+                    sp.title + ":  " + sp.selectedLabel,
+                    icon = Icons.Filled.KeyboardArrowDown, compact = true,
+                    selected = sp.highlight && sp.selected != null,
+                    modifier = if (i == 0) firstModifier else Modifier,
+                    onClick = { open = i },
+                )
+                // phone: a plain drop-down right under the button (TV keeps the side list)
+                if (!tv) androidx.compose.material3.DropdownMenu(
+                    expanded = open == i,
+                    onDismissRequest = { open = null },
+                    modifier = Modifier.heightIn(max = 380.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    containerColor = Color(0xFF17171F),
+                ) {
+                    sp.options.forEach { (id, label) ->
+                        val sel = id == sp.selected || (sp.selected == null && id == null)
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(label, color = if (sel) LocalAccent.current else Color.White, maxLines = 1) },
+                            trailingIcon = if (sel) ({ Icon(Icons.Filled.Check, null, tint = LocalAccent.current) }) else null,
+                            onClick = { sp.onSelect(id); open = null },
+                        )
+                    }
+                }
+            }
         }
         if (onClear != null) PillButton(s.clearFilters, icon = Icons.Filled.Close, compact = true, onClick = onClear)
     }
     }
-    open?.let { idx -> specs.getOrNull(idx)?.let { FilterSheet(it) { open = null } } }
+    if (LocalIsTv.current) open?.let { idx -> specs.getOrNull(idx)?.let { FilterSheet(it) { open = null } } }
 }
 
 @Composable
