@@ -205,6 +205,9 @@ abstract class ItemDao {
     @Query("SELECT * FROM items WHERE groupKey = :groupKey ORDER BY uploadedAt DESC")
     abstract fun versions(groupKey: String): Flow<List<ItemEntity>>
 
+    @Query("SELECT COUNT(*) FROM items WHERE sourceId LIKE 'bk-%'")
+    abstract fun otherServerCount(): Flow<Int>
+
     /** Other servers' folders (BokaSoka) are only an index for the server picker: never shown anywhere. */
     @Query("UPDATE items SET isPrimary = 0 WHERE sourceId LIKE 'bk-%' OR sourceId LIKE 'rd-%'")
     abstract suspend fun hideOtherServers()

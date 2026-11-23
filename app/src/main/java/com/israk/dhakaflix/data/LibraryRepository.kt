@@ -121,7 +121,9 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         scope.launch(Dispatchers.IO) {
             val count = db.items().countFlow().first()
             val stale = System.currentTimeMillis() - settings.lastSync.value > maxAgeMs
-            if (count == 0 || stale) startSync(force = false, manual = false) else { startEnrich(); startPosterScan() }
+            // also when another server's hidden index (BokaSoka) has never been built
+            val otherMissing = settings.sources.value.any { it.enabled && Defaults.isOtherServer(it.id) && db.items().countForSource(it.id) == 0 }
+            if (count == 0 || stale || otherMissing) startSync(force = false, manual = false) else { startEnrich(); startPosterScan() }
         }
     }
 

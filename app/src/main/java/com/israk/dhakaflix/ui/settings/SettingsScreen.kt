@@ -328,6 +328,14 @@ private fun LibraryCard() {
         if (sync.failedSources.isNotEmpty()) {
             Text("⚠ " + sync.failedSources.joinToString(), color = Color(0xFFFF8A80), style = MaterialTheme.typography.bodySmall)
         }
+        // the hidden BokaSoka index behind the server picker: shows whether it has been built
+        val bk by remember { app.db.items().otherServerCount() }.collectAsState(initial = 0)
+        val dhkLang = com.israk.dhakaflix.ui.components.isDhakaiya()
+        Text(
+            if (bk > 0) (if (dhkLang) "BokaSoka তালিকা: $bk টা" else "BokaSoka index: $bk titles")
+            else (if (dhkLang) "BokaSoka তালিকা এখনো বানানো হয় নাই — Refresh library চাপ" else "BokaSoka index not built yet — press Refresh library"),
+            color = if (bk > 0) TextDim else Color(0xFFFBBF24), style = MaterialTheme.typography.bodySmall,
+        )
         Spacer(Modifier.height(8.dp))
         Text(s.autoRefreshNote, color = TextDim, style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.height(14.dp))

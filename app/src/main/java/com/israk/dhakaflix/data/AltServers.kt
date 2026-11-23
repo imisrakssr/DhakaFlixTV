@@ -80,7 +80,8 @@ object AltServers {
      * Other DhakaFlix copies are not offered: the picker is only for other servers.
      */
     suspend fun find(meta: ItemEntity?, p: PlayItem): List<Alt> = withContext(Dispatchers.IO) {
-        val lib = runCatching { libraryCopies(meta, p) }.getOrDefault(emptyList())
+        val lib = runCatching { libraryCopies(meta, p) }.getOrDefault(emptyList()) +
+            runCatching { bokaSokaYearProbe(meta, p) }.getOrDefault(emptyList())
         val ext = runCatching { searchServers(meta, p) }.getOrDefault(emptyList())
         (lib + ext).distinctBy { it.url }.filter { it.url != p.url && !it.is3D }
             .also { list -> list.forEach { labels[it.url] = it.label } }
@@ -109,6 +110,32 @@ object AltServers {
                 Alt(serverOf(url), label, url, is3D = Defaults.is3D(v.rawName))
             }.getOrNull()
         }
+    }
+
+    /**
+     * BokaSoka English films sit in "<year>_Hollywood" folders (some in a "######" subfolder): look there
+     * directly, so they are found even before the index is built.
+     */
+    private suspend fun bokaSokaYearProbe(meta: ItemEntity?, p: PlayItem): List<Alt> {
+        if (meta?.isSeries == true || p.season != null) return emptyList()
+        val year = meta?.displayYear ?: meta?.year ?: return emptyList()
+        val want = listOfNotNull(meta?.title, meta?.tmdbTitle, p.title).map { norm(it) }.toSet()
+        val h5ai = DhakaFlixApp.instance.library.h5ai
+        val root = Defaults.BK_ROOT + "NAS1/Movies_Collection/Hollywood_Movies/${year}_Hollywood/"
+        val top = runCatching { h5ai.list(root) }.getOrNull() ?: return emptyList()
+        val dirs = top.filter { it.isDir } + top.filter { it.isDir && it.name.startsWith("#") }
+            .flatMap { d -> runCatching { h5ai.list(d.url) }.getOrDefault(emptyList()).filter { it.isDir } }
+        val out = mutableListOf<Alt>()
+        for (d in dirs) {
+            val parsed = NameParser.parseFolder(d.name, MediaType.MOVIE) ?: continue
+            if (norm(parsed.title) !in want || Defaults.is3D(d.name)) continue
+            val files = runCatching { h5ai.list(d.url) }.getOrDefault(emptyList())
+                .filter { !it.isDir && NameParser.ext(it.name) in NameParser.videoExt }
+            val f = files.maxByOrNull { it.sizeBytes } ?: continue
+            out += Alt("BokaSoka", listOfNotNull("English Movies", parsed.quality).joinToString(" · "), f.url)
+            if (out.size >= 3) break
+        }
+        return out
     }
 
     private suspend fun searchServers(meta: ItemEntity?, p: PlayItem): List<Alt> {
