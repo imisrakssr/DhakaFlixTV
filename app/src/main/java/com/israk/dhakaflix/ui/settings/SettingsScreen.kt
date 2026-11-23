@@ -690,8 +690,8 @@ private fun AboutCard() {
             Text("For more contact Israk", color = TextDim, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
             Spacer(Modifier.height(14.dp))
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                ContactRow(badge = "f", badgeColor = Color(0xFF1877F2), text = "fb.com/imisrakssr", url = "https://fb.com/imisrakssr")
-                ContactRow(badge = "GH", badgeColor = Color(0xFF24292F), text = "github.com/imisrakssr", url = "https://github.com/imisrakssr")
+                ContactRow(icon = com.israk.dhakaflix.R.drawable.ic_contact_facebook, text = "fb.com/imisrakssr", url = "https://fb.com/imisrakssr")
+                ContactRow(icon = com.israk.dhakaflix.R.drawable.ic_contact_github, text = "github.com/imisrakssr", url = "https://github.com/imisrakssr")
                 ContactRow(badge = "@", badgeColor = Color(0xFFEA4335), text = "israksisir@gmail.com", url = "mailto:israksisir@gmail.com")
             }
 
@@ -1151,7 +1151,7 @@ private fun DiagSection(title: String, rows: List<Triple<String, String, Boolean
 
 /** A contact line in About me: small coloured badge, the address, opens it when picked. */
 @Composable
-private fun ContactRow(badge: String, badgeColor: Color, text: String, url: String) {
+private fun ContactRow(text: String, url: String, icon: Int? = null, badge: String = "", badgeColor: Color = Color.Transparent) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     FocusFrame(
         onClick = {
@@ -1166,8 +1166,15 @@ private fun ContactRow(badge: String, badgeColor: Color, text: String, url: Stri
             Modifier.background(if (focused) Color.White.copy(alpha = .14f) else Color.White.copy(alpha = .06f)).padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.size(26.dp).clip(CircleShape).background(badgeColor), contentAlignment = Alignment.Center) {
-                Text(badge, color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+            if (icon != null) {
+                androidx.compose.foundation.Image(
+                    painter = androidx.compose.ui.res.painterResource(icon), contentDescription = null,
+                    modifier = Modifier.size(26.dp),
+                )
+            } else {
+                Box(Modifier.size(26.dp).clip(CircleShape).background(badgeColor), contentAlignment = Alignment.Center) {
+                    Text(badge, color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                }
             }
             Spacer(Modifier.width(10.dp))
             Text(text, color = Color.White, style = MaterialTheme.typography.bodyLarge)
