@@ -23,7 +23,7 @@ android {
         minSdk = 23
         targetSdk = 35
         versionCode = ciRun
-        versionName = "1.0.$ciRun"
+        versionName = "2.0.$ciRun"
         buildConfigField("String", "TMDB_API_KEY", "\"$tmdbKey\"")
         buildConfigField("String", "SIMKL_CLIENT_ID", "\"$simklId\"")
     }
