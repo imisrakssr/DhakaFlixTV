@@ -56,6 +56,9 @@ class Simkl(private val app: DhakaFlixApp) {
     val syncing: StateFlow<Boolean> = _syncing
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
+    /** Syncs that failed in a row; reset by the next good one. Several in a row = Simkl is refusing us. */
+    private val _failStreak = MutableStateFlow(0)
+    val failStreak: StateFlow<Int> = _failStreak
 
     private var loginJob: Job? = null
     private val lastScrobble = HashMap<String, Long>()
@@ -68,6 +71,7 @@ class Simkl(private val app: DhakaFlixApp) {
 
     fun startLogin() {
         if (!hasClient) { _error.value = "No Simkl Client ID"; return }
+        _failStreak.value = 0
         loginJob?.cancel()
         _error.value = null
         loginJob = app.appScope.launch(Dispatchers.IO) {
@@ -217,7 +221,9 @@ class Simkl(private val app: DhakaFlixApp) {
                 pushMissing(firstTime || settings.simklLastSync.value == 0L)
                 lastPull = System.currentTimeMillis()
                 settings.setSimklLastSync(lastPull)
+                _failStreak.value = 0
             } catch (t: Throwable) {
+                _failStreak.value++
                 _error.value = t.message
                 DiagLog.add("Simkl", t.message ?: t.toString())
             } finally {

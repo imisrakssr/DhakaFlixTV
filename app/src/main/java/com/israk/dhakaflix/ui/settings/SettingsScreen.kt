@@ -1072,15 +1072,19 @@ private fun SimklCard() {
             Spacer(Modifier.height(8.dp))
             Text("⚠ $it", color = Color(0xFFFF8A80), style = MaterialTheme.typography.bodySmall)
         }
-        ClientIdNotice(blocked = error?.let { e -> listOf("403", "429", "rejected", "suspend", "blocked").any { it in e.lowercase() } } == true)
+        // only when Simkl is refusing this Client ID; a working sync shows nothing here
+        val streak by simkl.failStreak.collectAsState()
+        val blocked = error?.let { e -> listOf("403", "429", "rejected", "suspend", "blocked").any { it in e.lowercase() } } == true
+        if (blocked || (error != null && streak >= 3)) ClientIdNotice()
     }
 }
 
 /** When Simkl blocks the app's Client ID, a new one has to be made — how to do that. */
 @Composable
-private fun ClientIdNotice(blocked: Boolean) {
+private fun ClientIdNotice() {
     val dhk = com.israk.dhakaflix.ui.components.isDhakaiya()
-    val tint = if (blocked) Color(0xFFFBBF24) else TextDim
+    val blocked = true
+    val tint = Color(0xFFFBBF24)
     Spacer(Modifier.height(14.dp))
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
@@ -1088,8 +1092,7 @@ private fun ClientIdNotice(blocked: Boolean) {
             .padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
         Text(
-            if (dhk) (if (blocked) "⚠ Simkl এই Client ID আটকাইয়া দিছে — নতুন একটা লাগব" else "ℹ Sync বারবার আটকায়? নতুন Client ID বানা")
-            else (if (blocked) "⚠ Simkl has blocked this Client ID — make a new one" else "ℹ Sync keeps failing? Make a new Client ID"),
+            if (dhk) "⚠ Simkl sync আটকাইয়া গেছে — নতুন একটা Client ID লাগব" else "⚠ Simkl sync is stuck — a new Client ID is needed",
             color = tint, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(4.dp))
