@@ -47,6 +47,9 @@ object AltServers {
         }
     }
 
+    /** Quality labels of copies seen so far (url → label), for naming the copy a film opened with. */
+    val labels = java.util.concurrent.ConcurrentHashMap<String, String>()
+
     /** Which server a stream URL belongs to. */
     fun serverOf(url: String): String = when {
         url.startsWith(Defaults.RD_ROOT) -> "RongDhong"
@@ -61,7 +64,8 @@ object AltServers {
     suspend fun find(meta: ItemEntity?, p: PlayItem): List<Alt> = withContext(Dispatchers.IO) {
         val lib = runCatching { libraryCopies(meta, p) }.getOrDefault(emptyList())
         val ext = runCatching { searchServers(meta, p) }.getOrDefault(emptyList())
-        (lib + ext).distinctBy { it.url }.filter { it.url != p.url && !it.is3D && it.server != serverOf(p.url) }
+        (lib + ext).distinctBy { it.url }.filter { it.url != p.url && !it.is3D }
+            .also { list -> list.forEach { labels[it.url] = it.label } }
     }
 
     /** BokaSoka: its hidden folder index, matched by title + year, then the file inside the folder. */

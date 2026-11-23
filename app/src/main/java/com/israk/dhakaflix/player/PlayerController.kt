@@ -258,12 +258,16 @@ class PlayerController(
 
     /** Label of the copy the title opened with (server + quality). */
     val originLabel: String
-        get() = listOfNotNull(com.israk.dhakaflix.data.AltServers.serverOf(current.url), meta?.quality).joinToString("  ·  ")
+        get() {
+            val server = com.israk.dhakaflix.data.AltServers.serverOf(current.url)
+            val q = if (server == "DhakaFlix") meta?.quality else com.israk.dhakaflix.data.AltServers.labels[current.url]
+            return listOfNotNull(server, q).joinToString("  ·  ")
+        }
 
     /** The choices, best quality first (1080p, then 720p, then the rest); null = the original copy. */
     fun serverChoices(): List<com.israk.dhakaflix.data.AltServers.Alt?> =
         (listOf<com.israk.dhakaflix.data.AltServers.Alt?>(null) + altCopies).sortedBy { a ->
-            com.israk.dhakaflix.data.AltServers.qualityRank(a?.let { it.label + " " + it.url } ?: (meta?.quality ?: current.url))
+            com.israk.dhakaflix.data.AltServers.qualityRank(a?.label ?: originLabel)
         }
 
     /** "Choose a server" screen before playback starts. */

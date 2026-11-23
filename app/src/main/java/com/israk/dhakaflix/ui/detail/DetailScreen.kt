@@ -112,6 +112,8 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
 
     var content by remember(id) { mutableStateOf<FolderContent?>(null) }
     var failed by remember(id) { mutableStateOf(false) }
+    /** DhakaFlix didn't answer, so the film plays from another server (RongDhong / BokaSoka). */
+    var offline by remember(id) { mutableStateOf(false) }
     var reload by remember { mutableStateOf(0) }
     var season by rememberSaveable(id) { mutableStateOf<Int?>(null) }
     var episodes by remember(id) { mutableStateOf<List<VideoFile>>(emptyList()) }
@@ -127,8 +129,21 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
     }
     LaunchedEffect(id, reload) {
         failed = false
+        offline = false
         val entity = app.db.items().get(id) ?: return@LaunchedEffect
-        content = try { repo.listItem(entity) } catch (e: Exception) { failed = true; null }
+        content = try {
+            repo.listItem(entity)
+        } catch (e: Exception) {
+            // DhakaFlix is down: a film can still play from another server that has it
+            val alts = if (entity.isSeries) emptyList() else runCatching {
+                com.israk.dhakaflix.data.AltServers.find(entity, com.israk.dhakaflix.data.PlayItem(entity.id, entity.id, entity.displayTitle))
+            }.getOrDefault(emptyList())
+            val best = alts.minByOrNull { com.israk.dhakaflix.data.AltServers.qualityRank(it.label) }
+            if (best != null) {
+                offline = true
+                FolderContent(listOf(VideoFile("${best.server} · ${best.label}", best.url, 0, null, null, emptyList())), emptyList(), emptyList(), null, null)
+            } else { failed = true; null }
+        }
     }
     LaunchedEffect(content) {
         val c = content ?: return@LaunchedEffect
@@ -284,6 +299,13 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
                         }
                         if (failed) {
                             Text(s.folderError, color = Color(0xFFFF8A80), style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (offline) {
+                            Text(
+                                if (com.israk.dhakaflix.ui.components.isDhakaiya()) "DhakaFlix সার্ভার সাড়া দিতাছে না, অন্য সার্ভার থেইকা চলব।"
+                                else "DhakaFlix isn't answering — this will play from another server.",
+                                color = Color(0xFFFBBF24), style = MaterialTheme.typography.bodySmall,
+                            )
                         }
                     }
                 }
