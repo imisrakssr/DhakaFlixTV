@@ -258,10 +258,6 @@ private fun SectionItem(sec: Section, selected: Boolean, selectOnFocus: Boolean,
         Icon(sec.icon(), null, tint = if (focused) Color.Black else if (selected) Color.White else TextDim, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(14.dp))
         Text(sec.title(s), Modifier.weight(1f), color = fg, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-        if (sec == Section.ABOUT && com.israk.dhakaflix.ui.updateReady()) {
-            com.israk.dhakaflix.ui.UpdateDot(size = 10.dp)
-            Spacer(Modifier.width(8.dp))
-        }
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = if (focused) Color.Black else TextDim, modifier = Modifier.size(18.dp))
     }
 }
