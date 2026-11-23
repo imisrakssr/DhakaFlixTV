@@ -45,25 +45,28 @@ object AltServers {
     }
 
     /**
-     * Every other copy of what [p] is: other versions of the same title in the library (DhakaFlix or
-     * RongDhong folders), then the extra servers' own search. The copy being played is left out.
+     * Every copy of what [p] is on the other servers (BokaSoka's index, RongDhong's search).
+     * Other DhakaFlix copies are not offered: the picker is only for other servers.
      */
     suspend fun find(meta: ItemEntity?, p: PlayItem): List<Alt> = withContext(Dispatchers.IO) {
         val lib = runCatching { libraryCopies(meta, p) }.getOrDefault(emptyList())
         val ext = runCatching { searchServers(meta, p) }.getOrDefault(emptyList())
-        (lib + ext).distinctBy { it.url }.filter { it.url != p.url && !it.is3D }
+        (lib + ext).distinctBy { it.url }.filter { it.url != p.url && !it.is3D && it.server != serverOf(p.url) }
     }
 
+    /** BokaSoka: its hidden folder index, matched by title + year, then the file inside the folder. */
     private suspend fun libraryCopies(meta: ItemEntity?, p: PlayItem): List<Alt> {
-        meta ?: return emptyList()
         val app = DhakaFlixApp.instance
         val repo = app.library
+        val type = if (meta?.isSeries == true || p.season != null) "SERIES" else "MOVIE"
+        val titles = listOfNotNull(meta?.title, meta?.tmdbTitle, p.title).map { it.lowercase().trim() }.distinct()
+        if (titles.isEmpty()) return emptyList()
         val names = app.settings.sources.value.associate { it.id to it.name.substringAfter(" · ") }
-        val versions = app.db.items().versionsNow(meta.groupKey).filter { it.id != meta.id }.take(6)
-        return versions.mapNotNull { v ->
+        val hits = app.db.items().otherServerMatches(type, titles, meta?.displayYear ?: meta?.year)
+        return hits.mapNotNull { v ->
             runCatching {
                 val content = repo.listItem(v)
-                val url = if (!v.isSeries || p.season == null) {
+                val url = if (type == "MOVIE" || p.season == null) {
                     (content.videos.maxByOrNull { it.size } ?: content.videos.firstOrNull())?.url
                 } else {
                     content.videos.firstOrNull { it.season == p.season && it.episode == p.episode }?.url
@@ -71,7 +74,7 @@ object AltServers {
                             ?.let { s -> repo.listSeason(s).firstOrNull { it.episode == p.episode } }?.url
                 } ?: return@runCatching null
                 val label = listOfNotNull(names[v.sourceId], v.quality).joinToString(" · ").ifBlank { qualityLabel(v.rawName) }
-                Alt(serverOf(url), label, url, is3D = Defaults.is3D(v.rawName) || Defaults.is3D(v.id))
+                Alt(serverOf(url), label, url, is3D = Defaults.is3D(v.rawName))
             }.getOrNull()
         }
     }

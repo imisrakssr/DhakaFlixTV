@@ -69,6 +69,7 @@ data class ItemEntity(
         const val META_MATCHED = 1
         const val META_NOT_FOUND = 2
         const val META_MANUAL = 3
+        const val META_HIDDEN = 4    // other-server index row: never looked up
     }
 }
 
@@ -178,7 +179,7 @@ abstract class ItemDao {
     @Query("SELECT * FROM items WHERE metaState = 0 ORDER BY uploadedAt DESC LIMIT :limit")
     abstract suspend fun pendingMeta(limit: Int): List<ItemEntity>
 
-    @Query("SELECT COUNT(*) FROM items")
+    @Query("SELECT COUNT(*) FROM items WHERE sourceId NOT LIKE 'bk-%'")
     abstract fun countFlow(): Flow<Int>
 
     @Query("SELECT COUNT(*) FROM items WHERE metaState = 0")
@@ -193,22 +194,24 @@ abstract class ItemDao {
     @Update
     abstract suspend fun update(item: ItemEntity)
 
-    /** One card per title: the newest DhakaFlix copy, or the newest other-server one when DhakaFlix has none. */
-    @Query(
-        "UPDATE items SET isPrimary = CASE WHEN id IN (SELECT id FROM (SELECT id, MAX(uploadedAt) FROM items " +
-            "WHERE (sourceId NOT LIKE 'rd-%' AND sourceId NOT LIKE 'bk-%') OR groupKey NOT IN " +
-            "(SELECT groupKey FROM items WHERE sourceId NOT LIKE 'rd-%' AND sourceId NOT LIKE 'bk-%') " +
-            "GROUP BY groupKey)) THEN 1 ELSE 0 END"
-    )
+    @Query("UPDATE items SET isPrimary = CASE WHEN id IN (SELECT id FROM (SELECT id, MAX(uploadedAt) FROM items GROUP BY groupKey)) THEN 1 ELSE 0 END")
     abstract suspend fun recomputePrimary()
 
     @Query("SELECT * FROM items WHERE groupKey = :groupKey ORDER BY uploadedAt DESC")
     abstract fun versions(groupKey: String): Flow<List<ItemEntity>>
 
-    @Query("SELECT * FROM items WHERE groupKey = :groupKey ORDER BY uploadedAt DESC")
-    abstract suspend fun versionsNow(groupKey: String): List<ItemEntity>
+    /** Other servers' folders (BokaSoka) are only an index for the server picker: never shown anywhere. */
+    @Query("UPDATE items SET isPrimary = 0 WHERE sourceId LIKE 'bk-%' OR sourceId LIKE 'rd-%'")
+    abstract suspend fun hideOtherServers()
 
-    @Query("SELECT DISTINCT year FROM items WHERE year IS NOT NULL ORDER BY year DESC")
+    /** Same title (any of [titles], lower case) on another server, year within one either way. */
+    @Query(
+        "SELECT * FROM items WHERE sourceId LIKE 'bk-%' AND type = :type AND LOWER(title) IN (:titles) " +
+            "AND (:year IS NULL OR year IS NULL OR year BETWEEN :year - 1 AND :year + 1) LIMIT 8"
+    )
+    abstract suspend fun otherServerMatches(type: String, titles: List<String>, year: Int?): List<ItemEntity>
+
+    @Query("SELECT DISTINCT year FROM items WHERE year IS NOT NULL AND isPrimary = 1 ORDER BY year DESC")
     abstract fun years(): Flow<List<Int>>
 
     @Query("UPDATE items SET metaState = 0 WHERE metaState = 2")

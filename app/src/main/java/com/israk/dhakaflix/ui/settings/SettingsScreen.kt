@@ -444,7 +444,7 @@ private fun HomeRowsEditor() {
     }
     val allRows = remember(rows, sources) {
         val keys = rows.map { it.key }.toSet()
-        rows + sources.filter { it.enabled && RowKeys.source(it.id) !in keys }.map { HomeRow(RowKeys.source(it.id), false) }
+        rows + sources.filter { it.enabled && !com.israk.dhakaflix.data.Defaults.isOtherServer(it.id) && RowKeys.source(it.id) !in keys }.map { HomeRow(RowKeys.source(it.id), false) }
     }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         allRows.forEachIndexed { i, row ->
@@ -490,6 +490,8 @@ private fun CategoriesCard() {
     }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         sources.forEachIndexed { i, src ->
+            // other servers (BokaSoka) are a hidden index for the server picker, not categories
+            if (com.israk.dhakaflix.data.Defaults.isOtherServer(src.id)) return@forEachIndexed
             val sub = (if (src.type == MediaType.MOVIE) s.movies else s.series) + " · " + android.net.Uri.decode(src.url)
             val toggle = { st.setSources(sources.toMutableList().also { it[i] = src.copy(enabled = !src.enabled) }) }
             if (src.custom) {

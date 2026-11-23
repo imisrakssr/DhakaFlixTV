@@ -116,7 +116,7 @@ fun BrowseScreen(type: MediaType, onOpen: (String) -> Unit) {
     val app = DhakaFlixApp.instance
     val s = LocalStrings.current
     val allSources by app.settings.sources.collectAsState()
-    val sources = remember(allSources, type) { allSources.filter { it.type == type && it.enabled } }
+    val sources = remember(allSources, type) { allSources.filter { it.type == type && it.enabled && !com.israk.dhakaflix.data.Defaults.isOtherServer(it.id) } }
     val years by remember { app.db.items().years() }.collectAsState(initial = emptyList())
 
     var sort by rememberSaveable { mutableStateOf(SortMode.LATEST) }
