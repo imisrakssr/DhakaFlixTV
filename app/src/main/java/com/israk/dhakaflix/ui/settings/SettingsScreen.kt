@@ -286,7 +286,7 @@ private fun SectionContent(sec: Section) {
             }
             Section.PLAYER -> item { PlayerCard() }
             Section.DIAGNOSTICS -> item { DiagnosticsCard() }
-            Section.ABOUT -> item { AboutCard() }
+            Section.ABOUT -> { item { AboutCard() }; item { UpdateCard() } }
         }
     }
 }
@@ -1103,6 +1103,75 @@ private fun ClientIdNotice(blocked: Boolean) {
             color = TextDim, style = MaterialTheme.typography.bodySmall,
         )
     }
+}
+
+// ------------------------------------------------------------------ updates
+
+@Composable
+private fun UpdateCard() {
+    val dhk = com.israk.dhakaflix.ui.components.isDhakaiya()
+    val st by com.israk.dhakaflix.data.Updater.state.collectAsState()
+    fun t(en: String, bn: String) = if (dhk) bn else en
+    Card {
+        Text(t("Check for updates", "আপডেট আছে নি দেখ"), color = Color.White, style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(4.dp))
+        Text(t("Installed: v${BuildConfig.VERSION_NAME}", "এখন আছে: v${BuildConfig.VERSION_NAME}"), color = TextDim, style = MaterialTheme.typography.bodySmall)
+        Spacer(Modifier.height(12.dp))
+        val U = com.israk.dhakaflix.data.Updater
+        when (val x = st) {
+            is com.israk.dhakaflix.data.Updater.State.Available -> {
+                ReleaseInfo(x.release, dhk)
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PillButton(t("Download & install", "নামা আর ইনস্টল কর"), primary = true, icon = Icons.Filled.Refresh, onClick = { U.downloadAndInstall(x.release) })
+                }
+            }
+            is com.israk.dhakaflix.data.Updater.State.Downloading -> {
+                ReleaseInfo(x.release, dhk)
+                Text(t("Downloading… ${(x.progress * 100).toInt()}%", "নামতাছে… ${com.israk.dhakaflix.ui.components.Bangla.digits((x.progress * 100).toInt().toString())}%"),
+                    color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(8.dp))
+                androidx.compose.material3.LinearProgressIndicator(progress = { x.progress }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                    color = MaterialTheme.colorScheme.primary, trackColor = Color.White.copy(alpha = .12f))
+            }
+            is com.israk.dhakaflix.data.Updater.State.Installing -> {
+                ReleaseInfo(x.release, dhk)
+                Text(t("Installing… confirm on the screen that opens.", "ইনস্টল হইতাছে… যেই স্ক্রিন আসব ওইখানে হ্যাঁ দে।"), color = Color(0xFF93C5FD), style = MaterialTheme.typography.bodyMedium)
+            }
+            else -> {
+                when (x) {
+                    com.israk.dhakaflix.data.Updater.State.Checking -> Text(t("Checking…", "দেখতাছি…"), color = TextDim, style = MaterialTheme.typography.bodyMedium)
+                    com.israk.dhakaflix.data.Updater.State.UpToDate -> StatusLine(Color(0xFF34D399), t("You're on the latest version", "সবচেয়ে নতুনটাই চলতাছে"))
+                    is com.israk.dhakaflix.data.Updater.State.Failed -> Text("⚠ ${x.message}", color = Color(0xFFFF8A80), style = MaterialTheme.typography.bodySmall)
+                    else -> Unit
+                }
+                Spacer(Modifier.height(10.dp))
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PillButton(t("Check for updates", "আপডেট দেখ"), primary = true, icon = Icons.Filled.Refresh, onClick = { U.check() })
+                    (x as? com.israk.dhakaflix.data.Updater.State.Failed)?.release?.let { r ->
+                        PillButton(t("Try again", "আবার চেষ্টা কর"), onClick = { U.downloadAndInstall(r) })
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReleaseInfo(r: com.israk.dhakaflix.data.Updater.Release, dhk: Boolean) {
+    val size = if (r.size > 0) "  ·  " + "%.1f MB".format(r.size / 1_048_576.0) else ""
+    StatusLine(Color(0xFF60A5FA), (if (dhk) "নতুন ভার্সন আইছে: v${r.version}" else "New version: v${r.version}") + size)
+    if (r.notes.isNotBlank()) {
+        Spacer(Modifier.height(10.dp))
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.White.copy(alpha = .05f))
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+        ) {
+            Text(if (dhk) "কী কী নতুন" else "What's new", color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(4.dp))
+            Text(r.notes, color = TextDim, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+    Spacer(Modifier.height(12.dp))
 }
 
 // ------------------------------------------------------------------ diagnostics

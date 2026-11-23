@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0   # full history + tags, for the release notes
 
       - uses: actions/setup-java@v5
         with:
@@ -53,12 +55,22 @@ jobs:
             out/*.apk
             out/*.txt
 
+      - name: Release notes (commits since the last release)
+        run: |
+          prev=$(git describe --tags --abbrev=0 2>/dev/null || true)
+          range=${prev:+$prev..}HEAD
+          {
+            git log --no-merges --pretty='- %s' $range | head -40
+            echo
+            echo "Mi TV Stick / most Android TV boxes → **armv7** APK."
+            echo "Newer 64-bit phones → arm64 APK."
+          } > notes.md
+          cat notes.md
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
           name: DhakaFlix TV v1.0.${{ github.run_number }}
-          body: |
-            Mi TV Stick / most Android TV boxes → **armv7** APK.
-            Newer 64-bit phones → arm64 APK.
+          body_path: notes.md
           files: out/*.apk
