@@ -452,6 +452,8 @@ class LibraryRepository(private val app: DhakaFlixApp) {
     }
 
     suspend fun listSeason(season: SeasonRef): List<VideoFile> = withContext(Dispatchers.IO) {
+        // RongDhong season (DhakaFlix was down and the series came from there)
+        if (season.url.startsWith(Defaults.RD_ROOT)) return@withContext AltServers.rongDhongSeason(season.url)
         val entries = h5ai.list(season.url)
         val files = entries.filter { !it.isDir }
         val subs = files.filter { NameParser.ext(it.name) in NameParser.subExt }.map { it.url }.toMutableList()

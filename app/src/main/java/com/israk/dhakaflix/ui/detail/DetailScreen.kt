@@ -134,12 +134,17 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
         content = try {
             repo.listItem(entity)
         } catch (e: Exception) {
-            // DhakaFlix is down: a film can still play from another server that has it
+            // DhakaFlix is down: a series can still be listed from another server that has it
+            val series = if (entity.isSeries) com.israk.dhakaflix.data.AltServers.seriesFallback(entity) else null
+            // …and a film can still play from another server that has it
             val alts = if (entity.isSeries) emptyList() else runCatching {
                 com.israk.dhakaflix.data.AltServers.find(entity, com.israk.dhakaflix.data.PlayItem(entity.id, entity.id, entity.displayTitle))
             }.getOrDefault(emptyList())
             val best = alts.minByOrNull { com.israk.dhakaflix.data.AltServers.qualityRank(it.label) }
-            if (best != null) {
+            if (series != null) {
+                offline = true
+                series.second
+            } else if (best != null) {
                 offline = true
                 FolderContent(listOf(VideoFile("${best.server} · ${best.label}", best.url, 0, null, null, emptyList())), emptyList(), emptyList(), null, null)
             } else { failed = true; null }

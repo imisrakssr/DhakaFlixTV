@@ -33,9 +33,27 @@ object AltServers {
         suspend fun episode(tmdb: Int?, title: String, year: Int?, season: Int, episode: Int): List<Alt>
     }
 
-    val servers: List<Server> = listOf(
-        RongDhong("RongDhong", "http://172.31.255.238/"),
-    )
+    private val rongDhong = RongDhong("RongDhong", Defaults.RD_ROOT)
+    val servers: List<Server> = listOf(rongDhong)
+
+    /**
+     * DhakaFlix is down: a series' seasons and episodes from another server instead (RongDhong first, it is
+     * matched by TMDB id; then BokaSoka's index). Returns the server name and its listing.
+     */
+    suspend fun seriesFallback(meta: ItemEntity): Pair<String, FolderContent>? = withContext(Dispatchers.IO) {
+        runCatching { rongDhong.seriesContent(meta.tmdbId, meta.displayTitle, meta.displayYear) }.getOrNull()
+            ?.takeIf { it.seasons.isNotEmpty() }?.let { return@withContext "RongDhong" to it }
+        val app = DhakaFlixApp.instance
+        val titles = listOfNotNull(meta.title, meta.tmdbTitle).map { it.lowercase().trim() }.distinct()
+        for (v in app.db.items().otherServerMatches("SERIES", titles, meta.displayYear ?: meta.year)) {
+            val c = runCatching { app.library.listItem(v) }.getOrNull() ?: continue
+            if (c.seasons.isNotEmpty() || c.videos.isNotEmpty()) return@withContext serverOf(v.id) to c
+        }
+        null
+    }
+
+    /** Episodes of a RongDhong season ("<root>api/tv-shows/<id>#season=<n>", from [seriesFallback]). */
+    suspend fun rongDhongSeason(url: String): List<VideoFile> = withContext(Dispatchers.IO) { rongDhong.season(url) }
 
     /** 1080p first, then 720p, then everything else. */
     fun qualityRank(text: String?): Int {
@@ -177,20 +195,53 @@ private class RongDhong(override val name: String, base: String) : AltServers.Se
         }.distinctBy { it.url }
     }
 
-    override suspend fun episode(tmdb: Int?, title: String, year: Int?, season: Int, episode: Int): List<AltServers.Alt> {
+    private val episodeCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, List<JsonObject>>>()
+
+    private fun episodesOf(showId: String): List<JsonObject> {
+        episodeCache[showId]?.let { (t, l) -> if (System.currentTimeMillis() - t < 120_000) return l }
+        val d = get("tv-shows/$showId", mapOf("fields" to "episodes", "episode_fields" to "id,name,season_number,episode_number")) as? JsonObject
+        val l = (d?.get("episodes") as? JsonArray)?.mapNotNull { it as? JsonObject } ?: emptyList()
+        episodeCache[showId] = System.currentTimeMillis() to l
+        return l
+    }
+
+    private fun findShows(tmdb: Int?, title: String, year: Int?): List<JsonObject> {
         var shows = if (tmdb != null) get("tv-shows", mapOf("tmdb_id" to "$tmdb", "limit" to "10", "fields" to "id,title,year,tmdb_id")).rows()
             .filter { it.s("tmdb_id") == "$tmdb" } else emptyList()
         if (shows.isEmpty()) shows = get("search", mapOf("search" to title)).rows()
             .filter { it.s("type") != "movie" && titleMatches(it, title, year) }
-        val out = mutableListOf<AltServers.Alt>()
-        for (show in shows.take(4)) {
+        return shows
+    }
+
+    /** Seasons of the show as virtual folders "<api>tv-shows/<id>#season=<n>". */
+    fun seriesContent(tmdb: Int?, title: String, year: Int?): FolderContent? {
+        for (show in findShows(tmdb, title, year).take(3)) {
             val id = show.s("id") ?: continue
-            val d = get("tv-shows/$id", mapOf("fields" to "episodes", "episode_fields" to "id,name,season_number,episode_number")) as? JsonObject ?: continue
-            val ep = (d["episodes"] as? JsonArray)?.mapNotNull { it as? JsonObject }
-                ?.firstOrNull { it.i("season_number") == season && it.i("episode_number") == episode } ?: continue
+            val seasons = episodesOf(id).mapNotNull { it.i("season_number") }.distinct().sorted()
+            if (seasons.isEmpty()) continue
+            return FolderContent(emptyList(), seasons.map { SeasonRef(it, "Season $it", api + "tv-shows/$id#season=$it") }, emptyList(), null, null)
+        }
+        return null
+    }
+
+    fun season(url: String): List<VideoFile> {
+        val n = url.substringAfter("#season=", "").toIntOrNull() ?: return emptyList()
+        val id = url.substringBefore('#').trimEnd('/').substringAfterLast('/')
+        return episodesOf(id).filter { it.i("season_number") == n }.mapNotNull { e ->
+            val epId = e.s("id") ?: return@mapNotNull null
+            val ep = e.i("episode_number")
+            val label = "S%02dE%02d".format(n, ep ?: 0)
+            VideoFile(e.s("name")?.takeIf { it.isNotBlank() }?.let { "$label · $it" } ?: label, episodeUrl(epId), 0, n, ep?.takeIf { it > 0 }, emptyList())
+        }.sortedBy { it.episode ?: 0 }
+    }
+
+    override suspend fun episode(tmdb: Int?, title: String, year: Int?, season: Int, episode: Int): List<AltServers.Alt> {
+        val out = mutableListOf<AltServers.Alt>()
+        for (show in findShows(tmdb, title, year).take(4)) {
+            val id = show.s("id") ?: continue
+            val ep = episodesOf(id).firstOrNull { it.i("season_number") == season && it.i("episode_number") == episode } ?: continue
             val epId = ep.s("id") ?: continue
-            val lib = (d["Library"] as? JsonObject)?.s("name")
-            out += AltServers.Alt(name, lib ?: "S%02dE%02d".format(season, episode), episodeUrl(epId))
+            out += AltServers.Alt(name, "S%02dE%02d".format(season, episode), episodeUrl(epId))
         }
         return out.distinctBy { it.url }
     }
