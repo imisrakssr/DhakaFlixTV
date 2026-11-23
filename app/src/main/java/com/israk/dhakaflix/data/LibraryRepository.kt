@@ -154,6 +154,8 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         val failed = mutableListOf<String>()
         for (src in sources) {
             if (Defaults.isRongDhong(src.id)) continue // synced together below
+            // other servers update only when you refresh by hand (or the very first time, to fill the library)
+            if (!manual && Defaults.isOtherServer(src.id) && db.items().countForSource(src.id) > 0) continue
             _sync.update { it.copy(currentSource = src.name) }
             val srcCache = if (db.items().countForSource(src.id) == 0) emptyMap() else cache
             try {

@@ -38,7 +38,11 @@ object AltServers {
     )
 
     /** Which server a stream URL belongs to. */
-    fun serverOf(url: String): String = if (url.startsWith(Defaults.RD_ROOT)) "RongDhong" else "DhakaFlix"
+    fun serverOf(url: String): String = when {
+        url.startsWith(Defaults.RD_ROOT) -> "RongDhong"
+        url.startsWith(Defaults.BK_ROOT) -> "BokaSoka"
+        else -> "DhakaFlix"
+    }
 
     /**
      * Every other copy of what [p] is: other versions of the same title in the library (DhakaFlix or
@@ -54,7 +58,7 @@ object AltServers {
         meta ?: return emptyList()
         val app = DhakaFlixApp.instance
         val repo = app.library
-        val names = app.settings.sources.value.associate { it.id to it.name.removePrefix("RongDhong · ") }
+        val names = app.settings.sources.value.associate { it.id to it.name.substringAfter(" · ") }
         val versions = app.db.items().versionsNow(meta.groupKey).filter { it.id != meta.id }.take(6)
         return versions.mapNotNull { v ->
             runCatching {

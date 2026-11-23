@@ -201,16 +201,16 @@ class AppSettings(ctx: Context) {
     private fun loadSources(): List<Source> {
         val s = prefs.getString("sources", null) ?: return Defaults.sources
         val saved = runCatching { json.decodeFromString(sourceSer, s) }.getOrNull()?.takeIf { it.isNotEmpty() } ?: return Defaults.sources
-        // RongDhong arrived after the source list was saved: add its libraries once
-        if (!prefs.getBoolean("rd_sources_added", false)) {
-            prefs.edit().putBoolean("rd_sources_added", true).apply()
-            if (saved.none { Defaults.isRongDhong(it.id) }) {
-                val merged = saved + Defaults.rongDhong
-                prefs.edit().putString("sources", json.encodeToString(sourceSer, merged)).apply()
-                return merged
-            }
+        // servers added after the source list was saved: add their libraries once each
+        var merged = saved
+        for ((flag, extra) in listOf("rd_sources_added" to Defaults.rongDhong, "bk_sources_added" to Defaults.bokaSoka)) {
+            if (prefs.getBoolean(flag, false)) continue
+            prefs.edit().putBoolean(flag, true).apply()
+            val prefix = extra.first().id.substringBefore('-') + "-"
+            if (merged.none { it.id.startsWith(prefix) }) merged = merged + extra
         }
-        return saved.filterNot { it.id == "rd-1" } // RongDhong 3D: never used
+        if (merged !== saved) prefs.edit().putString("sources", json.encodeToString(sourceSer, merged)).apply()
+        return merged.filterNot { it.id == "rd-1" } // RongDhong 3D: never used
     }
 
     private val rowSer = ListSerializer(HomeRow.serializer())

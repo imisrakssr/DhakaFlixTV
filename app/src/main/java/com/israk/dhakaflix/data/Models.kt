@@ -55,6 +55,29 @@ object Defaults {
 
     fun isRongDhong(id: String) = id.startsWith("rd-")
 
+    /** BokaSoka (http://198.20.20.20/) — an h5ai server like DhakaFlix, so its folders are crawled the same way. */
+    const val BK_ROOT = "http://198.20.20.20/"
+    private const val BK = "${BK_ROOT}NAS1/"
+    val bokaSoka: List<Source> = listOf(
+        Source("bk-eng", "BokaSoka · English Movies", "${BK}Movies_Collection/Hollywood_Movies/", MediaType.MOVIE),
+        Source("bk-hindi", "BokaSoka · Hindi Movies", "${BK}Bollywood_South_Indian_Movies/Bollywood_Movies/", MediaType.MOVIE),
+        Source("bk-south", "BokaSoka · South Indian Movies", "${BK}Bollywood_South_Indian_Movies/South_Indian_Movies/Telegu_Tamil/", MediaType.MOVIE),
+        Source("bk-malayalam", "BokaSoka · Malayalam Movies", "${BK}Bollywood_South_Indian_Movies/South_Indian_Movies/Malayalam_Movies/", MediaType.MOVIE),
+        Source("bk-kolkata", "BokaSoka · Indian Bangla Movies", "${BK}Movies_Collection/Bangla_Collection/Indian_Bangla_Movies/", MediaType.MOVIE),
+        Source("bk-bndub", "BokaSoka · Bangla Dubbed", "${BK}Movies_Collection/Bangla_Collection/Bangla_Dubbed/", MediaType.MOVIE),
+        Source("bk-foreign", "BokaSoka · Other Country Movies", "${BK}Movies_Collection/Others_Language_Movies/", MediaType.MOVIE),
+        Source("bk-anim", "BokaSoka · Animation Movies", "${BK}Movies_Collection/Animation_Movies/", MediaType.MOVIE),
+        Source("bk-imdb", "BokaSoka · IMDb Top-250", "${BK}Movies_Collection/IMDb_Top-250%20Movies/", MediaType.MOVIE, enabled = false),
+        Source("bk-engtv", "BokaSoka · English TV & Web Series", "${BK}NAS2/TV_Web_Series/English_Dual_Audio_Series/", MediaType.SERIES),
+        Source("bk-hinditv", "BokaSoka · Hindi Web Series", "${BK}NAS2/TV_Web_Series/Hindi_Telegu_Tamil_Series/", MediaType.SERIES),
+        Source("bk-bntv", "BokaSoka · Bangla Web Series", "${BK}NAS2/TV_Web_Series/Bangla_Web_Series/", MediaType.SERIES),
+        Source("bk-animtv", "BokaSoka · Animation Series", "${BK}NAS2/TV_Web_Series/Animation_Series/", MediaType.SERIES),
+        Source("bk-othertv", "BokaSoka · Other TV Shows", "${BK}NAS2/TV_Web_Series/Other_Web_Series/", MediaType.SERIES),
+    )
+
+    /** Sources on servers other than DhakaFlix: updated only on a manual refresh, DhakaFlix copy preferred. */
+    fun isOtherServer(id: String) = id.startsWith("rd-") || id.startsWith("bk-")
+
     /** 3D copies are never used (library 1 on RongDhong, "[3D]" in a file name). */
     fun is3D(path: String): Boolean {
         val n = path.lowercase()
@@ -75,7 +98,7 @@ object Defaults {
         Source("tvweb", "TV & WEB Series", "${S12}TV-WEB-Series/", MediaType.SERIES),
         Source("korean", "Korean TV & WEB Series", "${S14}KOREAN%20TV%20%26%20WEB%20Series/", MediaType.SERIES),
         Source("cartoon", "Anime & Cartoon Series", "${S10}Anime%20%26%20Cartoon%20TV%20Series/", MediaType.SERIES),
-    ) + rongDhong
+    ) + rongDhong + bokaSoka
 
 
     val homeRows: List<HomeRow> = listOf(

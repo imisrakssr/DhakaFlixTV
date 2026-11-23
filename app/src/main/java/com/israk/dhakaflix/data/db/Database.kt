@@ -193,10 +193,11 @@ abstract class ItemDao {
     @Update
     abstract suspend fun update(item: ItemEntity)
 
-    /** One card per title: the newest DhakaFlix copy, or the newest RongDhong one when DhakaFlix has none. */
+    /** One card per title: the newest DhakaFlix copy, or the newest other-server one when DhakaFlix has none. */
     @Query(
         "UPDATE items SET isPrimary = CASE WHEN id IN (SELECT id FROM (SELECT id, MAX(uploadedAt) FROM items " +
-            "WHERE sourceId NOT LIKE 'rd-%' OR groupKey NOT IN (SELECT groupKey FROM items WHERE sourceId NOT LIKE 'rd-%') " +
+            "WHERE (sourceId NOT LIKE 'rd-%' AND sourceId NOT LIKE 'bk-%') OR groupKey NOT IN " +
+            "(SELECT groupKey FROM items WHERE sourceId NOT LIKE 'rd-%' AND sourceId NOT LIKE 'bk-%') " +
             "GROUP BY groupKey)) THEN 1 ELSE 0 END"
     )
     abstract suspend fun recomputePrimary()
