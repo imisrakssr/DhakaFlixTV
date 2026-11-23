@@ -433,6 +433,8 @@ private fun Controls(c: PlayerController, visible: Boolean) {
                 Row(Modifier.align(Alignment.CenterStart), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     ControlButton(AppIcons.Subtitles, s.subtitles) { c.panel = PlayerController.Panel.SUBS }
                     ControlButton(AppIcons.Audio, s.audio) { c.panel = PlayerController.Panel.AUDIO }
+                    // phone: aspect right on the controls (Fit → Zoom → Stretch)
+                    if (!isTv) ControlButton(AppIcons.Aspect, s.aspect) { c.panel = PlayerController.Panel.ASPECT }
                     if (c.altCopies.isNotEmpty() || c.altPlaying != null) {
                         ControlButton(AppIcons.Server, serverLabel()) { c.panel = PlayerController.Panel.SERVER }
                     }
@@ -627,7 +629,7 @@ private fun SidePanel(c: PlayerController) {
                         else -> s.off
                     } + ")", false, chevron = true),
                     Opt("vlc", s.openInVlc, false),
-                )
+                ).filter { LocalIsTv.current || it.id != "aspect" } // phone: aspect has its own button on the controls
             ) { id ->
                 when (id) {
                     "sync" -> c.panel = PlayerController.Panel.SYNC
