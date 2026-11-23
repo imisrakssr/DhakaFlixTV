@@ -198,7 +198,7 @@ abstract class ItemDao {
     @Query(
         "UPDATE items SET isPrimary = CASE WHEN id = (SELECT j.id FROM items j WHERE j.groupKey = items.groupKey " +
             "ORDER BY CASE WHEN LOWER(j.quality) = '1080p' THEN 0 WHEN LOWER(j.quality) = '720p' THEN 1 ELSE 2 END, " +
-            "j.uploadedAt DESC LIMIT 1) THEN 1 ELSE 0 END"
+            "j.uploadedAt DESC LIMIT 1) AND sourceId NOT LIKE 'bk-%' AND sourceId NOT LIKE 'rd-%' THEN 1 ELSE 0 END"
     )
     abstract suspend fun recomputePrimary()
 

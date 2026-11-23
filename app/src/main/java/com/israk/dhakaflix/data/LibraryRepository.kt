@@ -121,6 +121,8 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         scope.launch(Dispatchers.IO) {
             val count = db.items().countFlow().first()
             val stale = System.currentTimeMillis() - settings.lastSync.value > maxAgeMs
+            // other servers' index rows must never show up (an interrupted sync could leave some visible)
+            db.items().hideOtherServers()
             // also when another server's hidden index (BokaSoka) has never been built
             val otherMissing = settings.sources.value.any { it.enabled && Defaults.isOtherServer(it.id) && db.items().countForSource(it.id) == 0 }
             if (count == 0 || stale || otherMissing) startSync(force = false, manual = false) else { startEnrich(); startPosterScan() }
@@ -201,7 +203,7 @@ class LibraryRepository(private val app: DhakaFlixApp) {
                     groupKey = e.url,
                 ).let {
                     // other servers: a hidden index for the server picker, no TMDB lookups or poster scans
-                    if (Defaults.isOtherServer(src.id)) it.copy(metaState = ItemEntity.META_HIDDEN, posterChecked = true) else it
+                    if (Defaults.isOtherServer(src.id)) it.copy(metaState = ItemEntity.META_HIDDEN, posterChecked = true, isPrimary = false) else it
                 }
             } else if (depth < MAX_DEPTH && !isJunkFolder(e.name)) {
                 subdirs += e
