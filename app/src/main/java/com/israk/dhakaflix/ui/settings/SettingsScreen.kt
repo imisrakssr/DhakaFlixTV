@@ -1163,10 +1163,29 @@ private fun UpdateCard() {
                     else -> Unit
                 }
                 Spacer(Modifier.height(10.dp))
+                var showNotes by remember { mutableStateOf(false) }
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PillButton(t("Check for updates", "আপডেট দেখ"), primary = true, icon = Icons.Filled.Refresh, onClick = { U.check() })
+                    PillButton(t("Check now", "এখনই দেখ"), primary = true, icon = Icons.Filled.Refresh, onClick = { U.check() })
+                    PillButton(t("Release notes", "কী কী নতুন"), selected = showNotes, onClick = {
+                        showNotes = !showNotes
+                        if (showNotes) U.loadInstalledNotes()
+                    })
                     (x as? com.israk.dhakaflix.data.Updater.State.Failed)?.release?.let { r ->
                         PillButton(t("Try again", "আবার চেষ্টা কর"), onClick = { U.downloadAndInstall(r) })
+                    }
+                }
+                if (showNotes) {
+                    val notes by U.installedNotes.collectAsState()
+                    val loading by U.notesLoading.collectAsState()
+                    Spacer(Modifier.height(12.dp))
+                    Column(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.White.copy(alpha = .05f))
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                    ) {
+                        Text(t("What's new in v${BuildConfig.VERSION_NAME}", "v${BuildConfig.VERSION_NAME} এ কী কী নতুন"),
+                            color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.height(4.dp))
+                        Text(if (loading) t("Loading…", "আনতাছি…") else notes.orEmpty(), color = TextDim, style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }

@@ -105,6 +105,31 @@ object Updater {
         }
     }
 
+    /** Notes of the installed version's release (the "Release notes" button); null until loaded. */
+    private val _installedNotes = MutableStateFlow<String?>(null)
+    val installedNotes: StateFlow<String?> = _installedNotes
+    private val _notesLoading = MutableStateFlow(false)
+    val notesLoading: StateFlow<Boolean> = _notesLoading
+
+    fun loadInstalledNotes() {
+        if (_installedNotes.value != null || _notesLoading.value) return
+        _notesLoading.value = true
+        app.appScope.launch(Dispatchers.IO) {
+            _installedNotes.value = runCatching {
+                val url = LATEST.substringBeforeLast("/latest") + "/tags/v" + BuildConfig.VERSION_NAME
+                val req = Request.Builder().url(url).header("Accept", "application/vnd.github+json")
+                    .header("User-Agent", "DhakaFlixTV/${BuildConfig.VERSION_NAME}").build()
+                val body = app.http.newCall(req).execute().use { r ->
+                    if (!r.isSuccessful) throw java.io.IOException("GitHub HTTP ${r.code}")
+                    r.body?.string().orEmpty()
+                }
+                val o = json.parseToJsonElement(body) as JsonObject
+                cleanNotes(o["body"]?.jsonPrimitive?.contentOrNull.orEmpty()).ifBlank { "—" }
+            }.getOrElse { "⚠ " + (it.message ?: it.toString()) }
+            _notesLoading.value = false
+        }
+    }
+
     /** "2.0.3" vs "1.0.41" → positive when [a] is newer. */
     private fun compareVersions(a: String, b: String): Int {
         val x = a.split('.').map { it.toIntOrNull() ?: 0 }
