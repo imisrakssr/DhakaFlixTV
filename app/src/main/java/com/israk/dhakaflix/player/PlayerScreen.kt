@@ -177,6 +177,16 @@ fun PlayerScreen(c: PlayerController) {
             modifier = Modifier.align(Alignment.BottomEnd),
         ) { UpNextCard(c) }
 
+        // phone: a tap anywhere outside the side panel closes it
+        if (c.panel != null && !LocalIsTv.current) {
+            Box(
+                Modifier.fillMaxSize().clickable(
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    indication = null,
+                ) { c.panel = null },
+            )
+        }
+
         AnimatedVisibility(
             visible = c.panel != null,
             enter = slideInHorizontally { it } + fadeIn(),
@@ -521,6 +531,8 @@ private fun SidePanel(c: PlayerController) {
     }
     Column(
         Modifier.padding(16.dp).width(360.dp).fillMaxHeight()
+            // taps on the panel's own background stay inside (only taps outside it close it)
+            .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }
             .glass(RoundedCornerShape(24.dp), tint = .10f)
             .background(Color.Black.copy(alpha = .55f))
             .padding(24.dp)
