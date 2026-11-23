@@ -203,14 +203,14 @@ class AppSettings(ctx: Context) {
         val saved = runCatching { json.decodeFromString(sourceSer, s) }.getOrNull()?.takeIf { it.isNotEmpty() } ?: return Defaults.sources
         // servers added after the source list was saved: add their libraries once each
         var merged = saved
-        for ((flag, extra) in listOf("bk_sources_added" to Defaults.bokaSoka)) {
+        for ((flag, extra) in listOf("rd_lib_added" to Defaults.rongDhong, "bk_sources_added" to Defaults.bokaSoka)) {
             if (prefs.getBoolean(flag, false)) continue
             prefs.edit().putBoolean(flag, true).apply()
             val prefix = extra.first().id.substringBefore('-') + "-"
             if (merged.none { it.id.startsWith(prefix) }) merged = merged + extra
         }
         if (merged !== saved) prefs.edit().putString("sources", json.encodeToString(sourceSer, merged)).apply()
-        return merged.filterNot { Defaults.isRongDhong(it.id) } // RongDhong has no library
+        return merged.filterNot { it.id == "rd-1" } // RongDhong 3D: never used
     }
 
     private val rowSer = ListSerializer(HomeRow.serializer())

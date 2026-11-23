@@ -38,15 +38,24 @@ object Defaults {
     private const val S12 = "http://172.16.50.12/DHAKA-FLIX-12/"
     private const val S14 = "http://172.16.50.14/DHAKA-FLIX-14/"
 
-    /** RongDhong: no library, only searched (its API) when something plays, for the server picker. */
+    /** RongDhong libraries (JSON API, not h5ai): one source per library, id "rd-<library id>". */
     const val RD_ROOT = "http://172.31.255.238/"
+    val rongDhong: List<Source> = listOf(
+        Triple(4, "English Movies", MediaType.MOVIE),
+        Triple(3, "English Movies 1080p", MediaType.MOVIE),
+        Triple(6, "Hindi Movies", MediaType.MOVIE),
+        Triple(10, "South Indian Movies", MediaType.MOVIE),
+        Triple(11, "Hindi Dubbed", MediaType.MOVIE),
+        Triple(8, "Kolkata Bangla Movies", MediaType.MOVIE),
+        Triple(5, "Foreign Language Movies", MediaType.MOVIE),
+        Triple(2, "Animation Movies", MediaType.MOVIE),
+        Triple(7, "IMDb Top-250", MediaType.MOVIE),
+        Triple(9, "Korean TV & Web Series", MediaType.SERIES),
+    ).map { (id, name, type) -> Source("rd-$id", "RongDhong · $name", "${RD_ROOT}api/library/$id", type, enabled = id != 7) }
 
     fun isRongDhong(id: String) = id.startsWith("rd-")
 
-    /**
-     * BokaSoka (http://198.20.20.20/): an h5ai server like DhakaFlix but without search, so its folders are
-     * crawled into a hidden index (never shown as library or categories) used only by the server picker.
-     */
+    /** BokaSoka (http://198.20.20.20/): an h5ai server like DhakaFlix, crawled the same way. */
     const val BK_ROOT = "http://198.20.20.20/"
     private const val BK = "${BK_ROOT}NAS1/"
     val bokaSoka: List<Source> = listOf(
@@ -66,7 +75,10 @@ object Defaults {
         Source("bk-othertv", "BokaSoka · Other TV Shows", "${BK}NAS2/TV_Web_Series/Other_Web_Series/", MediaType.SERIES),
     )
 
-    /** Sources on servers other than DhakaFlix: hidden, updated only on a manual refresh. */
+    /**
+     * Sources on servers other than DhakaFlix: merged into the one library (no separate categories in
+     * Settings or filters), updated only on a manual refresh; DhakaFlix stays the preferred copy.
+     */
     fun isOtherServer(id: String) = id.startsWith("rd-") || id.startsWith("bk-")
 
     /** 3D copies are never used (library 1 on RongDhong, "[3D]" in a file name). */
@@ -89,7 +101,7 @@ object Defaults {
         Source("tvweb", "TV & WEB Series", "${S12}TV-WEB-Series/", MediaType.SERIES),
         Source("korean", "Korean TV & WEB Series", "${S14}KOREAN%20TV%20%26%20WEB%20Series/", MediaType.SERIES),
         Source("cartoon", "Anime & Cartoon Series", "${S10}Anime%20%26%20Cartoon%20TV%20Series/", MediaType.SERIES),
-    ) + bokaSoka
+    ) + rongDhong + bokaSoka
 
 
     val homeRows: List<HomeRow> = listOf(

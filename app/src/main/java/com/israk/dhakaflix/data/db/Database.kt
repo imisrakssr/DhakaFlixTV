@@ -179,7 +179,7 @@ abstract class ItemDao {
     @Query("SELECT * FROM items WHERE metaState = 0 ORDER BY uploadedAt DESC LIMIT :limit")
     abstract suspend fun pendingMeta(limit: Int): List<ItemEntity>
 
-    @Query("SELECT COUNT(*) FROM items WHERE sourceId NOT LIKE 'bk-%'")
+    @Query("SELECT COUNT(*) FROM items")
     abstract fun countFlow(): Flow<Int>
 
     @Query("SELECT COUNT(*) FROM items WHERE metaState = 0")
@@ -194,23 +194,31 @@ abstract class ItemDao {
     @Update
     abstract suspend fun update(item: ItemEntity)
 
-    /** One card per title, played from its best copy: 1080p first, then 720p, then the rest (newest wins a tie). */
+    /** One card per title, played from its best copy: 1080p first, then 720p, then the rest; DhakaFlix before other servers, then newest. */
     @Query(
         "UPDATE items SET isPrimary = CASE WHEN id = (SELECT j.id FROM items j WHERE j.groupKey = items.groupKey " +
             "ORDER BY CASE WHEN LOWER(j.quality) = '1080p' THEN 0 WHEN LOWER(j.quality) = '720p' THEN 1 ELSE 2 END, " +
-            "j.uploadedAt DESC LIMIT 1) AND sourceId NOT LIKE 'bk-%' AND sourceId NOT LIKE 'rd-%' THEN 1 ELSE 0 END"
+            "(j.sourceId LIKE 'bk-%' OR j.sourceId LIKE 'rd-%'), j.uploadedAt DESC LIMIT 1) THEN 1 ELSE 0 END"
     )
     abstract suspend fun recomputePrimary()
 
     @Query("SELECT * FROM items WHERE groupKey = :groupKey ORDER BY uploadedAt DESC")
     abstract fun versions(groupKey: String): Flow<List<ItemEntity>>
 
-    @Query("SELECT COUNT(*) FROM items WHERE sourceId LIKE 'bk-%'")
+    @Query("SELECT COUNT(*) FROM items WHERE sourceId LIKE 'bk-%' OR sourceId LIKE 'rd-%'")
     abstract fun otherServerCount(): Flow<Int>
 
-    /** Other servers' folders (BokaSoka) are only an index for the server picker: never shown anywhere. */
-    @Query("UPDATE items SET isPrimary = 0 WHERE sourceId LIKE 'bk-%' OR sourceId LIKE 'rd-%'")
-    abstract suspend fun hideOtherServers()
+    data class MatchedKey(val id: String, val type: String, val title: String, val tmdbTitle: String?, val year: Int?, val releaseYear: Int?)
+
+    @Query("SELECT id, type, title, tmdbTitle, year, releaseYear FROM items WHERE tmdbId IS NOT NULL AND metaState IN (1, 3)")
+    abstract suspend fun matchedKeys(): List<MatchedKey>
+
+    /** Rows kept hidden by v2.0.1–2.0.4 (BokaSoka index) join the library: look them up like the rest. */
+    @Query("UPDATE items SET metaState = 0 WHERE metaState = 4")
+    abstract suspend fun unhideOldIndex()
+
+    @Query("SELECT * FROM items WHERE groupKey = :groupKey ORDER BY uploadedAt DESC")
+    abstract suspend fun versionsNow(groupKey: String): List<ItemEntity>
 
     /** Same title (any of [titles], lower case) on another server, year within one either way. */
     @Query(
@@ -219,7 +227,7 @@ abstract class ItemDao {
     )
     abstract suspend fun otherServerMatches(type: String, titles: List<String>, year: Int?): List<ItemEntity>
 
-    @Query("SELECT DISTINCT year FROM items WHERE year IS NOT NULL AND isPrimary = 1 ORDER BY year DESC")
+    @Query("SELECT DISTINCT year FROM items WHERE year IS NOT NULL ORDER BY year DESC")
     abstract fun years(): Flow<List<Int>>
 
     @Query("UPDATE items SET metaState = 0 WHERE metaState = 2")

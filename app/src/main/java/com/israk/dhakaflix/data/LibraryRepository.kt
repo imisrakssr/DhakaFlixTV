@@ -87,6 +87,7 @@ class LibraryRepository(private val app: DhakaFlixApp) {
     private val settings = app.settings
     private val scope = app.appScope
     val h5ai = H5aiClient(app.http)
+    val rongDhong = com.israk.dhakaflix.data.net.RongDhongClient(app.http, Defaults.RD_ROOT)
     val tmdb = TmdbClient(app.http) { settings.tmdbKey.value.ifBlank { BuildConfig.TMDB_API_KEY } }
     val mdblist = com.israk.dhakaflix.data.accounts.MdbList(app)
     val simkl = com.israk.dhakaflix.data.accounts.Simkl(app)
@@ -121,9 +122,8 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         scope.launch(Dispatchers.IO) {
             val count = db.items().countFlow().first()
             val stale = System.currentTimeMillis() - settings.lastSync.value > maxAgeMs
-            // other servers' index rows must never show up (an interrupted sync could leave some visible)
-            db.items().hideOtherServers()
-            // also when another server's hidden index (BokaSoka) has never been built
+            db.items().unhideOldIndex()
+            // also when another server's library (RongDhong / BokaSoka) has never been filled
             val otherMissing = settings.sources.value.any { it.enabled && Defaults.isOtherServer(it.id) && db.items().countForSource(it.id) == 0 }
             if (count == 0 || stale || otherMissing) startSync(force = false, manual = false) else { startEnrich(); startPosterScan() }
         }
@@ -156,6 +156,7 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         val folders = AtomicInteger(0)
         val failed = mutableListOf<String>()
         for (src in sources) {
+            if (Defaults.isRongDhong(src.id)) continue // synced together below (JSON API)
             // other servers update only when you refresh by hand (or the very first time, to fill the library)
             if (!manual && Defaults.isOtherServer(src.id) && db.items().countForSource(src.id) > 0) continue
             _sync.update { it.copy(currentSource = src.name) }
@@ -170,8 +171,21 @@ class LibraryRepository(private val app: DhakaFlixApp) {
                 DiagLog.add("Library", "${src.name}: ${e.message ?: e.javaClass.simpleName}")
             }
         }
+        // other servers update only when you refresh by hand (or the very first time, to fill the library)
+        val rdSources = sources.filter { Defaults.isRongDhong(it.id) }
+            .filter { manual || db.items().countForSource(it.id) == 0 }
+        if (rdSources.isNotEmpty()) {
+            try {
+                syncRongDhong(rdSources, force, newItems)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "RongDhong failed", e)
+                failed += rdSources.map { it.name }
+                DiagLog.add("Library", "RongDhong: ${e.message ?: e.javaClass.simpleName}")
+            }
+        }
         db.items().recomputePrimary()
-        db.items().hideOtherServers()
         if (failed.size < sources.size) settings.setLastSync(System.currentTimeMillis())
         _sync.value = SyncState(
             running = false,
@@ -203,7 +217,9 @@ class LibraryRepository(private val app: DhakaFlixApp) {
                     groupKey = e.url,
                 ).let {
                     // other servers: a hidden index for the server picker, no TMDB lookups or poster scans
-                    if (Defaults.isOtherServer(src.id)) it.copy(metaState = ItemEntity.META_HIDDEN, posterChecked = true, isPrimary = false) else it
+                    // other servers: no folder-image poster scan (thousands of extra requests, TMDB gives the art),
+                    // and an old film re-uploaded there doesn't count as new
+                    if (Defaults.isOtherServer(src.id)) it.copy(posterChecked = true, uploadedAt = capUpload(it.uploadedAt, it.year)) else it
                 }
             } else if (depth < MAX_DEPTH && !isJunkFolder(e.name)) {
                 subdirs += e
@@ -227,6 +243,132 @@ class LibraryRepository(private val app: DhakaFlixApp) {
                 }
             }
         }.awaitAll()
+    }
+
+    // ------------------------------------------------------------ RongDhong library
+
+    /**
+     * RongDhong lists its whole catalogue through its API, already matched to TMDB, so its titles come in
+     * with posters and details straight away (no TMDB lookups). A cheap fingerprint skips unchanged catalogues.
+     */
+    private suspend fun syncRongDhong(srcs: List<Source>, force: Boolean, newItems: AtomicInteger) {
+        for ((kind, type) in listOf("movies" to MediaType.MOVIE, "tv-shows" to MediaType.SERIES)) {
+            val mine = srcs.filter { it.type == type }
+            if (mine.isEmpty()) continue
+            _sync.update { it.copy(currentSource = "RongDhong") }
+            val key = "rd:$kind:" + mine.joinToString(",") { it.id }
+            val fp = net.withPermit { rongDhong.fingerprint(kind) }.hashCode().toLong()
+            val have = mine.any { db.items().countForSource(it.id) > 0 }
+            if (!force && have && db.dirs().all().any { it.url == key && it.modified == fp }) continue
+            val now = System.currentTimeMillis()
+            val byLib = mine.associate { it.id.removePrefix("rd-") to (it to ArrayList<ItemEntity>()) }
+            net.withPermit {
+                rongDhong.all(kind) { page ->
+                    for (o in page) {
+                        val (src, list) = byLib[libraryOf(o)] ?: continue
+                        rdItem(o, kind, src, now)?.let(list::add)
+                    }
+                }
+            }
+            for ((src, list) in byLib.values) {
+                val leaves = list.distinctBy { it.id }
+                val before = db.items().countForSource(src.id)
+                db.items().upsertListing(src.url, leaves)
+                if (leaves.size > before) _sync.update { it.copy(newItems = newItems.addAndGet(leaves.size - before)) }
+            }
+            db.dirs().put(DirCacheEntity(key, fp))
+        }
+    }
+
+    private fun kotlinx.serialization.json.JsonObject.str(k: String): String? =
+        (this[k] as? kotlinx.serialization.json.JsonPrimitive)?.let { if (it is kotlinx.serialization.json.JsonNull) null else it.content }
+
+    private fun libraryOf(o: kotlinx.serialization.json.JsonObject): String? =
+        (o["Library"] as? kotlinx.serialization.json.JsonObject)?.str("id") ?: o.str("library")
+
+    private fun rdItem(o: kotlinx.serialization.json.JsonObject, kind: String, src: Source, now: Long): ItemEntity? {
+        val rid = o.str("id") ?: return null
+        val title = o.str("title")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val isTv = kind == "tv-shows"
+        val path = (if (isTv) o.str("path") else o.str("file_path")).orEmpty().trimEnd('/')
+        if (Defaults.is3D(path)) return null
+        val file = path.substringAfterLast('/')
+        val folder = if (isTv) file else path.substringBeforeLast('/', "").substringAfterLast('/')
+        val parsed = NameParser.parseFolder(folder, src.type)
+        val year = o.str("year")?.toIntOrNull()?.takeIf { it in 1880..2100 }
+        val tmdbId = o.str("tmdb_id")?.toIntOrNull()?.takeIf { it > 0 }
+        val poster = o.str("poster_path")?.takeIf { it.startsWith("/") }
+        val genres = o.str("genre")?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
+            ?.takeIf { it.isNotEmpty() }?.joinToString("|", "|", "|")
+        val itemId = rongDhong.itemId(kind, rid)
+        return ItemEntity(
+            id = itemId, type = src.type.name, sourceId = src.id, parentUrl = src.url,
+            rawName = file.ifBlank { title }, title = title, year = year ?: parsed?.year,
+            quality = parsed?.quality, tags = parsed?.tags?.joinToString(",").orEmpty(),
+            uploadedAt = rdUploaded(o, isTv) ?: now, firstSeenAt = now,
+            groupKey = if (tmdbId != null) "${src.type.name}:$tmdbId" else itemId,
+            metaState = if (tmdbId != null) ItemEntity.META_MATCHED else ItemEntity.META_PENDING,
+            tmdbId = tmdbId, tmdbTitle = if (tmdbId != null) title else null,
+            posterPath = poster, backdropPath = o.str("backdrop_path")?.takeIf { it.startsWith("/") },
+            overview = o.str("overview")?.takeIf { it.isNotBlank() }?.take(400),
+            rating = o.str("online_rating")?.toDoubleOrNull()?.takeIf { it > 0 },
+            genres = genres, releaseYear = year,
+            localPoster = if (poster == null) rongDhong.posterUrl(isTv, rid) else null,
+            posterChecked = true,
+        )
+    }
+
+    /**
+     * When it really arrived. RongDhong imported its whole old collection in one go, so "added" alone would
+     * make every old film look brand new: a film counts from its release date unless it was added before it,
+     * and a show from its last update only when it changed after the import (new episodes).
+     */
+    private fun rdUploaded(o: kotlinx.serialization.json.JsonObject, isTv: Boolean): Long? {
+        val created = isoTime(o.str("createdAt"))
+        val updated = isoTime(o.str("updatedAt"))
+        val released = isoTime(o.str("release_date")?.let { if (it.length == 10) it + "T00:00:00" else it })
+        if (isTv && updated != null && created != null && updated - created > 86_400_000L) return updated
+        return listOfNotNull(created, released).minOrNull() ?: updated
+    }
+
+    private fun isoTime(s: String?): Long? {
+        if (s.isNullOrBlank()) return null
+        val f = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+        return runCatching { f.parse(s.take(19))?.time }.getOrNull()
+    }
+
+    private val rdEpisodes = ConcurrentHashMap<String, Pair<Long, List<com.israk.dhakaflix.data.net.RongDhongClient.Episode>>>()
+    private fun rdEpisodesOf(showId: String): List<com.israk.dhakaflix.data.net.RongDhongClient.Episode> {
+        rdEpisodes[showId]?.let { (t, l) -> if (System.currentTimeMillis() - t < 120_000) return l }
+        return rongDhong.episodes(showId).also { rdEpisodes[showId] = System.currentTimeMillis() to it }
+    }
+
+    private fun rdListItem(item: ItemEntity): FolderContent {
+        val rid = rongDhong.idOf(item.id)
+        if (!item.isSeries) {
+            val v = VideoFile(item.rawName, rongDhong.movieStream(rid), 0, null, null, emptyList())
+            return FolderContent(listOf(v), emptyList(), emptyList(), null, null)
+        }
+        val seasons = rdEpisodesOf(rid).map { it.season }.distinct().sorted()
+            .map { SeasonRef(it, "Season $it", rongDhong.seasonRef(item.id, it)) }
+        return FolderContent(emptyList(), seasons, emptyList(), null, null)
+    }
+
+    private fun rdListSeason(season: SeasonRef): List<VideoFile> {
+        val n = rongDhong.seasonOf(season.url) ?: season.number
+        val rid = rongDhong.idOf(season.url.substringBefore('#'))
+        return rdEpisodesOf(rid).filter { it.season == n }.map { e ->
+            val label = "S%02dE%02d".format(e.season, e.episode)
+            VideoFile(e.name?.takeIf { it.isNotBlank() }?.let { "$label · $it" } ?: label,
+                rongDhong.episodeStream(e.id), 0, e.season, e.episode.takeIf { it > 0 }, emptyList())
+        }
+    }
+
+    /** An old film newly put on another server isn't "new": count it from the year after its release at the latest. */
+    private fun capUpload(t: Long, year: Int?): Long {
+        if (year == null) return t
+        val c = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply { clear(); set(year + 1, 0, 1) }
+        return minOf(t, c.timeInMillis)
     }
 
     private fun isJunkFolder(name: String): Boolean {
@@ -289,6 +431,8 @@ class LibraryRepository(private val app: DhakaFlixApp) {
 
     private sealed interface Outcome {
         class Match(val item: ItemEntity, val r: TmdbResult) : Outcome
+        /** Same title + year already matched in the library (usually RongDhong's TMDB-tagged copy): no TMDB call. */
+        class Copy(val item: ItemEntity, val from: ItemEntity) : Outcome
         class Miss(val id: String) : Outcome
         object Skip : Outcome
         object Fail : Outcome
@@ -296,17 +440,38 @@ class LibraryRepository(private val app: DhakaFlixApp) {
 
     private suspend fun enrichLoop() {
         val sem = Semaphore(8)
-        var batches = 0
+        // titles already matched (DhakaFlix + RongDhong, which arrives TMDB-tagged): other servers' copies of
+        // the same film borrow that match instead of asking TMDB — most of BokaSoka is matched this way, fast
+        val known = HashMap<String, String>()
+        db.items().matchedKeys().forEach { k ->
+            listOfNotNull(k.title, k.tmdbTitle).forEach { t ->
+                val y = k.year ?: k.releaseYear
+                known.putIfAbsent("${k.type}|${NameParser.norm(t)}|$y", k.id)
+            }
+        }
+        fun twin(item: ItemEntity): String? {
+            val n = NameParser.norm(item.title)
+            val y = item.year
+            return known["${item.type}|$n|$y"] ?: y?.let { known["${item.type}|$n|${it - 1}"] ?: known["${item.type}|$n|${it + 1}"] }
+        }
+        var lastPrimary = System.currentTimeMillis()
         while (true) {
             val batch = db.items().pendingMeta(40)
             if (batch.isEmpty()) break
             val outcomes = coroutineScope {
-                batch.map { item -> async { sem.withPermit { lookup(item) } } }.awaitAll()
+                batch.map { item ->
+                    async {
+                        val t = if (Defaults.isOtherServer(item.sourceId)) twin(item) else null
+                        val from = t?.let { db.items().get(it) }
+                        if (from?.tmdbId != null) Outcome.Copy(item, from) else sem.withPermit { lookup(item) }
+                    }
+                }.awaitAll()
             }
             if (outcomes.all { it is Outcome.Fail }) break // TMDB unreachable: stop, retry next launch
             // one transaction per batch = one UI refresh instead of 40 (keeps the TV UI smooth)
             db.withTransaction { outcomes.forEach { applyOutcome(it) } }
-            if (++batches % 5 == 0) db.items().recomputePrimary()
+            // re-pick the cards now and then, not every batch: with a big library that query is the slow part on TV
+            if (System.currentTimeMillis() - lastPrimary > 60_000) { db.items().recomputePrimary(); lastPrimary = System.currentTimeMillis() }
         }
         db.items().recomputePrimary()
     }
@@ -315,6 +480,12 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         when (o) {
             is Outcome.Match -> applyResult(o.item, o.r, ItemEntity.META_MATCHED)
             is Outcome.Miss -> db.items().setMetaState(o.id, ItemEntity.META_NOT_FOUND)
+            is Outcome.Copy -> db.items().applyMeta(
+                id = o.item.id, state = ItemEntity.META_MATCHED, tmdbId = o.from.tmdbId!!, tmdbTitle = o.from.tmdbTitle,
+                posterPath = o.from.posterPath, backdropPath = o.from.backdropPath, overview = o.from.overview,
+                rating = o.from.rating, voteCount = o.from.voteCount, genres = o.from.genres,
+                releaseYear = o.from.releaseYear, groupKey = "${o.item.type}:${o.from.tmdbId}",
+            )
             else -> Unit
         }
     }
@@ -434,6 +605,7 @@ class LibraryRepository(private val app: DhakaFlixApp) {
     // --------------------------------------------------------------- folders
 
     suspend fun listItem(item: ItemEntity): FolderContent = withContext(Dispatchers.IO) {
+        if (Defaults.isRongDhong(item.sourceId)) return@withContext rdListItem(item)
         val entries = h5ai.list(item.id)
         val files = entries.filter { !it.isDir }
         val dirs = entries.filter { it.isDir }

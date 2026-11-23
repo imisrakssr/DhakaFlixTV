@@ -76,18 +76,18 @@ object AltServers {
     }
 
     /**
-     * Every copy of what [p] is on the other servers (BokaSoka's index, RongDhong's search).
-     * Other DhakaFlix copies are not offered: the picker is only for other servers.
+     * Every copy of what [p] is on the other servers (library copies, RongDhong's search, BokaSoka's
+     * year folders). Copies on the server that is playing aren't offered: the picker is for servers.
      */
     suspend fun find(meta: ItemEntity?, p: PlayItem): List<Alt> = withContext(Dispatchers.IO) {
         val lib = runCatching { libraryCopies(meta, p) }.getOrDefault(emptyList()) +
             runCatching { bokaSokaYearProbe(meta, p) }.getOrDefault(emptyList())
         val ext = runCatching { searchServers(meta, p) }.getOrDefault(emptyList())
-        (lib + ext).distinctBy { it.url }.filter { it.url != p.url && !it.is3D }
+        (lib + ext).distinctBy { it.url }.filter { it.url != p.url && !it.is3D && it.server != serverOf(p.url) }
             .also { list -> list.forEach { labels[it.url] = it.label } }
     }
 
-    /** BokaSoka: its hidden folder index, matched by title + year, then the file inside the folder. */
+    /** Copies of the title in the library on other servers (grouped by TMDB id, or BokaSoka by name + year). */
     private suspend fun libraryCopies(meta: ItemEntity?, p: PlayItem): List<Alt> {
         val app = DhakaFlixApp.instance
         val repo = app.library
@@ -95,7 +95,10 @@ object AltServers {
         val titles = listOfNotNull(meta?.title, meta?.tmdbTitle, p.title).map { it.lowercase().trim() }.distinct()
         if (titles.isEmpty()) return emptyList()
         val names = app.settings.sources.value.associate { it.id to it.name.substringAfter(" · ") }
-        val hits = app.db.items().otherServerMatches(type, titles, meta?.displayYear ?: meta?.year)
+        // same title grouped in the library (any server but the one playing), then BokaSoka by name + year
+        val grouped = meta?.let { m -> app.db.items().versionsNow(m.groupKey).filter { it.id != m.id && serverOf(it.id) != serverOf(p.url) } }.orEmpty()
+        val hits = (grouped + app.db.items().otherServerMatches(type, titles, meta?.displayYear ?: meta?.year))
+            .distinctBy { it.id }.filter { serverOf(it.id) != serverOf(p.url) }.take(8)
         return hits.mapNotNull { v ->
             runCatching {
                 val content = repo.listItem(v)
