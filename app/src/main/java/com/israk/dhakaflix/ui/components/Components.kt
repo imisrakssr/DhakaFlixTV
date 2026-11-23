@@ -127,14 +127,16 @@ fun FocusFrame(
     if (!LocalIsTv.current) {
         // phone: touch never focuses a card, so skip the focus animations, rim and layer.
         // Every card that scrolls into view is then much cheaper to build -> smoother scrolling.
+        val dragged = remember { booleanArrayOf(false) }
+        val tap = { if (!dragged[0]) onClick() }
         Box(
             modifier
                 .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-                .dragCancelsClick()
+                .trackDrag(dragged)
                 .clip(shape)
                 .then(
-                    if (onLongClick == null) Modifier.clickable(onClick = onClick)
-                    else Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                    if (onLongClick == null) Modifier.clickable(onClick = tap)
+                    else Modifier.combinedClickable(onClick = tap, onLongClick = onLongClick)
                 ),
         ) { content(false) }
         return
@@ -797,16 +799,20 @@ fun CalmVerticalScroll(topMargin: Dp, bottomMargin: Dp = 56.dp, content: @Compos
 }
 
 
-/** Touch: when the finger moved further than a tap allows, swallow the release so the click never fires. */
-fun Modifier.dragCancelsClick(): Modifier = pointerInput(Unit) {
+/**
+ * Touch: remembers whether the finger moved further than a tap allows, so the card can ignore the click.
+ * It only watches — it never consumes anything. (The old version swallowed the finger's release, and the
+ * list under it then lost its fling: lifting the finger stopped the scroll dead, so scrolling felt stuck.)
+ */
+fun Modifier.trackDrag(dragged: BooleanArray): Modifier = pointerInput(Unit) {
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false, pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial)
-        var moved = false
+        dragged[0] = false
         while (true) {
             val ev = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
             val c = ev.changes.firstOrNull { it.id == down.id } ?: break
-            if (!moved && (c.position - down.position).getDistance() > viewConfiguration.touchSlop) moved = true
-            if (!c.pressed) { if (moved) c.consume(); break }
+            if (!dragged[0] && (c.position - down.position).getDistance() > viewConfiguration.touchSlop) dragged[0] = true
+            if (!c.pressed) break
         }
     }
 }

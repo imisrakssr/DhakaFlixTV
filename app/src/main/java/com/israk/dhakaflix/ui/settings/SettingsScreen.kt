@@ -1009,6 +1009,29 @@ private fun SimklCard() {
                     PillButton(s.signOut, onClick = { simkl.signOut() })
                 }
             }
+            p != null && !LocalIsTv.current -> {
+                // phone: Simkl opens right here in the browser, no QR needed
+                val dhk = com.israk.dhakaflix.ui.components.isDhakaiya()
+                val ctx = androidx.compose.ui.platform.LocalContext.current
+                Text(
+                    if (dhk) "নিচের বাটন চাপ, Simkl এ Allow দে, তারপর এইখানে ফিরা আয়। কোড:" else "Tap the button, press Allow on Simkl, then come back here. Code:",
+                    color = TextDim, style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(p.code, color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(6.dp))
+                Text(s.waitingApproval, color = Color(0xFF93C5FD), style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(12.dp))
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PillButton(if (dhk) "Simkl খোল" else "Open Simkl", primary = true, onClick = {
+                        runCatching {
+                            ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(p.link))
+                                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                        }
+                    })
+                    PillButton(s.cancel, onClick = { simkl.cancelLogin() })
+                }
+            }
             p != null -> {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     com.israk.dhakaflix.ui.components.QrCode(p.link, size = 130.dp)
@@ -1049,6 +1072,36 @@ private fun SimklCard() {
             Spacer(Modifier.height(8.dp))
             Text("⚠ $it", color = Color(0xFFFF8A80), style = MaterialTheme.typography.bodySmall)
         }
+        ClientIdNotice(blocked = error?.let { e -> listOf("403", "429", "rejected", "suspend", "blocked").any { it in e.lowercase() } } == true)
+    }
+}
+
+/** When Simkl blocks the app's Client ID, a new one has to be made — how to do that. */
+@Composable
+private fun ClientIdNotice(blocked: Boolean) {
+    val dhk = com.israk.dhakaflix.ui.components.isDhakaiya()
+    val tint = if (blocked) Color(0xFFFBBF24) else TextDim
+    Spacer(Modifier.height(14.dp))
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+            .background(if (blocked) Color(0x33FBBF24) else Color.White.copy(alpha = .05f))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+    ) {
+        Text(
+            if (dhk) (if (blocked) "⚠ Simkl এই Client ID আটকাইয়া দিছে — নতুন একটা লাগব" else "ℹ Sync বারবার আটকায়? নতুন Client ID বানা")
+            else (if (blocked) "⚠ Simkl has blocked this Client ID — make a new one" else "ℹ Sync keeps failing? Make a new Client ID"),
+            color = tint, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            if (dhk) "১. simkl.com/settings/developer এ গিয়া New app বানা (Redirect URI: urn:ietf:wg:oauth:2.0:oob)\n" +
+                "২. এইখানে Sign out কর → Client ID → নতুন আইডিটা বসা → Save\n" +
+                "৩. আবার Sign in কর — অন্য ডিভাইসেও একই নতুন আইডি দিস"
+            else "1. On simkl.com/settings/developer create a New app (Redirect URI: urn:ietf:wg:oauth:2.0:oob)\n" +
+                "2. Here: Sign out → Client ID → paste the new ID → Save\n" +
+                "3. Sign in again — use the same new ID on your other devices too",
+            color = TextDim, style = MaterialTheme.typography.bodySmall,
+        )
     }
 }
 
