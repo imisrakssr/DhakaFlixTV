@@ -117,6 +117,51 @@ class LibraryRepository(private val app: DhakaFlixApp) {
 
     // ------------------------------------------------------------------ sync
 
+    // ---------------------------------------------------------------- "new on the other servers" notice
+
+    /** Servers (RongDhong / BokaSoka) with titles the library doesn't have yet; cleared by a manual refresh. */
+    private val _otherNews = MutableStateFlow<List<String>>(emptyList())
+    val otherNews: StateFlow<List<String>> = _otherNews
+    @Volatile private var lastNewsCheck = 0L
+
+    /**
+     * Light check (no sync): RongDhong's catalogue fingerprint (2 small calls) and BokaSoka's category folders
+     * (one listing each) against what the last refresh saw. On app open and every few hours.
+     */
+    fun checkOtherServers(maxAgeMs: Long = 6 * 3600_000L) {
+        if (_sync.value.running || System.currentTimeMillis() - lastNewsCheck < maxAgeMs) return
+        lastNewsCheck = System.currentTimeMillis()
+        scope.launch(Dispatchers.IO) {
+            val enabled = settings.sources.value.filter { it.enabled && Defaults.isOtherServer(it.id) }
+            if (enabled.isEmpty()) return@launch
+            val cache = db.dirs().all().associate { it.url to it.modified }
+            val news = mutableListOf<String>()
+            // RongDhong
+            val rd = enabled.filter { Defaults.isRongDhong(it.id) }
+            for ((kind, type) in listOf("movies" to MediaType.MOVIE, "tv-shows" to MediaType.SERIES)) {
+                val mine = rd.filter { it.type == type }
+                if (mine.isEmpty() || mine.all { db.items().countForSource(it.id) == 0 }) continue
+                val key = "rd:$kind:" + mine.joinToString(",") { it.id }
+                val fp = runCatching { rongDhong.fingerprint(kind).hashCode().toLong() }.getOrNull() ?: continue
+                if (cache[key] != fp) { news += "RongDhong"; break }
+            }
+            // BokaSoka
+            for (src in enabled.filter { it.id.startsWith("bk-") }) {
+                if (db.items().countForSource(src.id) == 0) continue
+                val entries = runCatching { h5ai.list(src.url) }.getOrNull() ?: continue
+                val known = db.items().idsByParent(src.url).toHashSet()
+                val changed = entries.any { e ->
+                    e.isDir && !Defaults.is3D(e.name) && !isJunkFolder(e.name) && when {
+                        cache.containsKey(e.url) -> e.modified != 0L && cache[e.url] != e.modified
+                        else -> NameParser.parseFolder(e.name, src.type) != null && e.url !in known
+                    }
+                }
+                if (changed) { news += "BokaSoka"; break }
+            }
+            _otherNews.value = news
+        }
+    }
+
     /** Incremental sync when the library is older than [maxAgeMs]; cheap because unchanged folders are skipped. */
     fun syncIfStale(maxAgeMs: Long = TEN_MINUTES) {
         scope.launch(Dispatchers.IO) {
@@ -153,6 +198,7 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         _sync.value = SyncState(running = true)
         db.items().deleteNotInSources(sources.map { it.id }.ifEmpty { listOf("__none__") })
         if (force) db.items().resetEmpty()
+        if (manual) _otherNews.value = emptyList() // this refresh brings the other servers' new titles in
         val cache = if (force) emptyMap() else db.dirs().all().associate { it.url to it.modified }
         val newItems = AtomicInteger(0)
         val folders = AtomicInteger(0)

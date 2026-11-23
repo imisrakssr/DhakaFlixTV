@@ -402,7 +402,7 @@ private fun PhoneTabBar(tab: Tab, onTab: (Tab) -> Unit, labels: (Tab) -> String,
             ) {
                 Box {
                     Icon(t.icon(), labels(t), tint = if (selected) Color.White else TextDim, modifier = Modifier.size(22.dp))
-                    if (t == Tab.SETTINGS && updateReady()) UpdateDot(Modifier.align(Alignment.TopEnd).offset(x = 3.dp, y = (-2).dp))
+                    if (t == Tab.SETTINGS && settingsBadge()) UpdateDot(Modifier.align(Alignment.TopEnd).offset(x = 3.dp, y = (-2).dp))
                 }
                 Spacer(Modifier.height(2.dp))
                 Text(
@@ -621,7 +621,7 @@ private fun LeftRail(nav: NavHandle, active: Boolean, onPick: (Tab) -> Unit) {
         ) {
             Image(painterResource(rememberBrandLogos().first), "DhakaFlix", Modifier.padding(start = 6.dp, bottom = 14.dp).size(32.dp))
             Tab.entries.forEach { t ->
-                RailItem(t.icon(), t.label(s), t == tab, expanded, nav.requesters.getValue(t), active, isCurrent = { nav.currentTab() == t }, redirect = nav::focusCurrent, badge = t == Tab.SETTINGS && updateReady()) { onPick(t) }
+                RailItem(t.icon(), t.label(s), t == tab, expanded, nav.requesters.getValue(t), active, isCurrent = { nav.currentTab() == t }, redirect = nav::focusCurrent, badge = t == Tab.SETTINGS && settingsBadge()) { onPick(t) }
             }
             Spacer(Modifier.weight(1f))
             Box(Modifier.padding(start = 14.dp)) { SyncIndicator() }
@@ -709,3 +709,8 @@ fun UpdateDot(modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp =
             .padding(1.5.dp).clip(androidx.compose.foundation.shape.CircleShape).background(LocalAccent.current)
     )
 }
+
+/** Dot on the Settings tab: a new app version, or new titles on RongDhong / BokaSoka waiting for a refresh. */
+@Composable
+fun settingsBadge(): Boolean =
+    updateReady() || com.israk.dhakaflix.DhakaFlixApp.instance.library.otherNews.collectAsState().value.isNotEmpty()

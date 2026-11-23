@@ -328,6 +328,25 @@ private fun LibraryCard() {
         if (sync.failedSources.isNotEmpty()) {
             Text("⚠ " + sync.failedSources.joinToString(), color = Color(0xFFFF8A80), style = MaterialTheme.typography.bodySmall)
         }
+        // new titles waiting on the other servers (they only come in with a manual refresh)
+        val news by repo.otherNews.collectAsState()
+        if (news.isNotEmpty() && !sync.running) {
+            Spacer(Modifier.height(10.dp))
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(LocalAccent.current.copy(alpha = .16f))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                com.israk.dhakaflix.ui.UpdateDot(size = 10.dp)
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    if (com.israk.dhakaflix.ui.components.isDhakaiya()) "${news.joinToString(" আর ")} এ নতুন মুভি/সিরিজ আইছে — Refresh library চাপ"
+                    else "New movies/series on ${news.joinToString(" and ")} — press Refresh library",
+                    color = Color.White, style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+        }
         // how much of the library comes from the other servers (RongDhong + BokaSoka)
         val bk by remember { app.db.items().otherServerCount() }.collectAsState(initial = 0)
         val dhkLang = com.israk.dhakaflix.ui.components.isDhakaiya()

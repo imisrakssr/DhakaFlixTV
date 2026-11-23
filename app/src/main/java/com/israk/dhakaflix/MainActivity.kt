@@ -50,6 +50,7 @@ class MainActivity : ComponentActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 while (true) {
                     app.library.syncIfStale(LibraryRepository.THIRTY_MINUTES)
+                    app.library.checkOtherServers()
                     app.library.simkl.syncIfStale()
                     com.israk.dhakaflix.data.Updater.checkIfStale()
                     delay(5 * 60_000L)
