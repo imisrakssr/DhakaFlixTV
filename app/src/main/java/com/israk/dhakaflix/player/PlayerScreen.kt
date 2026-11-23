@@ -253,6 +253,10 @@ private fun PauseInfo(c: PlayerController) {
                 c.current.title, color = Color.White, style = MaterialTheme.typography.displaySmall,
                 fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis,
             )
+            Text(
+                (if (bn) "সার্ভার: " else "Server: ") + (c.altPlaying?.let { "${it.server} · ${it.label}" } ?: c.originLabel),
+                color = TextDim, style = MaterialTheme.typography.labelMedium, maxLines = 1,
+            )
             val facts = listOfNotNull(
                 m?.displayYear?.toString()?.let { if (bn) B.digits(it) else it },
                 m?.rating?.takeIf { it > 0 }?.let { "★ " + com.israk.dhakaflix.ui.components.fmtRating(it).let { r -> if (bn) B.digits(r) else r } },
@@ -380,6 +384,12 @@ private fun Controls(c: PlayerController, visible: Boolean) {
             Column(Modifier.weight(1f)) {
                 Text(item.title, style = MaterialTheme.typography.headlineSmall, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold)
                 item.subtitle?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = TextDim, maxLines = 1) }
+                // which server this is playing from (small, under the title)
+                Text(
+                    (if (com.israk.dhakaflix.ui.components.isDhakaiya()) "সার্ভার: " else "Server: ") +
+                        (c.altPlaying?.let { "${it.server} · ${it.label}" } ?: c.originLabel),
+                    style = MaterialTheme.typography.labelSmall, color = TextDim.copy(alpha = .85f), maxLines = 1,
+                )
             }
             // top right: the time now, and when this will end
             val bn = com.israk.dhakaflix.ui.components.isDhakaiya()
