@@ -173,8 +173,8 @@ class TmdbClient(private val http: OkHttpClient, private val key: () -> String) 
     suspend fun videos(tv: Boolean, id: Int): List<TmdbVideo> =
         json.decodeFromString(TmdbVideos.serializer(), get(if (tv) "tv/$id/videos" else "movie/$id/videos", emptyMap())).results
 
-    suspend fun logos(tv: Boolean, id: Int, langs: String = "en,null"): List<TmdbImage> =
-        json.decodeFromString(TmdbImageSet.serializer(), get(if (tv) "tv/$id/images" else "movie/$id/images", mapOf("include_image_language" to langs))).logos
+    suspend fun logos(tv: Boolean, id: Int): List<TmdbImage> =
+        json.decodeFromString(TmdbImageSet.serializer(), get(if (tv) "tv/$id/images" else "movie/$id/images", mapOf("include_image_language" to "en,null"))).logos
 
     fun castToJson(cast: List<TmdbCast>): String = json.encodeToString(castSer, cast)
     fun castFromJson(s: String?): List<TmdbCast> =

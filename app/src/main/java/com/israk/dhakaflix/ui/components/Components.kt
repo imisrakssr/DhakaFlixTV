@@ -2,6 +2,9 @@
 
 package com.israk.dhakaflix.ui.components
 
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.basicMarquee
 
 import androidx.compose.animation.animateColorAsState
@@ -157,6 +160,8 @@ fun FocusFrame(
                     else -> false
                 }
             })
+            // phone: a sideways drag that starts on a card must not count as a tap
+            .then(if (LocalIsTv.current) Modifier else Modifier.dragCancelsClick())
             .border(2.5.dp, rim, shape)
             .clip(shape)
             .then(
@@ -760,5 +765,20 @@ fun CalmVerticalScroll(topMargin: Dp, bottomMargin: Dp = 56.dp, content: @Compos
     }
     androidx.compose.runtime.CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides spec) {
         content()
+    }
+}
+
+
+/** Touch: when the finger moved further than a tap allows, swallow the release so the click never fires. */
+fun Modifier.dragCancelsClick(): Modifier = pointerInput(Unit) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false, pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+        var moved = false
+        while (true) {
+            val ev = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+            val c = ev.changes.firstOrNull { it.id == down.id } ?: break
+            if (!moved && (c.position - down.position).getDistance() > viewConfiguration.touchSlop) moved = true
+            if (!c.pressed) { if (moved) c.consume(); break }
+        }
     }
 }

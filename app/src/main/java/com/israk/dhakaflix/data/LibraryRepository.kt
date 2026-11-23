@@ -528,9 +528,15 @@ class LibraryRepository(private val app: DhakaFlixApp) {
                     updatedAt = System.currentTimeMillis(), completed = completed,
                 )
             )
-            if (completed && play.episode == null) { setWatched(play.itemId, true); simkl.onMovieDone(play.itemId) }
-            else if (completed && play.season != null) simkl.onEpisodeDone(play.itemId, play.season, play.episode!!)
-            else simkl.onProgress(play, positionMs, durationMs, force = false)
+            val isMovie = play.season == null && play.episode == null && db.items().get(play.itemId)?.isSeries != true
+            when {
+                // a finished movie marks the title watched
+                completed && isMovie -> { setWatched(play.itemId, true); simkl.onMovieDone(play.itemId) }
+                completed && play.season != null && play.episode != null -> simkl.onEpisodeDone(play.itemId, play.season, play.episode)
+                // an episode whose file name gave no number: never mark the whole series watched
+                completed -> Unit
+                else -> simkl.onProgress(play, positionMs, durationMs, force = false)
+            }
             Unit
         }
 

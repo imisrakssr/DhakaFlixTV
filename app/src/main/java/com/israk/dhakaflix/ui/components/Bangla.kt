@@ -19,7 +19,7 @@ object Bangla {
         s.forEach { c -> append(if (c in '0'..'9') DIGITS[c - '0'] else c) }
     }
 
-    val locale: Locale = Locale("bn", "BD")
+    val locale: Locale = Locale.forLanguageTag("bn-BD")
 
     fun runtime(min: Int): String {
         val h = min / 60
@@ -66,20 +66,7 @@ fun isDhakaiya(): Boolean {
     return lang == "dhk"
 }
 
-/** Numbers in the app language (Bengali digits in Dhakaiya). */
-@Composable
-fun localDigits(s: String): String = if (isDhakaiya()) Bangla.digits(s) else s
-
-/** Title and plot in the app language: Bengali when TMDB has a translation, otherwise English. */
-@Composable
-fun localTitle(item: ItemEntity): String {
-    val bn = isDhakaiya()
-    val t by produceState(item.displayTitle, item.id, bn) {
-        value = if (bn) DhakaFlixApp.instance.library.discovery.bangla(item).title ?: item.displayTitle else item.displayTitle
-    }
-    return t
-}
-
+/** Plot in the app language: Bengali when TMDB has a translation, otherwise English. */
 @Composable
 fun localOverview(item: ItemEntity): String? {
     val bn = isDhakaiya()

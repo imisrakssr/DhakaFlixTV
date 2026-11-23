@@ -119,26 +119,6 @@ class Discovery(private val app: DhakaFlixApp) {
         b
     }
 
-    /** Dhakaiya mode: a Bengali logo if TMDB has one; otherwise null when a Bengali title exists (shown as
-     *  text), else the usual English logo. */
-    suspend fun logoUrlBangla(item: ItemEntity): String? = withContext(Dispatchers.IO) {
-        val id = item.tmdbId ?: return@withContext null
-        val k = "bn" + (if (item.isSeries) "tv:" else "mv:") + id
-        if (logoMem.containsKey(k)) return@withContext logoMem[k]
-        if (prefs.contains("logo:$k")) return@withContext prefs.getString("logo:$k", null)?.ifBlank { null }.also { logoMem[k] = it }
-        if (!tmdb.hasKey) return@withContext null
-        val bnLogo = runCatching { tmdb.logos(item.isSeries, id, "bn").filter { it.lang == "bn" }.maxByOrNull { it.vote ?: 0.0 }?.filePath }
-            .getOrElse { return@withContext null }
-        val url = when {
-            bnLogo != null -> TmdbImages.url(bnLogo, "w500")
-            bangla(item).title != null -> null
-            else -> logoUrl(item)
-        }
-        prefs.edit().putString("logo:$k", url ?: "").apply()
-        logoMem[k] = url
-        url
-    }
-
     suspend fun logoUrl(item: ItemEntity): String? = withContext(Dispatchers.IO) {
         val id = item.tmdbId ?: return@withContext null
         val k = (if (item.isSeries) "tv:" else "mv:") + id

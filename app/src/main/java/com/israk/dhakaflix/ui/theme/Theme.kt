@@ -21,19 +21,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.israk.dhakaflix.R
 
-data class AccentOption(val name: String, val color: Color)
-
-val Accents = listOf(
-    AccentOption("Dhaka Blue", Color(0xFF2E9BFF)),
-    AccentOption("Cyan", Color(0xFF22D3EE)),
-    AccentOption("Crimson", Color(0xFFE5323B)),
-    AccentOption("Emerald", Color(0xFF10B981)),
-    AccentOption("Violet", Color(0xFF8B5CF6)),
-    AccentOption("Amber", Color(0xFFF59E0B)),
-    AccentOption("Rose", Color(0xFFF43F5E)),
-    AccentOption("Lime", Color(0xFF84CC16)),
-)
-
 /** The accent colour follows the app icon picked in Settings (same palettes as ci/logo.py). */
 fun iconAccent(appIcon: String): Color = when (appIcon) {
     "sunset" -> Color(0xFFFF7A28)
@@ -51,7 +38,7 @@ val Surface2 = Color(0xFF1B1E26)
 val TextDim = Color(0xFFA7ACB8)
 val TextFaint = Color(0xFF6B7180)
 
-val LocalAccent = staticCompositionLocalOf { Accents[0].color }
+val LocalAccent = staticCompositionLocalOf { iconAccent("classic") }
 
 /** True on Android TV / leanback devices (D-pad first UI). */
 val LocalIsTv = staticCompositionLocalOf { false }

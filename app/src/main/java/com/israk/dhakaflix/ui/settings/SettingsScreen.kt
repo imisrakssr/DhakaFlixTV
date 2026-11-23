@@ -39,14 +39,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -106,7 +106,6 @@ import com.israk.dhakaflix.ui.components.glass
 import com.israk.dhakaflix.ui.entryFocus
 import com.israk.dhakaflix.ui.home.rowTitle
 import com.israk.dhakaflix.ui.home.defaultRowTitle
-import com.israk.dhakaflix.ui.theme.Accents
 import com.israk.dhakaflix.ui.theme.LocalAccent
 import com.israk.dhakaflix.ui.theme.LocalEdge
 import com.israk.dhakaflix.ui.theme.LocalIsTv
@@ -224,7 +223,7 @@ fun SettingsScreen() {
         } else {
             Column(Modifier.fillMaxSize().padding(start = edge, end = edge, top = top)) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { section = null }.padding(vertical = 8.dp)) {
-                    Icon(Icons.Filled.ArrowBack, null, tint = Color.White)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
                     Spacer(Modifier.width(12.dp))
                     Text(cur.title(s), style = MaterialTheme.typography.titleLarge, color = Color.White)
                 }
@@ -258,7 +257,7 @@ private fun SectionItem(sec: Section, selected: Boolean, selectOnFocus: Boolean,
         Icon(sec.icon(), null, tint = if (focused) Color.Black else if (selected) Color.White else TextDim, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(14.dp))
         Text(sec.title(s), Modifier.weight(1f), color = fg, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-        Icon(Icons.Filled.KeyboardArrowRight, null, tint = if (focused) Color.Black else TextDim, modifier = Modifier.size(18.dp))
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = if (focused) Color.Black else TextDim, modifier = Modifier.size(18.dp))
     }
 }
 

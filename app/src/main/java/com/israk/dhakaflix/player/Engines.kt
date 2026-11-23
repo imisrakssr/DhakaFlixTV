@@ -184,13 +184,15 @@ class ExoEngine(private val ctx: Context, preferSubs: Boolean) : VideoEngine {
     private fun applyNight() {
         runCatching { dynamics?.release() }
         dynamics = null
-        if (!night || session == 0 || android.os.Build.VERSION.SDK_INT < 28) return
+        // ExoPlayer creates its audio session up front and only reports later *changes*, so read it directly
+        val sid = if (session != 0) session else runCatching { player.audioSessionId }.getOrDefault(0)
+        if (!night || sid == 0 || android.os.Build.VERSION.SDK_INT < 28) return
         dynamics = runCatching {
             val cfg = android.media.audiofx.DynamicsProcessing.Config.Builder(
                 android.media.audiofx.DynamicsProcessing.VARIANT_FAVOR_FREQUENCY_RESOLUTION, 2,
                 false, 0, true, 1, false, 0, true,
             ).build()
-            android.media.audiofx.DynamicsProcessing(0, session, cfg).apply {
+            android.media.audiofx.DynamicsProcessing(0, sid, cfg).apply {
                 // one wide compressor band: loud scenes come down, quiet voices come up
                 setMbcBandAllChannelsTo(0, android.media.audiofx.DynamicsProcessing.MbcBand(
                     true, 20000f, 5f, 120f, 4f, -28f, 6f, -90f, 1f, 0f, 9f,
@@ -205,7 +207,7 @@ class ExoEngine(private val ctx: Context, preferSubs: Boolean) : VideoEngine {
         useController = false
         player = this@ExoEngine.player
         setShutterBackgroundColor(Color.BLACK)
-        keepScreenOn = true
+        // screen-awake is handled by PlayerActivity (stays on while playing, sleeps after 30 idle minutes paused)
         subtitleView?.visibility = View.GONE
     }.also { view = it; applySubStyle() }
 
@@ -372,7 +374,11 @@ class VlcEngine(ctx: Context, private val preferSubs: Boolean, private var subSc
 
     override fun createView(ctx: Context): View = VLCVideoLayout(ctx).also { layout = it }
 
+    private var lastUrl: String? = null
+    private var lastSubs: List<String> = emptyList()
+
     override fun load(url: String, startMs: Long, externalSubs: List<String>) {
+        lastUrl = url; lastSubs = externalSubs
         val l = layout ?: return
         l.post {
             if (released) return@post
@@ -413,7 +419,23 @@ class VlcEngine(ctx: Context, private val preferSubs: Boolean, private var subSc
     override fun setEngineSubtitlesVisible(visible: Boolean) { if (!visible) mp.setSpuTrack(-1) }
     override fun setSubtitleStyle(scale: Float, color: Int) { subScale = scale } // colour: next engine; size: next file
     private var night = false
-    override fun setNightMode(on: Boolean) { night = on } // VLC: takes effect from the next file
+    override fun setNightMode(on: Boolean) {
+        if (night == on) return
+        night = on
+        // VLC sets audio filters per file: reopen the current one at the same spot (a short pause)
+        val url = lastUrl ?: return
+        if (mp.length <= 0) return
+        val pos = mp.time.coerceAtLeast(0)
+        val audio = mp.audioTrack
+        val wasPlaying = mp.isPlaying
+        load(url, pos, lastSubs)
+        layout?.postDelayed({
+            if (!released) {
+                if (audio >= 0) runCatching { mp.setAudioTrack(audio) }
+                if (!wasPlaying) runCatching { mp.pause() }
+            }
+        }, 1200)
+    }
 
     override val supportsSubtitleDelay = true
     override fun setSubtitleDelay(ms: Long) { mp.setSpuDelay(ms * 1000) }

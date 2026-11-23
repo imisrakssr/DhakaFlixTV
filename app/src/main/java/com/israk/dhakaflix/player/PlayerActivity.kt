@@ -75,26 +75,61 @@ class PlayerActivity : ComponentActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        lastInput = android.os.SystemClock.elapsedRealtime()
         val c = ctrl
         if (c != null && c.handleKey(event)) return true
         return super.dispatchKeyEvent(event)
     }
 
-    /** Keeps the TV's own screensaver away while the player is open, paused or not. */
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        lastInput = android.os.SystemClock.elapsedRealtime()
+        return super.dispatchTouchEvent(ev)
+    }
+
+    /**
+     * Keeps the TV's own screensaver away while the player is open. While playing it always stays on;
+     * left paused with no button pressed for 30 minutes, the TV may sleep again.
+     */
     private var wake: android.os.PowerManager.WakeLock? = null
+    private var lastInput = android.os.SystemClock.elapsedRealtime()
+    private val awakeCheck = android.os.Handler(android.os.Looper.getMainLooper())
+    private val awakeTick = object : Runnable {
+        override fun run() {
+            val idle = android.os.SystemClock.elapsedRealtime() - lastInput > IDLE_SLEEP_MS
+            setAwake(ctrl?.isPlaying == true || !idle)
+            awakeCheck.postDelayed(this, 30_000)
+        }
+    }
 
     @Suppress("DEPRECATION")
+    @Suppress("DEPRECATION") // SCREEN_BRIGHT_WAKE_LOCK: still the only lock that keeps a TV panel lit
+    private fun setAwake(on: Boolean) {
+        if (on) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            window.decorView.keepScreenOn = true
+            if (wake == null) wake = runCatching {
+                (getSystemService(POWER_SERVICE) as android.os.PowerManager)
+                    .newWakeLock(android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK, "dhakaflix:player")
+                    .apply { setReferenceCounted(false) }
+            }.getOrNull()
+            if (wake?.isHeld != true) runCatching { wake?.acquire(6 * 3600_000L) }
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            window.decorView.keepScreenOn = false
+            runCatching { if (wake?.isHeld == true) wake?.release() }
+        }
+    }
+
     override fun onResume() {
         super.onResume()
-        if (wake == null) wake = runCatching {
-            (getSystemService(POWER_SERVICE) as android.os.PowerManager)
-                .newWakeLock(android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK, "dhakaflix:player")
-                .apply { setReferenceCounted(false) }
-        }.getOrNull()
-        runCatching { wake?.acquire(6 * 3600_000L) }
+        lastInput = android.os.SystemClock.elapsedRealtime()
+        setAwake(true)
+        awakeCheck.removeCallbacks(awakeTick)
+        awakeCheck.postDelayed(awakeTick, 30_000)
     }
 
     override fun onPause() {
+        awakeCheck.removeCallbacks(awakeTick)
         runCatching { if (wake?.isHeld == true) wake?.release() }
         super.onPause()
         // stop sound the moment the player is closed, don't wait for onDestroy
@@ -113,6 +148,8 @@ class PlayerActivity : ComponentActivity() {
     }
 
     companion object {
+        /** Paused and untouched this long: let the TV sleep. */
+        const val IDLE_SLEEP_MS = 30 * 60_000L
         const val EXTRA_LIST = "playlist"
         const val EXTRA_INDEX = "index"
         const val EXTRA_MODE = "mode"

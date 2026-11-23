@@ -64,9 +64,15 @@ class MainActivity : ComponentActivity() {
             val appIcon by app.settings.appIcon.collectAsState()
             // with the app's own screensaver on, keep the TV's screensaver from taking over while we're open
             val saverMin by app.settings.screensaver.collectAsState()
+            // ...but after 30 minutes without a button press, let the TV sleep as usual
             androidx.compose.runtime.LaunchedEffect(saverMin) {
-                if (saverMin > 0) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                while (true) {
+                    val idle = android.os.SystemClock.elapsedRealtime() - com.israk.dhakaflix.ui.AppEvents.lastInput >
+                        com.israk.dhakaflix.player.PlayerActivity.IDLE_SLEEP_MS
+                    if (saverMin > 0 && !idle) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    kotlinx.coroutines.delay(30_000)
+                }
             }
             val lang by app.settings.language.collectAsState()
             val uiSize by app.settings.uiSize.collectAsState()

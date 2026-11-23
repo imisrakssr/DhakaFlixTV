@@ -36,9 +36,9 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -358,7 +358,7 @@ private fun Controls(c: PlayerController, visible: Boolean) {
         ) {
         Row(Modifier.padding(start = 40.dp, end = 40.dp, top = 26.dp, bottom = 40.dp), verticalAlignment = Alignment.CenterVertically) {
             if (!isTv) {
-                Icon(Icons.Filled.ArrowBack, null, tint = Color.White, modifier = Modifier.size(28.dp).clickable { c.exit() })
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White, modifier = Modifier.size(28.dp).clickable { c.exit() })
                 Spacer(Modifier.width(16.dp))
             }
             Column(Modifier.weight(1f)) {
@@ -618,7 +618,7 @@ private fun OptionList(options: List<Opt>, onPick: (String?) -> Unit) {
                 ) {
                     Text(o.label, Modifier.weight(1f), color = if (focused) Color.Black else Color.White, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     if (o.selected) Icon(Icons.Filled.Check, null, tint = if (focused) Color.Black else LocalAccent.current)
-                    if (o.chevron) Icon(Icons.Filled.KeyboardArrowRight, null, tint = if (focused) Color.Black else TextDim)
+                    if (o.chevron) Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = if (focused) Color.Black else TextDim)
                 }
             }
         }
@@ -667,7 +667,7 @@ private fun ExitPrompt(c: PlayerController) {
             Spacer(Modifier.height(22.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 PillButton(s.keepWatching, icon = Icons.Filled.PlayArrow, primary = true, focusRequester = fr, onClick = { c.exitAsk = false })
-                PillButton(s.stopWatching, icon = Icons.Filled.ArrowBack, onClick = { c.exit() })
+                PillButton(s.stopWatching, icon = Icons.AutoMirrored.Filled.ArrowBack, onClick = { c.exit() })
             }
         }
     }

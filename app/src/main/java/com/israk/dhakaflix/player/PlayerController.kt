@@ -128,6 +128,9 @@ class PlayerController(
         panel = PlayerController.Panel.OPTIONS
     }
 
+    /** Short player messages in the app language. */
+    private fun tr(en: String, dhk: String) = if (settings.language.value == "dhk") dhk else en
+
     // ---- night mode
     var nightMode by mutableStateOf(settings.nightMode.value)
         private set
@@ -135,7 +138,7 @@ class PlayerController(
         nightMode = !nightMode
         settings.setNightMode(nightMode)
         engine?.setNightMode(nightMode)
-        if (kind == EngineKind.VLC) toast = "VLC: next video"
+        toast = tr("🌙 Night mode: " + if (nightMode) "On" else "Off", "🌙 নাইট মোড: " + if (nightMode) "চালু" else "বন্ধ")
     }
 
     private var pendingStart: Long? = null
@@ -248,14 +251,14 @@ class PlayerController(
     fun setSubtitleSize(i: Int) {
         subSize = i; settings.setSubSize(i)
         engine?.setSubtitleStyle(subScale, subColorArgb)
-        if (kind == EngineKind.VLC) toast = "VLC: next video"
+        if (kind == EngineKind.VLC) toast = tr("VLC: from the next video", "VLC: পরের ভিডিও থেইকা")
         panel = Panel.OPTIONS
     }
 
     fun setSubtitleColor(i: Int) {
         subColor = i; settings.setSubColor(i)
         engine?.setSubtitleStyle(subScale, subColorArgb)
-        if (kind == EngineKind.VLC) toast = "VLC: next video"
+        if (kind == EngineKind.VLC) toast = tr("VLC: from the next video", "VLC: পরের ভিডিও থেইকা")
         panel = Panel.OPTIONS
     }
 
@@ -348,7 +351,7 @@ class PlayerController(
         if (ownSubUrl != null) subtitleText = SubtitleParser.at(cues, position, subDelay)
         // auto skip: only while actually playing (not while the user is scrubbing) and once per episode
         if (settings.autoSkipIntro.value && isPlaying && seekJob?.isActive != true && showSkipIntro &&
-            position >= (introWindow?.first ?: 0) - 1500) { skipIntro(); toast = "⏭ Intro skipped" }
+            position >= (introWindow?.first ?: 0) - 1500) { skipIntro(); toast = tr("⏭ Intro skipped", "⏭ ইন্ট্রো বাদ দিলাম") }
         if (sleepAt > 0 && SystemClock.elapsedRealtime() >= sleepAt) {
             sleepAt = 0
             e.pause(); isPlaying = false
@@ -422,13 +425,13 @@ class PlayerController(
         introWindow = from to to
         introSkipped = true
         introStore.edit().putString(current.itemId, "$from,$to").apply()
-        if (first) toast = "⏭ Intro saved for this series"
+        if (first) toast = tr("⏭ Intro saved for this series", "⏭ এই সিরিজের ইন্ট্রো মনে রাখলাম")
     }
 
     fun toggleAutoSkipIntro() {
         val v = !settings.autoSkipIntro.value
         settings.setAutoSkipIntro(v)
-        toast = "⏭ Auto skip intro: " + if (v) "On" else "Off"
+        toast = tr("⏭ Auto skip intro: " + if (v) "On" else "Off", "⏭ নিজে নিজে ইন্ট্রো বাদ: " + if (v) "চালু" else "বন্ধ")
     }
 
     fun seekToFraction(f: Float) {
@@ -506,7 +509,7 @@ class PlayerController(
                 cues = list
                 ownSubUrl = url
                 engine?.setEngineSubtitlesVisible(false)
-            } else toast = "Subtitle could not be loaded"
+            } else toast = tr("Subtitle could not be loaded", "সাবটাইটেল খুলা গেলো না")
         }
     }
 
@@ -607,7 +610,7 @@ class PlayerController(
             if (kind == EngineKind.EXO && settings.engine.value == "auto" && !triedFallback) {
                 triedFallback = true
                 val pos = maxOf(engine?.position ?: 0L, 0L)
-                toast = "ExoPlayer → LibVLC"
+                toast = tr("ExoPlayer → LibVLC", "ExoPlayer → LibVLC এ চালাইতাছি")
                 kind = EngineKind.VLC
                 clearOwnSubs()
                 start(pos)

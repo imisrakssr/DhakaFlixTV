@@ -135,8 +135,7 @@ object Diagnostics {
             if (hw.isEmpty()) return name to "✗ not supported"
             val best = hw.maxOf { i ->
                 runCatching {
-                    val caps = i.getCapabilitiesForType(mime).videoCapabilities
-                    caps.supportedHeights.upper
+                    i.getCapabilitiesForType(mime).videoCapabilities?.supportedHeights?.upper ?: 0
                 }.getOrDefault(0)
             }
             val hardware = hw.any { isHardware(it) }

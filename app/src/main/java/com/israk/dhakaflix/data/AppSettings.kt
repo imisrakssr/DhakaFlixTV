@@ -17,10 +17,6 @@ class AppSettings(ctx: Context) {
     private val prefs = ctx.getSharedPreferences("dhakaflix_settings", Context.MODE_PRIVATE)
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
-    private val _accent = MutableStateFlow(prefs.getInt("accent", 0))
-    val accent: StateFlow<Int> = _accent
-    fun setAccent(v: Int) { _accent.value = v; prefs.edit().putInt("accent", v).apply() }
-
     /** "en" or "dhk" (Dhakaiya). Older "bn" installs fall back to English. */
     private val _language = MutableStateFlow((prefs.getString("language", "en") ?: "en").let { if (it == "dhk") it else "en" })
     val language: StateFlow<String> = _language
