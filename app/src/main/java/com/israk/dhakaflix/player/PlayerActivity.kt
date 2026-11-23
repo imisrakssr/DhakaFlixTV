@@ -101,7 +101,6 @@ class PlayerActivity : ComponentActivity() {
         }
     }
 
-    @Suppress("DEPRECATION")
     @Suppress("DEPRECATION") // SCREEN_BRIGHT_WAKE_LOCK: still the only lock that keeps a TV panel lit
     private fun setAwake(on: Boolean) {
         if (on) {
