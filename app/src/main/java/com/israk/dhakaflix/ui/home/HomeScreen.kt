@@ -270,7 +270,7 @@ fun HomeScreen(onOpen: (String) -> Unit) {
         val bannerH: Dp = if (isTv) maxHeight * 0.82f - topInset else minOf(460.dp, maxHeight * 0.8f)
         if (isTv) HomeBackdrop(focus, bannerItem)
 
-        androidx.compose.runtime.CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides OnlyIfNeeded) {
+        androidx.compose.runtime.CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides com.israk.dhakaflix.ui.components.tvScrollSpec(OnlyIfNeeded)) {
         LazyColumn(
             Modifier.fillMaxSize(),
             state = listState,
@@ -288,7 +288,7 @@ fun HomeScreen(onOpen: (String) -> Unit) {
                         focusedRow[0] = null
                         // always show the whole banner when it has focus (no cut-off title/logo); the
                         // list's own bring-into-view runs right after focus, so correct after it
-                        scope.launch {
+                        if (isTv) scope.launch {
                             delay(60)
                             if (listState.firstVisibleItemIndex != 0 || listState.firstVisibleItemScrollOffset != 0)
                                 listState.animateScrollToItem(0)

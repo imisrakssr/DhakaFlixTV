@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+
 package com.israk.dhakaflix.ui
 
 import androidx.activity.compose.BackHandler
@@ -336,7 +338,10 @@ private fun MainScaffold(tab: Tab, currentTab: () -> Tab, onTab: (Tab) -> Unit, 
             .asPaddingValues().calculateTopPadding()
         Box(Modifier.fillMaxSize().background(Bg)) {
             // page titles start below the status bar and the header (Home's banner ignores it and runs to the top)
-            CompositionLocalProvider(LocalTopInset provides statusTop + 64.dp, LocalBottomInset provides 96.dp) { content() }
+            CompositionLocalProvider(
+                LocalTopInset provides statusTop + 64.dp, LocalBottomInset provides 96.dp,
+                androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides com.israk.dhakaflix.ui.components.NoAutoScrollSpec,
+            ) { content() }
             if (tab != Tab.HOME) PhoneHeader(Modifier.align(Alignment.TopCenter), statusTop)
             PhoneTabBar(
                 tab = tab, onTab = onTab, labels = { it.label(s) },

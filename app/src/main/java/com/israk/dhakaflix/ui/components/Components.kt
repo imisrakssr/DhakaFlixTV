@@ -300,7 +300,7 @@ fun PosterCard(
     var showMenu by remember { mutableStateOf(false) }
     if (showMenu) ItemMenu(item, menu) { showMenu = false }
     // only the one card that should get focus back pays for an effect (not every card in every row)
-    if (FocusMemory.restoreId == item.id) {
+    if (LocalIsTv.current && FocusMemory.restoreId == item.id) {
         LaunchedEffect(item.id) {
             FocusMemory.restoreId = null
             runCatching { fr.requestFocus() }
@@ -410,8 +410,9 @@ fun LandscapeCard(
     var showMenu by remember { mutableStateOf(false) }
     if (showMenu) ItemMenu(item, CardMenu.CONTINUE) { showMenu = false }
     val memKey = "cw:" + item.id
+    val tvCard = LocalIsTv.current
     LaunchedEffect(item.id) {
-        if (FocusMemory.restoreId == memKey) {
+        if (tvCard && FocusMemory.restoreId == memKey) {
             FocusMemory.restoreId = null
             runCatching { fr.requestFocus() }
         }
@@ -737,6 +738,20 @@ fun ItemMenu(item: ItemEntity, mode: CardMenu, onDismiss: () -> Unit) {
         }
     }
 }
+
+/**
+ * Phone: never scroll a list just because something inside it got focus. On touch screens a card that
+ * takes focus (e.g. coming back from a page) made the list jump back to it while the finger was
+ * scrolling — scrolling up felt stuck. Only the finger moves a phone list.
+ */
+val NoAutoScrollSpec = object : androidx.compose.foundation.gestures.BringIntoViewSpec {
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = 0f
+}
+
+/** [spec] on TV; on phone keep whatever is provided around (the no-auto-scroll spec). */
+@Composable
+fun tvScrollSpec(spec: androidx.compose.foundation.gestures.BringIntoViewSpec): androidx.compose.foundation.gestures.BringIntoViewSpec =
+    if (LocalIsTv.current) spec else androidx.compose.foundation.gestures.LocalBringIntoViewSpec.current
 
 /** Scrolls only when the focused thing is (partly) off screen — no pivot fighting. */
 val OnlyIfNeededSpec = object : androidx.compose.foundation.gestures.BringIntoViewSpec {

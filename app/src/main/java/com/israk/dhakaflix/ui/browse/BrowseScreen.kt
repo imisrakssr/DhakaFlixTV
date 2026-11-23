@@ -165,7 +165,7 @@ class FilterSpec(
 fun FilterBar(specs: List<FilterSpec>, onClear: (() -> Unit)?, firstModifier: Modifier = Modifier) {
     val s = LocalStrings.current
     var open by remember { mutableStateOf<Int?>(null) }
-    androidx.compose.runtime.CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides com.israk.dhakaflix.ui.components.OnlyIfNeededSpec) {
+    androidx.compose.runtime.CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides com.israk.dhakaflix.ui.components.tvScrollSpec(com.israk.dhakaflix.ui.components.OnlyIfNeededSpec)) {
     Row(
         Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
