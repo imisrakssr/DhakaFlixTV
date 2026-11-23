@@ -632,7 +632,7 @@ private fun LeftRail(nav: NavHandle, active: Boolean, onPick: (Tab) -> Unit) {
 @Composable
 private fun RailItem(
     icon: ImageVector, text: String, selected: Boolean, expanded: Boolean, fr: FocusRequester, focusable: Boolean,
-    isCurrent: () -> Boolean, redirect: () -> Unit, onSelect: () -> Unit,
+    isCurrent: () -> Boolean, redirect: () -> Unit, badge: Boolean = false, onSelect: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
     val accent = LocalAccent.current
