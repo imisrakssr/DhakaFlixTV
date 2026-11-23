@@ -580,7 +580,7 @@ private fun TmdbCard() {
         }
         Spacer(Modifier.height(16.dp))
         Text(
-            "This product uses the TMDB API but is not endorsed or certified by TMDB.",
+            "This product uses the TMDB API to pull all the posters, banners, and details.",
             color = TextDim.copy(alpha = .7f), style = MaterialTheme.typography.bodySmall,
         )
     }
