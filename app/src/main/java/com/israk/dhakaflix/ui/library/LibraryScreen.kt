@@ -18,6 +18,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -145,6 +148,32 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
         ) {
             item(span = { GridItemSpan(maxLineSpan) }, key = "title") {
                 Text(s.library, style = MaterialTheme.typography.headlineMedium, color = Color.White)
+            }
+
+            // new titles on RongDhong / BokaSoka: one tap brings them in
+            item(span = { GridItemSpan(maxLineSpan) }, key = "news") {
+                val news by com.israk.dhakaflix.DhakaFlixApp.instance.library.otherNews.collectAsState()
+                val running by com.israk.dhakaflix.DhakaFlixApp.instance.library.sync.collectAsState()
+                if (news.isNotEmpty() && !running.running) {
+                    val dhk = com.israk.dhakaflix.ui.components.isDhakaiya()
+                    androidx.compose.foundation.layout.Row(
+                        Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+                            .background(com.israk.dhakaflix.ui.theme.LocalAccent.current.copy(alpha = .16f))
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    ) {
+                        com.israk.dhakaflix.ui.UpdateDot(size = 10.dp)
+                        androidx.compose.foundation.layout.Spacer(Modifier.width(10.dp))
+                        Text(
+                            if (dhk) "${news.joinToString(" আর ")} এ নতুন মুভি/সিরিজ আইছে" else "New movies/series on ${news.joinToString(" and ")}",
+                            Modifier.weight(1f), color = Color.White, style = MaterialTheme.typography.bodyMedium,
+                        )
+                        com.israk.dhakaflix.ui.components.PillButton(
+                            if (dhk) "রিফ্রেশ" else "Refresh library", compact = true, primary = true,
+                            onClick = { com.israk.dhakaflix.DhakaFlixApp.instance.library.startSync(false) },
+                        )
+                    }
+                }
             }
 
             // ---- Continue Watching (no filters)
