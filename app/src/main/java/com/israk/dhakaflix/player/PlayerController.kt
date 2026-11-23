@@ -198,7 +198,12 @@ class PlayerController(
         private set
 
     /** Seek preview frames + when the user last moved the seek position. */
-    val thumbs = SeekThumbnailer(scope)
+    val thumbs = SeekThumbnailer(
+        scope,
+        lowEnd = (activity.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager).let { am ->
+            am.isLowRamDevice || android.app.ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }.totalMem < 2_500_000_000L
+        },
+    )
     var previewAt by mutableLongStateOf(0L)
         private set
     val previewTarget: Long get() = seekTarget
@@ -446,6 +451,8 @@ class PlayerController(
         if (!subsChecked && duration > 0 && position > 1500) ensureDefaultSubs(e)
         isPlaying = e.isPlaying
         buffering = e.isBuffering
+        // fill the seek-preview strip slowly while the film plays smoothly
+        thumbs.prefetch(playingUrl, duration, isPlaying && !buffering && seekJob?.isActive != true && !scrubbing)
         if (ownSubUrl != null) subtitleText = SubtitleParser.at(cues, position, subDelay)
         // auto skip: only while actually playing (not while the user is scrubbing) and once per episode
         if (settings.autoSkipIntro.value && isPlaying && seekJob?.isActive != true && showSkipIntro &&
@@ -511,7 +518,9 @@ class PlayerController(
         if (!controlsVisible) {
             seekFlashDelta = if (now - seekFlashAt < 1500) seekFlashDelta + delta else delta
             seekFlashAt = now
-        } else showControls()
+        }
+        // bring the seek bar up so its preview thumbnail shows where you're going
+        showControls()
     }
 
     /** A 30 s – 3 min jump forward in the first 10 minutes of an episode is almost always "skip the intro". */

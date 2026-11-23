@@ -782,8 +782,8 @@ private fun ErrorOverlay(c: PlayerController, message: String) {
 /** Small frame of the seek target (if the device could grab one). */
 @Composable
 private fun ThumbImage(c: PlayerController) {
+    // nearest frame known so far (the exact one replaces it as soon as it's read)
     val img = c.thumbs.image ?: return
-    if (kotlin.math.abs(c.thumbs.imageAt - (c.previewTarget / 10_000) * 10_000) > 10_000) return
     androidx.compose.foundation.Image(
         img, null,
         Modifier.size(width = 224.dp, height = 126.dp).clip(RoundedCornerShape(12.dp))
