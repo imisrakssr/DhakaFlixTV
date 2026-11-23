@@ -446,7 +446,8 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         db.items().matchedKeys().forEach { k ->
             listOfNotNull(k.title, k.tmdbTitle).forEach { t ->
                 val y = k.year ?: k.releaseYear
-                known.putIfAbsent("${k.type}|${NameParser.norm(t)}|$y", k.id)
+                val key = "${k.type}|${NameParser.norm(t)}|$y"
+                if (key !in known) known[key] = k.id
             }
         }
         fun twin(item: ItemEntity): String? {
