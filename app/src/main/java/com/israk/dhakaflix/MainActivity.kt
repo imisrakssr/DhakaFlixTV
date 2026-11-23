@@ -51,6 +51,7 @@ class MainActivity : ComponentActivity() {
                 while (true) {
                     app.library.syncIfStale(LibraryRepository.THIRTY_MINUTES)
                     app.library.simkl.syncIfStale()
+                    com.israk.dhakaflix.data.Updater.checkIfStale()
                     delay(5 * 60_000L)
                 }
             }

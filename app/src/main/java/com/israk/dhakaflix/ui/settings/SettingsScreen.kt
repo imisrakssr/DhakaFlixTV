@@ -258,6 +258,10 @@ private fun SectionItem(sec: Section, selected: Boolean, selectOnFocus: Boolean,
         Icon(sec.icon(), null, tint = if (focused) Color.Black else if (selected) Color.White else TextDim, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(14.dp))
         Text(sec.title(s), Modifier.weight(1f), color = fg, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+        if (sec == Section.ABOUT && com.israk.dhakaflix.ui.updateReady()) {
+            com.israk.dhakaflix.ui.UpdateDot(size = 10.dp)
+            Spacer(Modifier.width(8.dp))
+        }
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = if (focused) Color.Black else TextDim, modifier = Modifier.size(18.dp))
     }
 }
@@ -1112,8 +1116,13 @@ private fun UpdateCard() {
     val dhk = com.israk.dhakaflix.ui.components.isDhakaiya()
     val st by com.israk.dhakaflix.data.Updater.state.collectAsState()
     fun t(en: String, bn: String) = if (dhk) bn else en
+    val ready = com.israk.dhakaflix.ui.updateReady()
     Card {
-        Text(t("Check for updates", "আপডেট আছে নি দেখ"), color = Color.White, style = MaterialTheme.typography.titleMedium)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(t("Check for updates", "আপডেট আছে নি দেখ"), color = if (ready) LocalAccent.current else Color.White,
+                style = MaterialTheme.typography.titleMedium, fontWeight = if (ready) FontWeight.Bold else null)
+            if (ready) { Spacer(Modifier.width(8.dp)); com.israk.dhakaflix.ui.UpdateDot(size = 10.dp) }
+        }
         Spacer(Modifier.height(4.dp))
         Text(t("Installed: v${BuildConfig.VERSION_NAME}", "এখন আছে: v${BuildConfig.VERSION_NAME}"), color = TextDim, style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.height(12.dp))

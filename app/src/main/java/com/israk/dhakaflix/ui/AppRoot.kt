@@ -25,6 +25,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -399,7 +400,10 @@ private fun PhoneTabBar(tab: Tab, onTab: (Tab) -> Unit, labels: (Tab) -> String,
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                Icon(t.icon(), labels(t), tint = if (selected) Color.White else TextDim, modifier = Modifier.size(22.dp))
+                Box {
+                    Icon(t.icon(), labels(t), tint = if (selected) Color.White else TextDim, modifier = Modifier.size(22.dp))
+                    if (t == Tab.SETTINGS && updateReady()) UpdateDot(Modifier.align(Alignment.TopEnd).offset(x = 3.dp, y = (-2).dp))
+                }
                 Spacer(Modifier.height(2.dp))
                 Text(
                     labels(t), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
@@ -563,7 +567,7 @@ private fun SimklAvatar() {
 @Composable
 private fun TabPill(
     text: String, selected: Boolean, fr: FocusRequester, focusable: Boolean,
-    isCurrent: () -> Boolean, redirect: () -> Unit, onSelect: () -> Unit,
+    isCurrent: () -> Boolean, redirect: () -> Unit, badge: Boolean = false, onSelect: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
     val bg = when {
@@ -617,7 +621,7 @@ private fun LeftRail(nav: NavHandle, active: Boolean, onPick: (Tab) -> Unit) {
         ) {
             Image(painterResource(rememberBrandLogos().first), "DhakaFlix", Modifier.padding(start = 6.dp, bottom = 14.dp).size(32.dp))
             Tab.entries.forEach { t ->
-                RailItem(t.icon(), t.label(s), t == tab, expanded, nav.requesters.getValue(t), active, isCurrent = { nav.currentTab() == t }, redirect = nav::focusCurrent) { onPick(t) }
+                RailItem(t.icon(), t.label(s), t == tab, expanded, nav.requesters.getValue(t), active, isCurrent = { nav.currentTab() == t }, redirect = nav::focusCurrent, badge = t == Tab.SETTINGS && updateReady()) { onPick(t) }
             }
             Spacer(Modifier.weight(1f))
             Box(Modifier.padding(start = 14.dp)) { SyncIndicator() }
@@ -652,7 +656,10 @@ private fun RailItem(
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, text, tint = fg, modifier = Modifier.size(22.dp))
+        Box {
+            Icon(icon, text, tint = fg, modifier = Modifier.size(22.dp))
+            if (badge) UpdateDot(Modifier.align(Alignment.TopEnd).offset(x = 3.dp, y = (-2).dp))
+        }
         AnimatedVisibility(visible = expanded) {
             Text(
                 text, Modifier.padding(start = 14.dp), color = fg, maxLines = 1,
@@ -688,4 +695,17 @@ fun edgeFor(isTv: Boolean, widthDp: Int): Dp = when {
     isTv -> 44.dp
     widthDp >= 600 -> 28.dp
     else -> 16.dp
+}
+
+/** True while a newer release is waiting (Settings → About me → Check for updates). */
+@Composable
+fun updateReady(): Boolean = com.israk.dhakaflix.data.Updater.available.collectAsState().value != null
+
+/** Small accent dot with a dark rim, the "new update" mark. */
+@Composable
+fun UpdateDot(modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp = 9.dp) {
+    Box(
+        modifier.size(size).clip(androidx.compose.foundation.shape.CircleShape).background(Color(0xFF0B0B10))
+            .padding(1.5.dp).clip(androidx.compose.foundation.shape.CircleShape).background(LocalAccent.current)
+    )
 }

@@ -45,6 +45,16 @@ object Updater {
     private val _state = MutableStateFlow<State>(State.Idle)
     val state: StateFlow<State> = _state
 
+    /** A newer release than the installed one: drives the dot on the Settings tab / About me. */
+    private val _available = MutableStateFlow<Release?>(null)
+    val available: StateFlow<Release?> = _available
+    @Volatile private var lastCheck = 0L
+
+    /** Automatic check: on app open and every few hours while it's open; silent when it fails. */
+    fun checkIfStale(maxAgeMs: Long = 6 * 3600_000L) {
+        if (System.currentTimeMillis() - lastCheck > maxAgeMs) check(quiet = true)
+    }
+
     private val json = Json { ignoreUnknownKeys = true }
     private val app get() = DhakaFlixApp.instance
 
@@ -53,11 +63,13 @@ object Updater {
         return if (Build.SUPPORTED_64_BIT_ABIS.any { it.startsWith("arm64") }) "-arm64.apk" else "-armv7.apk"
     }
 
-    fun check() {
-        if (_state.value is State.Checking || _state.value is State.Downloading) return
-        _state.value = State.Checking
+    fun check(quiet: Boolean = false) {
+        val before = _state.value
+        if (before is State.Checking || before is State.Downloading || before is State.Installing) return
+        lastCheck = System.currentTimeMillis()
+        if (!quiet) _state.value = State.Checking
         app.appScope.launch(Dispatchers.IO) {
-            _state.value = runCatching {
+            val result = runCatching {
                 val req = Request.Builder().url(LATEST)
                     .header("Accept", "application/vnd.github+json")
                     .header("User-Agent", "DhakaFlixTV/${BuildConfig.VERSION_NAME}")
@@ -83,6 +95,13 @@ object Updater {
                     )
                 )
             }.getOrElse { State.Failed(it.message ?: it.toString()) }
+            when (result) {
+                is State.Available -> _available.value = result.release
+                State.UpToDate -> _available.value = null
+                else -> Unit
+            }
+            // a silent check only changes what's shown when it found something
+            if (!quiet || result is State.Available) _state.value = result
         }
     }
 
