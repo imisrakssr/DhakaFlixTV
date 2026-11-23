@@ -95,15 +95,16 @@ class PlayerController(
     val playingUrl: String get() = altPlaying?.url ?: current.url
     private var altJob: kotlinx.coroutines.Job? = null
 
-    private fun findAlternatives(p: PlayItem) {
+    private suspend fun lookupAlternatives(p: PlayItem): List<com.israk.dhakaflix.data.AltServers.Alt> {
         altJob?.cancel()
         altCopies = emptyList()
         altSearching = true
-        altJob = scope.launch {
+        val found = kotlinx.coroutines.withTimeoutOrNull(7_000) {
             val m = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { app.db.items().get(p.itemId) }
-            val found = runCatching { com.israk.dhakaflix.data.AltServers.find(m, p) }.getOrDefault(emptyList())
-            if (current.url == p.url) { altCopies = found; altSearching = false }
-        }
+            runCatching { com.israk.dhakaflix.data.AltServers.find(m, p) }.getOrDefault(emptyList())
+        } ?: emptyList()
+        if (current.url == p.url) { altCopies = found; altSearching = false }
+        return found
     }
 
     /** Switch to another server's copy (null = back to DhakaFlix), carrying on from the same spot. */
@@ -113,6 +114,7 @@ class PlayerController(
         val pos = maxOf(engine?.position ?: position, 0L)
         save()
         altPlaying = alt
+        preferredServer = alt?.server ?: com.israk.dhakaflix.data.AltServers.serverOf(current.url)
         error = null
         triedFallback = false
         clearOwnSubs()
@@ -219,7 +221,8 @@ class PlayerController(
             ?.mapNotNull { it.toLongOrNull() }?.takeIf { it.size == 2 }?.let { it[0] to it[1] }
         loadMeta(playlist[i])
         altPlaying = null
-        findAlternatives(playlist[i])
+        serverAsk = false
+        afterServer = null
         prefetchNextSeason()
         error = null; panel = null; endedHandled = false; triedFallback = false
         clearOwnSubs()
@@ -228,11 +231,46 @@ class PlayerController(
         val resumable = saved?.takeIf {
             !it.completed && it.positionMs > 20_000 && (it.durationMs == 0L || it.positionMs < it.durationMs * 0.95)
         }?.positionMs
-        when {
-            mode == PlayerActivity.MODE_START || resumable == null -> start(0)
-            mode == PlayerActivity.MODE_RESUME -> start(resumable)
-            else -> { engine?.pause(); resumeAsk = resumable }
+        val go: () -> Unit = {
+            when {
+                mode == PlayerActivity.MODE_START || resumable == null -> start(0)
+                mode == PlayerActivity.MODE_RESUME -> start(resumable)
+                else -> { engine?.pause(); resumeAsk = resumable }
+            }
         }
+        // Which server? Look for the other copies first; ask when there is a choice.
+        engine?.pause()
+        buffering = true
+        val p = playlist[i]
+        val found = lookupAlternatives(p)
+        if (current.url != p.url) return
+        val pref = preferredServer
+        when {
+            found.isEmpty() -> go()
+            // next episodes keep the server picked for this session
+            pref != null -> {
+                altPlaying = if (pref == com.israk.dhakaflix.data.AltServers.serverOf(p.url)) null else found.firstOrNull { it.server == pref }
+                go()
+            }
+            else -> { afterServer = go; buffering = false; serverAsk = true }
+        }
+    }
+
+    /** "Choose a server" screen before playback starts. */
+    var serverAsk by mutableStateOf(false)
+        private set
+    private var afterServer: (() -> Unit)? = null
+    /** Server picked in this player session (kept for the following episodes). */
+    private var preferredServer: String? = null
+
+    fun pickServer(alt: com.israk.dhakaflix.data.AltServers.Alt?) {
+        if (!serverAsk) return
+        serverAsk = false
+        altPlaying = alt
+        preferredServer = alt?.server ?: com.israk.dhakaflix.data.AltServers.serverOf(current.url)
+        buffering = true
+        afterServer?.invoke()
+        afterServer = null
     }
 
     private fun loadMeta(p: PlayItem) {
@@ -608,7 +646,7 @@ class PlayerController(
             }
             return true
         }
-        if (resumeAsk != null || error != null || panel != null || exitAsk) { if (down) interaction++; return false }
+        if (serverAsk || resumeAsk != null || error != null || panel != null || exitAsk) { if (down) interaction++; return false }
         if (controlsVisible) { if (down) interaction++; return false }
         // Controls hidden: the remote drives playback directly
         when (e.keyCode) {
@@ -629,6 +667,7 @@ class PlayerController(
 
     private fun onBack() {
         when {
+            serverAsk -> activity.finish()
             pauseInfo -> { pauseInfo = false; showControls() }
             exitAsk -> exitAsk = false
             panel != null -> panel = PlayerController.Panel.OPTIONS.takeIf { panel in setOf(Panel.SYNC, Panel.AUDIO_SYNC, Panel.SPEED, Panel.ASPECT, Panel.SUB_SIZE, Panel.SUB_COLOR, Panel.SLEEP, Panel.SERVER) }

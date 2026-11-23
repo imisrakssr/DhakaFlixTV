@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -136,13 +137,13 @@ fun PlayerScreen(c: PlayerController) {
 
         c.subtitleText?.let { SubtitleOverlay(it, raised = c.controlsVisible, scale = c.subScale, color = Color(c.subColorArgb)) }
 
-        if (c.buffering && c.resumeAsk == null && c.error == null) {
+        if (c.buffering && c.resumeAsk == null && c.error == null && !c.serverAsk) {
             CircularProgressIndicator(Modifier.align(Alignment.Center).size(54.dp), color = LocalAccent.current, strokeWidth = 4.dp)
         }
 
         SeekFlash(c)
 
-        Controls(c, visible = c.controlsVisible && !c.pauseInfo && c.resumeAsk == null && c.error == null && !c.exitAsk && c.panel == null)
+        Controls(c, visible = c.controlsVisible && !c.pauseInfo && c.resumeAsk == null && c.error == null && !c.exitAsk && c.panel == null && !c.serverAsk)
 
         AnimatedVisibility(c.pauseInfo, enter = fadeIn(androidx.compose.animation.core.tween(600)), exit = fadeOut(androidx.compose.animation.core.tween(250))) {
             PauseInfo(c)
@@ -183,6 +184,7 @@ fun PlayerScreen(c: PlayerController) {
             modifier = Modifier.align(Alignment.CenterEnd),
         ) { SidePanel(c) }
 
+        if (c.serverAsk) ServerPrompt(c)
         c.resumeAsk?.let { ResumePrompt(c, it) }
         if (c.exitAsk) ExitPrompt(c)
         c.error?.let { ErrorOverlay(c, it) }
@@ -706,6 +708,30 @@ private fun ResumePrompt(c: PlayerController, pos: Long) {
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 PillButton(s.resumeFrom.format(fmtTime(pos)), icon = Icons.Filled.PlayArrow, primary = true, focusRequester = fr, onClick = { c.answerResume(true) })
                 PillButton(s.startOver, icon = AppIcons.Rewind, onClick = { c.answerResume(false) })
+            }
+        }
+    }
+}
+
+/** Before playback: pick which server to play from (shown only when the title is on more than one). */
+@Composable
+private fun ServerPrompt(c: PlayerController) {
+    val dhk = com.israk.dhakaflix.ui.components.isDhakaiya()
+    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .7f)), contentAlignment = Alignment.Center) {
+        Column(
+            Modifier.widthIn(max = 560.dp).heightIn(max = 520.dp).glass(RoundedCornerShape(26.dp), tint = .12f).padding(28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(c.current.title, style = MaterialTheme.typography.titleLarge, color = Color.White, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
+            c.current.subtitle?.let { Text(it, color = TextDim, style = MaterialTheme.typography.bodyMedium) }
+            Spacer(Modifier.height(6.dp))
+            Text(if (dhk) "কোন সার্ভার থেইকা চালামু?" else "Play from which server?", color = TextDim, style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.height(18.dp))
+            val opts = listOf(Opt("", com.israk.dhakaflix.data.AltServers.serverOf(c.current.url), true)) +
+                c.altCopies.mapIndexed { i, a -> Opt("$i", "${a.server}  ·  ${a.label}", false) }
+            OptionList(opts.map { it.copy(selected = false) }) { id ->
+                val i = id?.toIntOrNull()
+                c.pickServer(if (i == null) null else c.altCopies.getOrNull(i))
             }
         }
     }
