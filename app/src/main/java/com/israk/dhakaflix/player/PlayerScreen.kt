@@ -15,6 +15,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -504,7 +505,7 @@ private fun SeekBar(c: PlayerController) {
             }
             // phone: drag along the bar to scrub, with the preview following the finger
             .pointerInput(c.duration) {
-                androidx.compose.foundation.gestures.detectHorizontalDragGestures(
+                detectHorizontalDragGestures(
                     onDragStart = { o -> c.scrubTo(o.x / size.width) },
                     onDragEnd = { c.endScrub() },
                     onDragCancel = { c.endScrub() },
