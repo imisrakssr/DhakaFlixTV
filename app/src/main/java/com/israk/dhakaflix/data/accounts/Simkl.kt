@@ -175,6 +175,8 @@ class Simkl(private val app: DhakaFlixApp) {
 
     fun signOut() {
         cancelLogin()
+        cacheStore.edit().clear().apply()
+        snap.edit().remove("activities").apply()
         settings.setSimklAccount("", "")
         settings.setSimklAvatar("")
         settings.setSimklRefresh("", 0)
@@ -205,10 +207,13 @@ class Simkl(private val app: DhakaFlixApp) {
             _syncing.value = true
             _error.value = null
             try {
-                if (settings.simklAvatar.value.isBlank()) runCatching {
-                    (post("/users/settings", JsonObject(emptyMap())) as? JsonObject)?.obj("user")?.str("avatar")
-                }.getOrNull()?.takeIf { it.isNotBlank() }?.let { settings.setSimklAvatar(it) }
-                pull()
+                if (!avatarTried && settings.simklAvatar.value.isBlank()) {
+                    avatarTried = true
+                    runCatching {
+                        (post("/users/settings", JsonObject(emptyMap())) as? JsonObject)?.obj("user")?.str("avatar")
+                    }.getOrNull()?.takeIf { it.isNotBlank() }?.let { settings.setSimklAvatar(it) }
+                }
+                pull(full = firstTime)
                 pushMissing(firstTime || settings.simklLastSync.value == 0L)
                 lastPull = System.currentTimeMillis()
                 settings.setSimklLastSync(lastPull)
@@ -221,41 +226,153 @@ class Simkl(private val app: DhakaFlixApp) {
             }
         }
     }
+    @Volatile private var avatarTried = false
 
-    /** Called when the app comes to the front and every few minutes while it's open. */
-    fun syncIfStale(maxAgeMs: Long = 2 * 60_000L) {
+    /** Called when the app comes to the front and every few minutes while it's open. Simkl asks mobile /
+     *  TV apps to check at most every 15-30 min (polling harder gets the app's client ID blocked). */
+    fun syncIfStale(maxAgeMs: Long = 15 * 60_000L) {
         if (signedIn && System.currentTimeMillis() - lastPull > maxAgeMs) syncNow()
     }
 
     private data class Remote(val watched: MutableMap<String, Long> = HashMap(), val list: MutableMap<String, Long> = HashMap(),
                               val episodes: MutableMap<String, MutableSet<Pair<Int, Int>>> = HashMap())
 
-    private suspend fun pull() {
-        val r = Remote()
+    /**
+     * Simkl's own sync model (api.simkl.org/guides/sync):
+     *  - read /sync/activities first; if nothing moved since last time, stop there (one tiny call);
+     *  - otherwise fetch only what changed (date_from delta), and the id list when something was removed;
+     *  - the whole library only on the very first sync.
+     * The old code pulled the whole library from both devices every few minutes, which Simkl throttles —
+     * and a failed pull was read as "everything was removed". Now any failed call aborts the sync.
+     */
+    private suspend fun pull(full: Boolean) {
+        val act = getJson("/sync/activities") as? JsonObject ?: throw java.io.IOException("Simkl: no activities")
+        val prev = snap.getString("activities", null)?.let { runCatching { json.parseToJsonElement(it) as? JsonObject }.getOrNull() }
+        val ready = cacheStore.getBoolean(READY, false)
+        val changed: Boolean
+        var playbackMoved = true
+        if (full || prev == null || !ready) {
+            val cache = HashMap<String, JsonObject>()
+            for (type in listOf("movies", "shows", "anime")) {
+                val q = if (type == "movies") "" else "?extended=full&episode_watched_at=yes"
+                val root = getJson("/sync/all-items/$type$q") as? JsonObject ?: continue // null = nothing of this type
+                addEntries(cache, root)
+            }
+            saveCache(cache)
+            changed = true
+        } else if (act.str("all") != null && act.str("all") == prev.str("all")) {
+            changed = false
+            playbackMoved = false
+        } else {
+            val cache = loadCache()
+            fun moved(key: String) = BLOCKS.any { b -> act.obj(b)?.str(key) != prev.obj(b)?.str(key) }
+            if (listOf("watching", "plantowatch", "hold", "completed", "dropped").any { moved(it) }) {
+                val since = prev.str("all")
+                val q = buildString {
+                    append("/sync/all-items?extended=full&episode_watched_at=yes")
+                    if (since != null) append("&date_from=").append(java.net.URLEncoder.encode(since, "UTF-8"))
+                }
+                (getJson(q) as? JsonObject)?.let { addEntries(cache, it) }
+            }
+            if (moved("removed_from_list")) {
+                val root = getJson("/sync/all-items?extended=simkl_ids_only") as? JsonObject
+                val keep = HashSet<String>()
+                if (root != null) for (type in listOf("movies", "shows", "anime")) {
+                    (root[type] as? JsonArray)?.forEach { el -> simklId(el)?.let { keep += "$type:$it" } }
+                }
+                // an empty answer while we hold items is more likely a hiccup than "everything removed"
+                if (keep.isNotEmpty() || cache.isEmpty()) cache.keys.retainAll { it in keep || !it.substringAfter(':').all(Char::isDigit) }
+            }
+            playbackMoved = moved("playback")
+            saveCache(cache)
+            changed = true
+        }
+        if (changed || !snap.contains("watched")) applyRemote(remoteFromCache())
+        if (playbackMoved) pullPlayback()
+        // saved last, only after every call above succeeded
+        snap.edit().putString("activities", act.toString()).apply()
+    }
+
+    // ---- local copy of the Simkl library ("type:simklId" -> small JSON), so deltas can be merged
+    private val cacheStore = app.settings.store("simkl_remote")
+
+    private fun loadCache(): HashMap<String, JsonObject> {
+        val out = HashMap<String, JsonObject>()
+        cacheStore.all.forEach { (k, v) ->
+            if (k != READY && v is String) runCatching { json.parseToJsonElement(v) as? JsonObject }.getOrNull()?.let { out[k] = it }
+        }
+        return out
+    }
+
+    private fun saveCache(cache: Map<String, JsonObject>) {
+        val e = cacheStore.edit().clear()
+        cache.forEach { (k, v) -> e.putString(k, v.toString()) }
+        e.putBoolean(READY, true).commit()
+    }
+
+    /** Merge one /sync/all-items answer (full or delta) into the cache. */
+    private fun addEntries(cache: MutableMap<String, JsonObject>, root: JsonObject) {
         for (type in listOf("movies", "shows", "anime")) {
-            val q = if (type == "movies") "" else "?extended=full&episode_watched_at=yes"
-            val root = runCatching { getJson("/sync/all-items/$type$q") }.getOrNull() as? JsonObject ?: continue
             val arr = root[type] as? JsonArray ?: continue
             for (el in arr) {
                 val o = el as? JsonObject ?: continue
                 val media = o.obj(if (type == "movies") "movie" else "show") ?: o.obj("show") ?: o.obj("anime") ?: continue
-                val item = match(media, type != "movies") ?: continue
-                when (o.str("status")) {
-                    "completed" -> r.watched[item.id] = parseTime(o.str("last_watched_at")) ?: 0L
-                    "plantowatch" -> r.list[item.id] = parseTime(o.str("added_to_watchlist_at")) ?: 0L
-                }
-                (o["seasons"] as? JsonArray)?.forEach { se ->
-                    val so = se as? JsonObject ?: return@forEach
-                    val sn = so.int("number") ?: return@forEach
-                    (so["episodes"] as? JsonArray)?.forEach { ee ->
-                        val en = (ee as? JsonObject)?.int("number") ?: return@forEach
-                        r.episodes.getOrPut(item.id) { HashSet() } += sn to en
+                val ids = media.obj("ids")
+                val sid = ids?.str("simkl") ?: ids?.tmdb()?.let { "tmdb$it" } ?: continue
+                val eps = buildJsonArray {
+                    (o["seasons"] as? JsonArray)?.forEach { se ->
+                        val so = se as? JsonObject ?: return@forEach
+                        val sn = so.int("number") ?: return@forEach
+                        (so["episodes"] as? JsonArray)?.forEach { ee ->
+                            (ee as? JsonObject)?.int("number")?.let { en -> add(kotlinx.serialization.json.JsonPrimitive("$sn:$en")) }
+                        }
                     }
+                }
+                cache["$type:$sid"] = buildJsonObject {
+                    put("tv", type != "movies")
+                    ids?.tmdb()?.let { put("tmdb", it) }
+                    media.str("title")?.let { put("title", it) }
+                    media.int("year")?.let { put("year", it) }
+                    put("status", o.str("status") ?: "")
+                    put("watchedAt", parseTime(o.str("last_watched_at")) ?: 0L)
+                    put("listAt", parseTime(o.str("added_to_watchlist_at")) ?: 0L)
+                    put("eps", eps)
                 }
             }
         }
-        applyRemote(r)
-        pullPlayback()
+    }
+
+    private fun simklId(el: JsonElement): String? {
+        val o = el as? JsonObject ?: return null
+        o.obj("ids")?.str("simkl")?.let { return it }
+        for (k in listOf("movie", "show", "anime")) o.obj(k)?.obj("ids")?.str("simkl")?.let { return it }
+        return null
+    }
+
+    /** The cache, matched to library items, in the shape applyRemote() works with. */
+    private suspend fun remoteFromCache(): Remote {
+        val r = Remote()
+        for ((_, e) in loadCache()) {
+            val media = buildJsonObject {
+                e.int("tmdb")?.let { putJsonObject("ids") { put("tmdb", it) } }
+                e.str("title")?.let { put("title", it) }
+                e.int("year")?.let { put("year", it) }
+            }
+            val tv = e["tv"]?.jsonPrimitive?.contentOrNull == "true"
+            val item = match(media, tv) ?: continue
+            when (e.str("status")) {
+                "completed" -> r.watched[item.id] = e["watchedAt"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 0L
+                "plantowatch" -> r.list[item.id] = e["listAt"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 0L
+            }
+            (e["eps"] as? JsonArray)?.forEach { p ->
+                val s = p.jsonPrimitive.contentOrNull ?: return@forEach
+                val i = s.indexOf(':'); if (i <= 0) return@forEach
+                val sn = s.substring(0, i).toIntOrNull() ?: return@forEach
+                val en = s.substring(i + 1).toIntOrNull() ?: return@forEach
+                r.episodes.getOrPut(item.id) { HashSet() } += sn to en
+            }
+        }
+        return r
     }
 
     /** Episodes Simkl says are watched, per series (shown as a check on the episode even when the file
@@ -491,7 +608,8 @@ class Simkl(private val app: DhakaFlixApp) {
         if (!signedIn || durationMs <= 0 || positionMs < 20_000) return
         val now = System.currentTimeMillis()
         val last = lastScrobble[play.url] ?: 0L
-        if (!force && now - last < 90_000) return
+        // Simkl moves progress on by itself; only re-post now and then (stop / pause always posts)
+        if (!force && now - last < 10 * 60_000) return
         lastScrobble[play.url] = now
         val pct = (positionMs * 100.0 / durationMs).coerceIn(1.0, 95.0)
         push(play.itemId) { item ->
@@ -634,4 +752,8 @@ class Simkl(private val app: DhakaFlixApp) {
         return t
     }
 
+    private companion object {
+        const val READY = "__ready"
+        val BLOCKS = listOf("movies", "tv_shows", "anime")
+    }
 }
