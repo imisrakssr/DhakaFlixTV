@@ -677,7 +677,7 @@ fun Modifier.dpadScrollFallback(state: androidx.compose.foundation.gestures.Scro
 
 
 /** What the hold-OK menu offers for a card. */
-enum class CardMenu { NONE, DEFAULT, LIBRARY, CONTINUE }
+enum class CardMenu { NONE, DEFAULT, LIBRARY, CONTINUE, WATCHLIST, WATCHED }
 
 /** Hold-OK / long-press menu: mark watched + add to / remove from My Library. */
 @Composable
@@ -697,6 +697,13 @@ fun ItemMenu(item: ItemEntity, mode: CardMenu, onDismiss: () -> Unit) {
         when (mode) {
             CardMenu.LIBRARY -> add(s.removeFromLibrary to suspend { repo.removeFromLibrary(item.id) })
             CardMenu.CONTINUE -> add(s.removeFromContinue to suspend { repo.removeFromContinue(item.id) })
+            // My Watchlist shelf: only out of the watchlist — watched stays watched
+            CardMenu.WATCHLIST -> add(
+                (if (com.israk.dhakaflix.ui.components.isDhakaiya()) "দেখার লিস্ট থেইকা বাদ" else "Remove from Watchlist")
+                    to suspend { repo.setInWatchlist(item.id, false) },
+            )
+            // Watched shelf: "Mark as unwatched" above is the way out; the watchlist is left alone
+            CardMenu.WATCHED -> Unit
             else -> add((if (inList) s.removeFromLibrary else s.addToLibrary) to suspend { repo.setInWatchlist(item.id, !inList) })
         }
     }

@@ -129,8 +129,8 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
                     }
                 },
             )
-            Shelf.WATCHLIST -> PosterCard(item = item, width = Dp.Unspecified, modifier = mod, menu = CardMenu.LIBRARY, onClick = { onOpen(item.id) })
-            Shelf.WATCHED -> PosterCard(item = item, width = Dp.Unspecified, modifier = mod, watched = true, menu = CardMenu.LIBRARY, onClick = { onOpen(item.id) })
+            Shelf.WATCHLIST -> PosterCard(item = item, width = Dp.Unspecified, modifier = mod, menu = CardMenu.WATCHLIST, onClick = { onOpen(item.id) })
+            Shelf.WATCHED -> PosterCard(item = item, width = Dp.Unspecified, modifier = mod, watched = true, menu = CardMenu.WATCHED, onClick = { onOpen(item.id) })
         }
     }
 
