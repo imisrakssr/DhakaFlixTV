@@ -578,6 +578,11 @@ private fun TmdbCard() {
                 })
             }
         }
+        Spacer(Modifier.height(16.dp))
+        Text(
+            "This product uses the TMDB API but is not endorsed or certified by TMDB.",
+            color = TextDim.copy(alpha = .7f), style = MaterialTheme.typography.bodySmall,
+        )
     }
 }
 
@@ -917,21 +922,26 @@ private fun KeyCard(
     onSave: (String) -> Unit,
     onTest: () -> Unit,
 ) {
+    // same layout as the TMDB key card: status, masked key, and the field shown right away when no key is set
     val s = LocalStrings.current
     var editing by remember { mutableStateOf(false) }
     var text by remember(saved) { mutableStateOf(saved) }
     Card {
         Text(title, color = Color.White, style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(4.dp))
-        Text(hint, color = TextDim, style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.height(10.dp))
-        StatusLine(status.first, status.second)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(12.dp).clip(CircleShape).background(status.first))
+            Spacer(Modifier.width(10.dp))
+            Text(status.second, color = Color.White, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+        }
         if (saved.isNotBlank()) {
             Spacer(Modifier.height(4.dp))
             Text("••••••••" + saved.takeLast(4), color = TextDim, style = MaterialTheme.typography.bodySmall)
         }
-        Spacer(Modifier.height(14.dp))
-        if (editing) {
+        Spacer(Modifier.height(16.dp))
+        if (editing || saved.isBlank()) {
+            Text(hint, color = TextDim, style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = text, onValueChange = { text = it }, singleLine = true,
                 label = { Text(title) }, colors = fieldColors(), modifier = Modifier.fillMaxWidth(),
@@ -939,15 +949,13 @@ private fun KeyCard(
             Spacer(Modifier.height(12.dp))
             androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 PillButton(s.save, primary = true, icon = Icons.Filled.Check, onClick = { onSave(text); editing = false })
-                PillButton(s.cancel, onClick = { editing = false; text = saved })
+                if (saved.isNotBlank()) PillButton(s.cancel, onClick = { editing = false; text = saved })
             }
         } else {
             androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                PillButton(s.edit, icon = Icons.Filled.Edit, primary = saved.isBlank(), onClick = { editing = true })
-                if (saved.isNotBlank()) {
-                    PillButton(s.testAgain, icon = Icons.Filled.Refresh, onClick = onTest)
-                    PillButton(s.remove, icon = Icons.Filled.Delete, onClick = { onSave(""); text = "" })
-                }
+                PillButton(s.edit, icon = Icons.Filled.Edit, primary = true, onClick = { editing = true })
+                PillButton(s.testAgain, icon = Icons.Filled.Refresh, onClick = onTest)
+                PillButton(s.remove, icon = Icons.Filled.Delete, onClick = { onSave(""); text = "" })
             }
         }
     }
@@ -966,7 +974,7 @@ private fun MdbListCard() {
         com.israk.dhakaflix.data.accounts.MdbList.Status.CHECKING -> Color(0xFF93C5FD) to s.tmdbChecking
         com.israk.dhakaflix.data.accounts.MdbList.Status.NOT_SET -> TextDim to s.tmdbNotSet
     }
-    KeyCard("MDBList", s.mdblistHint, saved, status,
+    KeyCard("MDBList API key", s.mdblistHint, saved, status,
         onSave = { app.settings.setMdblistKey(it); app.library.mdblist.verify() },
         onTest = { app.library.mdblist.verify() })
 }
