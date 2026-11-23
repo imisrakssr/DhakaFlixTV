@@ -557,14 +557,13 @@ private fun SidePanel(c: PlayerController) {
             ) { id -> c.setSleep(if (id == "eoe") null else id?.toIntOrNull() ?: 0) }
             PlayerController.Panel.SERVER -> {
                 val dhk = com.israk.dhakaflix.ui.components.isDhakaiya()
-                val opts = listOf(Opt("", com.israk.dhakaflix.data.AltServers.serverOf(c.current.url), c.altPlaying == null)) +
-                    c.altCopies.mapIndexed { i, a -> Opt("$i", "${a.server}  ·  ${a.label}", c.altPlaying?.url == a.url) }
+                val choices = c.serverChoices()
+                val opts = choices.mapIndexed { i, a ->
+                    Opt("$i", a?.let { "${it.server}  ·  ${it.label}" } ?: c.originLabel, a?.url == c.altPlaying?.url)
+                }
                 if (c.altSearching) Text(if (dhk) "অন্য সার্ভারে খুঁজতাছি…" else "Looking on other servers…", color = TextDim, style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(bottom = 8.dp))
-                OptionList(opts) { id ->
-                    val i = id?.toIntOrNull()
-                    c.selectServer(if (i == null) null else c.altCopies.getOrNull(i))
-                }
+                OptionList(opts) { id -> id?.toIntOrNull()?.let { c.selectServer(choices.getOrNull(it)) } }
             }
             PlayerController.Panel.SUB_SIZE -> OptionList(
                 listOf(s.sizeSmall, s.sizeMedium, s.sizeLarge, "XL").mapIndexed { i, l -> Opt(i.toString(), l, i == c.subSize) }
@@ -727,11 +726,9 @@ private fun ServerPrompt(c: PlayerController) {
             Spacer(Modifier.height(6.dp))
             Text(if (dhk) "কোন সার্ভার থেইকা চালামু?" else "Play from which server?", color = TextDim, style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(18.dp))
-            val opts = listOf(Opt("", com.israk.dhakaflix.data.AltServers.serverOf(c.current.url), true)) +
-                c.altCopies.mapIndexed { i, a -> Opt("$i", "${a.server}  ·  ${a.label}", false) }
-            OptionList(opts.map { it.copy(selected = false) }) { id ->
-                val i = id?.toIntOrNull()
-                c.pickServer(if (i == null) null else c.altCopies.getOrNull(i))
+            val choices = remember(c.altCopies, c.meta) { c.serverChoices() }
+            OptionList(choices.mapIndexed { i, a -> Opt("$i", a?.let { "${it.server}  ·  ${it.label}" } ?: c.originLabel, false) }) { id ->
+                id?.toIntOrNull()?.let { c.pickServer(choices.getOrNull(it)) }
             }
         }
     }

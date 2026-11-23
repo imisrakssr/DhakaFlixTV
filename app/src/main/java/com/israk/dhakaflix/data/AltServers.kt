@@ -37,6 +37,16 @@ object AltServers {
         RongDhong("RongDhong", "http://172.31.255.238/"),
     )
 
+    /** 1080p first, then 720p, then everything else. */
+    fun qualityRank(text: String?): Int {
+        val t = text?.lowercase() ?: return 2
+        return when {
+            "1080p" in t -> 0
+            "720p" in t -> 1
+            else -> 2
+        }
+    }
+
     /** Which server a stream URL belongs to. */
     fun serverOf(url: String): String = when {
         url.startsWith(Defaults.RD_ROOT) -> "RongDhong"

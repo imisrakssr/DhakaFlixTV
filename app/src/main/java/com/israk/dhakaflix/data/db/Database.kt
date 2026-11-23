@@ -194,7 +194,12 @@ abstract class ItemDao {
     @Update
     abstract suspend fun update(item: ItemEntity)
 
-    @Query("UPDATE items SET isPrimary = CASE WHEN id IN (SELECT id FROM (SELECT id, MAX(uploadedAt) FROM items GROUP BY groupKey)) THEN 1 ELSE 0 END")
+    /** One card per title, played from its best copy: 1080p first, then 720p, then the rest (newest wins a tie). */
+    @Query(
+        "UPDATE items SET isPrimary = CASE WHEN id = (SELECT j.id FROM items j WHERE j.groupKey = items.groupKey " +
+            "ORDER BY CASE WHEN LOWER(j.quality) = '1080p' THEN 0 WHEN LOWER(j.quality) = '720p' THEN 1 ELSE 2 END, " +
+            "j.uploadedAt DESC LIMIT 1) THEN 1 ELSE 0 END"
+    )
     abstract suspend fun recomputePrimary()
 
     @Query("SELECT * FROM items WHERE groupKey = :groupKey ORDER BY uploadedAt DESC")
