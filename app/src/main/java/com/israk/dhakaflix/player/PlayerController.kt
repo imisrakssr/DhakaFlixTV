@@ -532,6 +532,30 @@ class PlayerController(
         toast = tr("⏭ Auto skip intro: " + if (v) "On" else "Off", "⏭ নিজে নিজে ইন্ট্রো বাদ: " + if (v) "চালু" else "বন্ধ")
     }
 
+    // ---- phone: dragging along the seek bar (live preview, one real seek on release)
+    var scrubbing by mutableStateOf(false)
+        private set
+
+    fun scrubTo(f: Float) {
+        if (duration <= 0) return
+        scrubbing = true
+        val now = SystemClock.elapsedRealtime()
+        val t = (duration * f.coerceIn(0f, 1f)).toLong().coerceAtMost(duration - 1000).coerceAtLeast(0)
+        seekTarget = t; seekAt = now
+        position = t
+        previewAt = now
+        thumbs.request(playingUrl, t)
+        interaction++
+    }
+
+    fun endScrub() {
+        if (!scrubbing) return
+        scrubbing = false
+        seekAt = SystemClock.elapsedRealtime()
+        engine?.seekTo(seekTarget)
+        showControls()
+    }
+
     fun seekToFraction(f: Float) {
         if (duration <= 0) return
         engine?.seekTo((duration * f).toLong())

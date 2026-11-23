@@ -483,9 +483,11 @@ private fun SeekBar(c: PlayerController) {
     var focused by remember { mutableStateOf(false) }
     val accent = LocalAccent.current
     val frac = if (c.duration > 0) (c.position.toFloat() / c.duration).coerceIn(0f, 1f) else 0f
-    val h by animateDpAsState(if (focused) 8.dp else 5.dp, label = "seekH")
+    val tv = LocalIsTv.current
+    val h by animateDpAsState(if (c.scrubbing) 10.dp else if (focused) 8.dp else 5.dp, label = "seekH")
+    val knob by animateDpAsState(if (c.scrubbing) 24.dp else if (focused) 18.dp else 14.dp, label = "seekKnob")
     BoxWithConstraints(
-        Modifier.fillMaxWidth().height(26.dp)
+        Modifier.fillMaxWidth().height(if (tv) 26.dp else 36.dp)
             .onFocusChanged { focused = it.isFocused }
             .onKeyEvent { ev ->
                 if (ev.type != KeyEventType.KeyDown) return@onKeyEvent false
@@ -499,6 +501,14 @@ private fun SeekBar(c: PlayerController) {
             .focusable()
             .pointerInput(c.duration) {
                 detectTapGestures { o -> c.seekToFraction(o.x / size.width) }
+            }
+            // phone: drag along the bar to scrub, with the preview following the finger
+            .pointerInput(c.duration) {
+                androidx.compose.foundation.gestures.detectHorizontalDragGestures(
+                    onDragStart = { o -> c.scrubTo(o.x / size.width) },
+                    onDragEnd = { c.endScrub() },
+                    onDragCancel = { c.endScrub() },
+                ) { change, _ -> change.consume(); c.scrubTo(change.position.x / size.width) }
             },
         contentAlignment = Alignment.CenterStart,
     ) {
@@ -506,8 +516,8 @@ private fun SeekBar(c: PlayerController) {
         Box(Modifier.fillMaxWidth().height(h).clip(RoundedCornerShape(4.dp)).background(Color.White.copy(alpha = .28f))) {
             Box(Modifier.fillMaxHeight().fillMaxWidth(frac).background(if (focused) Color.White else accent))
         }
-        if (focused) {
-            Box(Modifier.offset(x = w * frac - 9.dp).size(18.dp).clip(CircleShape).background(Color.White))
+        if (focused || !tv) {
+            Box(Modifier.offset(x = w * frac - knob / 2).size(knob).clip(CircleShape).background(if (c.scrubbing) accent else Color.White))
         }
     }
 }
@@ -789,7 +799,7 @@ private fun SeekPreview(c: PlayerController) {
     LaunchedEffect(c.previewAt) {
         now = SystemClock.elapsedRealtime(); delay(1600); now = SystemClock.elapsedRealtime()
     }
-    val visible = c.previewAt > 0 && now - c.previewAt < 1500
+    val visible = c.scrubbing || (c.previewAt > 0 && now - c.previewAt < 1500)
     if (!visible) return
     // zero-height anchor: the preview floats above the seek bar without pushing the controls around
     Box(Modifier.fillMaxWidth().height(0.dp)) {
