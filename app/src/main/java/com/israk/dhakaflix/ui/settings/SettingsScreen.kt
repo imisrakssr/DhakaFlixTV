@@ -694,11 +694,7 @@ private fun AboutCard() {
                 ContactRow(badge = "GH", badgeColor = Color(0xFF24292F), text = "github.com/imisrakssr", url = "https://github.com/imisrakssr")
                 ContactRow(badge = "@", badgeColor = Color(0xFFEA4335), text = "israksisir@gmail.com", url = "mailto:israksisir@gmail.com")
             }
-            Spacer(Modifier.height(18.dp))
-            Text(
-                "This product uses the TMDB API but is not endorsed or certified by TMDB.",
-                color = TextDim.copy(alpha = .7f), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center,
-            )
+
         }
     }
 }
