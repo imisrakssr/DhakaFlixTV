@@ -122,7 +122,7 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         scope.launch(Dispatchers.IO) {
             val count = db.items().countFlow().first()
             val stale = System.currentTimeMillis() - settings.lastSync.value > maxAgeMs
-            if (count == 0 || stale) startSync(force = false) else { startEnrich(); startPosterScan() }
+            if (count == 0 || stale) startSync(force = false, manual = false) else { startEnrich(); startPosterScan() }
         }
     }
 
@@ -133,16 +133,17 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         }
     }
 
-    fun startSync(force: Boolean) {
+    /** [manual] = asked for in Settings / Home; automatic syncs leave the other servers (RongDhong) alone. */
+    fun startSync(force: Boolean, manual: Boolean = true) {
         if (syncJob?.isActive == true) return
         syncJob = scope.launch(Dispatchers.IO) {
-            runSync(force)
+            runSync(force, manual)
             startEnrich()
             if (!tmdb.hasKey) startPosterScan()
         }
     }
 
-    private suspend fun runSync(force: Boolean) {
+    private suspend fun runSync(force: Boolean, manual: Boolean = true) {
         val all = settings.sources.value
         val sources = all.filter { it.enabled }
         _sync.value = SyncState(running = true)
@@ -165,7 +166,9 @@ class LibraryRepository(private val app: DhakaFlixApp) {
                 DiagLog.add("Library", "${src.name}: ${e.message ?: e.javaClass.simpleName}")
             }
         }
+        // other servers update only when you refresh by hand (or the very first time, to fill the library)
         val rdSources = sources.filter { Defaults.isRongDhong(it.id) }
+            .filter { manual || db.items().countForSource(it.id) == 0 }
         if (rdSources.isNotEmpty()) {
             try {
                 syncRongDhong(rdSources, force, newItems)
@@ -199,6 +202,7 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         val subdirs = ArrayList<DirEntry>()
         for (e in entries) {
             if (!e.isDir) continue
+            if (Defaults.is3D(e.name)) continue // 3D copies are never used
             val p = NameParser.parseFolder(e.name, src.type)
             if (p != null) {
                 leaves += ItemEntity(
@@ -277,6 +281,7 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         val title = o.str("title")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         val isTv = kind == "tv-shows"
         val path = (if (isTv) o.str("path") else o.str("file_path")).orEmpty().trimEnd('/')
+        if (Defaults.is3D(path)) return null
         val file = path.substringAfterLast('/')
         val folder = if (isTv) file else path.substringBeforeLast('/', "").substringAfterLast('/')
         val parsed = NameParser.parseFolder(folder, src.type)

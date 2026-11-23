@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit
 object AltServers {
 
     /** One playable copy on another server. */
-    data class Alt(val server: String, val label: String, val url: String)
+    data class Alt(val server: String, val label: String, val url: String, val is3D: Boolean = false)
 
     interface Server {
         val name: String
@@ -47,7 +47,7 @@ object AltServers {
     suspend fun find(meta: ItemEntity?, p: PlayItem): List<Alt> = withContext(Dispatchers.IO) {
         val lib = runCatching { libraryCopies(meta, p) }.getOrDefault(emptyList())
         val ext = runCatching { searchServers(meta, p) }.getOrDefault(emptyList())
-        (lib + ext).distinctBy { it.url }.filter { it.url != p.url }
+        (lib + ext).distinctBy { it.url }.filter { it.url != p.url && !it.is3D }
     }
 
     private suspend fun libraryCopies(meta: ItemEntity?, p: PlayItem): List<Alt> {
@@ -67,7 +67,7 @@ object AltServers {
                             ?.let { s -> repo.listSeason(s).firstOrNull { it.episode == p.episode } }?.url
                 } ?: return@runCatching null
                 val label = listOfNotNull(names[v.sourceId], v.quality).joinToString(" · ").ifBlank { qualityLabel(v.rawName) }
-                Alt(serverOf(url), label, url)
+                Alt(serverOf(url), label, url, is3D = Defaults.is3D(v.rawName) || Defaults.is3D(v.id))
             }.getOrNull()
         }
     }
@@ -151,8 +151,8 @@ private class RongDhong(override val name: String, base: String) : AltServers.Se
             .filter { (it.s("type") ?: "movie") == "movie" && titleMatches(it, title, year) }
         return rows.mapNotNull { o ->
             val id = o.s("id") ?: return@mapNotNull null
-            val file = o.s("file_path")?.substringAfterLast('/') ?: ""
-            AltServers.Alt(name, AltServers.qualityLabel(file), movieUrl(id))
+            val path = o.s("file_path") ?: ""
+            AltServers.Alt(name, AltServers.qualityLabel(path.substringAfterLast('/')), movieUrl(id), is3D = Defaults.is3D(path))
         }.distinctBy { it.url }
     }
 

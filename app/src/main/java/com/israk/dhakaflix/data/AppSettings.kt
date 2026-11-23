@@ -210,7 +210,7 @@ class AppSettings(ctx: Context) {
                 return merged
             }
         }
-        return saved
+        return saved.filterNot { it.id == "rd-1" } // RongDhong 3D: never used
     }
 
     private val rowSer = ListSerializer(HomeRow.serializer())

@@ -49,12 +49,17 @@ object Defaults {
         Triple(8, "Kolkata Bangla Movies", MediaType.MOVIE),
         Triple(5, "Foreign Language Movies", MediaType.MOVIE),
         Triple(2, "Animation Movies", MediaType.MOVIE),
-        Triple(1, "3D Movies", MediaType.MOVIE),
         Triple(7, "IMDb Top-250", MediaType.MOVIE),
         Triple(9, "Korean TV & Web Series", MediaType.SERIES),
-    ).map { (id, name, type) -> Source("rd-$id", "RongDhong · $name", "${RD_ROOT}api/library/$id", type, enabled = id != 7 && id != 1) }
+    ).map { (id, name, type) -> Source("rd-$id", "RongDhong · $name", "${RD_ROOT}api/library/$id", type, enabled = id != 7) }
 
     fun isRongDhong(id: String) = id.startsWith("rd-")
+
+    /** 3D copies are never used (library 1 on RongDhong, "[3D]" in a file name). */
+    fun is3D(path: String): Boolean {
+        val n = path.lowercase()
+        return "3d movies" in n || "[3d]" in n || Regex("(^|[^a-z0-9])3d([^a-z0-9]|$)").containsMatchIn(n.substringAfterLast('/'))
+    }
 
     val sources: List<Source> = listOf(
         Source("eng", "English Movies", "${S7}English%20Movies/", MediaType.MOVIE),
