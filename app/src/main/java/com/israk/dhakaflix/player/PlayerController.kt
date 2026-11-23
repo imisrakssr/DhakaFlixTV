@@ -541,6 +541,71 @@ class PlayerController(
         toast = tr("⏭ Auto skip intro: " + if (v) "On" else "Off", "⏭ নিজে নিজে ইন্ট্রো বাদ: " + if (v) "চালু" else "বন্ধ")
     }
 
+    // ---- phone gestures on the picture: swipe sideways = seek, left side up/down = brightness, right side = volume
+    /** On-screen readout while a gesture runs: kind ("seek" / "bright" / "vol"), text, level 0..1 (or -1). */
+    var gestureHud by mutableStateOf<Triple<String, String, Float>?>(null)
+        private set
+    private var gestureStart = 0L
+    private var brightStart = 0.5f
+    private var volStart = 0f
+
+    fun gestureBegin(kind: String) {
+        when (kind) {
+            "seek" -> gestureStart = position
+            "bright" -> {
+                val cur = activity.window.attributes.screenBrightness
+                brightStart = if (cur >= 0f) cur else runCatching {
+                    android.provider.Settings.System.getInt(activity.contentResolver, android.provider.Settings.System.SCREEN_BRIGHTNESS) / 255f
+                }.getOrDefault(.5f)
+            }
+            "vol" -> {
+                val am = activity.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+                volStart = am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC).toFloat() / am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+            }
+        }
+    }
+
+    /** [dx] / [dy]: finger movement as a fraction of the screen width / height (up = positive dy). */
+    fun gestureMove(kind: String, dx: Float, dy: Float) {
+        when (kind) {
+            "seek" -> {
+                if (duration <= 0) return
+                // one screen width = 2 minutes
+                val t = (gestureStart + (dx * 120_000).toLong()).coerceIn(0, duration - 1000)
+                showControls()
+                scrubTo(t.toFloat() / duration)
+                val d = (t - gestureStart) / 1000
+                gestureHud = Triple("seek", (if (d >= 0) "+" else "−") + fmtShort(kotlin.math.abs(d)) + "   " + fmtShort(t / 1000), -1f)
+            }
+            "bright" -> {
+                val v = (brightStart + dy).coerceIn(0f, 1f)
+                val lp = activity.window.attributes
+                // all the way down = Auto (the phone's own brightness)
+                lp.screenBrightness = if (v <= 0.02f) android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE else v
+                activity.window.attributes = lp
+                gestureHud = Triple("bright", if (v <= 0.02f) tr("Auto", "অটো") else "${(v * 100).toInt()}%", v)
+            }
+            "vol" -> {
+                val am = activity.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+                val max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+                val v = (volStart + dy).coerceIn(0f, 1f)
+                am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, Math.round(v * max), 0)
+                gestureHud = Triple("vol", "${(v * 100).toInt()}%", v)
+            }
+        }
+        interaction++
+    }
+
+    fun gestureEnd(kind: String) {
+        if (kind == "seek") endScrub()
+        scope.launch { delay(700); gestureHud = null }
+    }
+
+    private fun fmtShort(sec: Long): String {
+        val h = sec / 3600; val m = (sec % 3600) / 60; val s = sec % 60
+        return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
+    }
+
     // ---- phone: dragging along the seek bar (live preview, one real seek on release)
     var scrubbing by mutableStateOf(false)
         private set

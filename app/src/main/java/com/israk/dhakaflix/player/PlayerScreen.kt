@@ -15,6 +15,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -128,7 +130,7 @@ fun PlayerScreen(c: PlayerController) {
                 onTap = { c.toggleControls() },
                 onDoubleTap = { o -> if (o.x < size.width / 2) c.seekBy(-10_000) else c.seekBy(10_000) },
             )
-        }
+        }.then(if (LocalIsTv.current) Modifier else Modifier.playerGestures(c))
     ) {
         if (c.engine != null) {
             key(c.viewGeneration) {
@@ -143,6 +145,7 @@ fun PlayerScreen(c: PlayerController) {
         }
 
         SeekFlash(c)
+        c.gestureHud?.let { GestureHud(it) }
 
         Controls(c, visible = c.controlsVisible && !c.pauseInfo && c.resumeAsk == null && c.error == null && !c.exitAsk && c.panel == null && !c.serverAsk)
 
@@ -826,3 +829,61 @@ private fun SeekPreview(c: PlayerController) {
 
 @Composable
 private fun serverLabel(): String = if (com.israk.dhakaflix.ui.components.isDhakaiya()) "সার্ভার" else "Server"
+
+/**
+ * Phone: swipe sideways anywhere to seek; up/down on the left half for brightness (bottom = Auto),
+ * on the right half for volume. The direction is decided by the first movement past the touch slop.
+ */
+private fun Modifier.playerGestures(c: PlayerController): Modifier = pointerInput(Unit) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        // leave the very edges to the system's back gesture / status bar
+        if (down.position.y < 48.dp.toPx() || down.position.x < 24.dp.toPx() || down.position.x > size.width - 24.dp.toPx()) return@awaitEachGesture
+        if (c.panel != null || c.serverAsk || c.resumeAsk != null) return@awaitEachGesture
+        val slop = viewConfiguration.touchSlop
+        var kind: String? = null
+        var total = androidx.compose.ui.geometry.Offset.Zero
+        while (true) {
+            val ev = awaitPointerEvent()
+            val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
+            if (!ch.pressed) break
+            if (ch.isConsumed) { if (kind == null) return@awaitEachGesture } // a child (the seek bar) took it
+            total += ch.position - ch.previousPosition
+            if (kind == null) {
+                if (kotlin.math.abs(total.x) < slop && kotlin.math.abs(total.y) < slop) continue
+                kind = if (kotlin.math.abs(total.x) > kotlin.math.abs(total.y)) "seek"
+                else if (down.position.x < size.width / 2) "bright" else "vol"
+                c.gestureBegin(kind)
+            }
+            ch.consume()
+            c.gestureMove(kind, total.x / size.width, -total.y / (size.height * 0.8f))
+        }
+        kind?.let { c.gestureEnd(it) }
+    }
+}
+
+/** Centre readout while a phone gesture runs (seek time, brightness, volume). */
+@Composable
+private fun GestureHud(h: Triple<String, String, Float>) {
+    val (kind, text, level) = h
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(
+            Modifier.glass(RoundedCornerShape(20.dp), tint = .14f).background(Color.Black.copy(alpha = .45f))
+                .padding(horizontal = 22.dp, vertical = 14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                when (kind) { "bright" -> "☀"; "vol" -> "🔊"; else -> "⇆" },
+                color = Color.White, style = MaterialTheme.typography.titleLarge,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(text, color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            if (level >= 0f) {
+                Spacer(Modifier.height(8.dp))
+                Box(Modifier.width(120.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = .25f))) {
+                    Box(Modifier.fillMaxHeight().fillMaxWidth(level).background(LocalAccent.current))
+                }
+            }
+        }
+    }
+}
