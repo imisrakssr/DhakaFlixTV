@@ -407,6 +407,9 @@ private fun Controls(c: PlayerController, visible: Boolean) {
                 Row(Modifier.align(Alignment.CenterStart), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     ControlButton(AppIcons.Subtitles, s.subtitles) { c.panel = PlayerController.Panel.SUBS }
                     ControlButton(AppIcons.Audio, s.audio) { c.panel = PlayerController.Panel.AUDIO }
+                    if (c.altCopies.isNotEmpty() || c.altPlaying != null) {
+                        ControlButton(AppIcons.Server, serverLabel()) { c.panel = PlayerController.Panel.SERVER }
+                    }
                 }
                 // centre: transport
                 Row(Modifier.align(Alignment.Center), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -512,6 +515,7 @@ private fun SidePanel(c: PlayerController) {
         PlayerController.Panel.SUB_SIZE -> s.subtitleSize
         PlayerController.Panel.SUB_COLOR -> s.subtitleColor
         PlayerController.Panel.SLEEP -> s.sleepTimer
+        PlayerController.Panel.SERVER -> serverLabel()
     }
     Column(
         Modifier.padding(16.dp).width(360.dp).fillMaxHeight()
@@ -549,6 +553,17 @@ private fun SidePanel(c: PlayerController) {
                 ) + listOf(15, 30, 45, 60, 90).map { Opt("$it", s.minutesShort.format(it), false) } +
                     listOf(Opt("eoe", s.endOfEpisode, c.sleepEndOfEpisode))
             ) { id -> c.setSleep(if (id == "eoe") null else id?.toIntOrNull() ?: 0) }
+            PlayerController.Panel.SERVER -> {
+                val dhk = com.israk.dhakaflix.ui.components.isDhakaiya()
+                val opts = listOf(Opt("", "DhakaFlix", c.altPlaying == null)) +
+                    c.altCopies.mapIndexed { i, a -> Opt("$i", "${a.server}  ·  ${a.label}", c.altPlaying?.url == a.url) }
+                if (c.altSearching) Text(if (dhk) "অন্য সার্ভারে খুঁজতাছি…" else "Looking on other servers…", color = TextDim, style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(bottom = 8.dp))
+                OptionList(opts) { id ->
+                    val i = id?.toIntOrNull()
+                    c.selectServer(if (i == null) null else c.altCopies.getOrNull(i))
+                }
+            }
             PlayerController.Panel.SUB_SIZE -> OptionList(
                 listOf(s.sizeSmall, s.sizeMedium, s.sizeLarge, "XL").mapIndexed { i, l -> Opt(i.toString(), l, i == c.subSize) }
             ) { id -> id?.toIntOrNull()?.let { c.setSubtitleSize(it) } }
@@ -565,6 +580,7 @@ private fun SidePanel(c: PlayerController) {
                     Opt("async", s.audioSync + "  (" + String.format(Locale.US, "%+.2fs", c.audioDelay / 1000.0) + ")", false, chevron = true),
                     Opt("speed", s.speed + "  (" + c.speed + "x)", false, chevron = true),
                     Opt("aspect", s.aspect, false, chevron = true),
+                    Opt("server", serverLabel() + "  (" + (c.altPlaying?.server ?: "DhakaFlix") + ")", false, chevron = true),
                     Opt("engine", s.switchEngine + "  (" + (if (c.kind == EngineKind.EXO) "ExoPlayer" else "LibVLC") + ")", false),
                     Opt("night", s.nightMode + "  ·  " + s.nightModeHint, c.nightMode),
                     Opt("autoskip", s.autoSkipIntro, autoSkip),
@@ -583,6 +599,7 @@ private fun SidePanel(c: PlayerController) {
                     "subcolor" -> c.panel = PlayerController.Panel.SUB_COLOR
                     "speed" -> c.panel = PlayerController.Panel.SPEED
                     "aspect" -> c.panel = PlayerController.Panel.ASPECT
+                    "server" -> c.panel = PlayerController.Panel.SERVER
                     "engine" -> { c.panel = null; c.switchEngine() }
                     "vlc" -> { c.panel = null; c.openInVlc() }
                     "night" -> c.toggleNightMode()
@@ -760,3 +777,6 @@ private fun SeekPreview(c: PlayerController) {
     }
     }
 }
+
+@Composable
+private fun serverLabel(): String = if (com.israk.dhakaflix.ui.components.isDhakaiya()) "সার্ভার" else "Server"

@@ -27,7 +27,7 @@ class PlayerController(
     private val startMode: String,
 ) : EngineListener {
 
-    enum class Panel { AUDIO, SUBS, SYNC, AUDIO_SYNC, SPEED, ASPECT, OPTIONS, SUB_SIZE, SUB_COLOR, SLEEP }
+    enum class Panel { AUDIO, SUBS, SYNC, AUDIO_SYNC, SPEED, ASPECT, OPTIONS, SUB_SIZE, SUB_COLOR, SLEEP, SERVER }
 
     val playlist = mutableStateListOf<PlayItem>().apply { addAll(initialPlaylist) }
 
@@ -82,6 +82,45 @@ class PlayerController(
         private set
     var scaleMode by mutableIntStateOf(0)
         private set
+
+    // ---- servers: the DhakaFlix file plus the same title on other servers (AltServers)
+    /** The other copies found for what's playing; empty until the lookup finishes. */
+    var altCopies by mutableStateOf<List<com.israk.dhakaflix.data.AltServers.Alt>>(emptyList())
+        private set
+    var altSearching by mutableStateOf(false)
+        private set
+    /** Copy being played instead of the DhakaFlix file (null = DhakaFlix). Progress stays on the DhakaFlix file. */
+    var altPlaying by mutableStateOf<com.israk.dhakaflix.data.AltServers.Alt?>(null)
+        private set
+    val playingUrl: String get() = altPlaying?.url ?: current.url
+    private var altJob: kotlinx.coroutines.Job? = null
+
+    private fun findAlternatives(p: PlayItem) {
+        altJob?.cancel()
+        altCopies = emptyList()
+        altSearching = true
+        altJob = scope.launch {
+            val m = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { app.db.items().get(p.itemId) }
+            val found = runCatching { com.israk.dhakaflix.data.AltServers.find(m, p) }.getOrDefault(emptyList())
+            if (current.url == p.url) { altCopies = found; altSearching = false }
+        }
+    }
+
+    /** Switch to another server's copy (null = back to DhakaFlix), carrying on from the same spot. */
+    fun selectServer(alt: com.israk.dhakaflix.data.AltServers.Alt?) {
+        panel = null
+        if (alt?.url == altPlaying?.url) return
+        val pos = maxOf(engine?.position ?: position, 0L)
+        save()
+        altPlaying = alt
+        error = null
+        triedFallback = false
+        clearOwnSubs()
+        subsChecked = false
+        tracksRestored = false
+        toast = alt?.let { "${it.server} · ${it.label}" } ?: "DhakaFlix"
+        start(pos)
+    }
 
     /** Library entry of what's playing (for the pause screen) + the current episode's TMDB info. */
     var meta by mutableStateOf<com.israk.dhakaflix.data.db.ItemEntity?>(null)
@@ -179,6 +218,8 @@ class PlayerController(
         introWindow = introStore.getString(playlist[i].itemId, null)?.split(',')
             ?.mapNotNull { it.toLongOrNull() }?.takeIf { it.size == 2 }?.let { it[0] to it[1] }
         loadMeta(playlist[i])
+        altPlaying = null
+        findAlternatives(playlist[i])
         prefetchNextSeason()
         error = null; panel = null; endedHandled = false; triedFallback = false
         clearOwnSubs()
@@ -274,10 +315,13 @@ class PlayerController(
         val startAt = pendingStart ?: return
         pendingStart = null
         val item = current
-        val engineSubs = if (e.kind == EngineKind.VLC) item.subs else item.subs.filterNot { SubtitleParser.isOwnRendered(it) }
+        val alt = altPlaying
+        // a copy from another server: the DhakaFlix .srt files belong to a different release, so leave them out
+        val fileSubs = if (alt != null) emptyList() else item.subs
+        val engineSubs = if (e.kind == EngineKind.VLC) fileSubs else fileSubs.filterNot { SubtitleParser.isOwnRendered(it) }
         val mem = TrackMemory.forFile(item.url) ?: TrackMemory.forTitle(item.itemId)
         mem?.aspect?.let { scaleMode = it }
-        e.load(item.url, startAt, engineSubs)
+        e.load(alt?.url ?: item.url, startAt, engineSubs)
         buffering = true
         showControls()
         scope.launch {
@@ -290,7 +334,9 @@ class PlayerController(
             }
         }
         val memSub = mem?.sub
-        if (e.kind == EngineKind.EXO && memSub != null && memSub.startsWith("ext:")) {
+        if (alt != null) {
+            // embedded tracks only on another server's copy
+        } else if (e.kind == EngineKind.EXO && memSub != null && memSub.startsWith("ext:")) {
             // remembered external subtitle: this file's own, or (next episode) its first external one
             val url = memSub.removePrefix("ext:").takeIf { it in item.subs } ?: item.subs.firstOrNull { SubtitleParser.isOwnRendered(it) }
             if (url != null) { subsChecked = true; selectOwnSub(url) }
@@ -402,7 +448,7 @@ class PlayerController(
         seekTarget = t; seekAt = now
         position = t
         previewAt = now
-        thumbs.request(current.url, t)
+        thumbs.request(playingUrl, t)
         // coalesce rapid presses into one real seek (each seek restarts buffering)
         seekJob?.cancel()
         seekJob = scope.launch {
@@ -468,7 +514,7 @@ class PlayerController(
     fun openInVlc() {
         engine?.pause()
         save()
-        ExternalPlayer.openInVlc(activity, current, engine?.position ?: 0L)
+        ExternalPlayer.openInVlc(activity, altPlaying?.let { current.copy(url = it.url, subs = emptyList()) } ?: current, engine?.position ?: 0L)
     }
 
     fun audioOptions(): List<TrackOption> = engine?.audioTracks() ?: emptyList()
@@ -585,7 +631,7 @@ class PlayerController(
         when {
             pauseInfo -> { pauseInfo = false; showControls() }
             exitAsk -> exitAsk = false
-            panel != null -> panel = PlayerController.Panel.OPTIONS.takeIf { panel in setOf(Panel.SYNC, Panel.AUDIO_SYNC, Panel.SPEED, Panel.ASPECT, Panel.SUB_SIZE, Panel.SUB_COLOR, Panel.SLEEP) }
+            panel != null -> panel = PlayerController.Panel.OPTIONS.takeIf { panel in setOf(Panel.SYNC, Panel.AUDIO_SYNC, Panel.SPEED, Panel.ASPECT, Panel.SUB_SIZE, Panel.SUB_COLOR, Panel.SLEEP, Panel.SERVER) }
             resumeAsk != null -> activity.finish()
             error != null -> { save(); activity.finish() }
             controlsVisible -> controlsVisible = false
@@ -614,6 +660,10 @@ class PlayerController(
                 kind = EngineKind.VLC
                 clearOwnSubs()
                 start(pos)
+            } else if (altPlaying == null && altCopies.isNotEmpty()) {
+                // the DhakaFlix file won't play: carry on from another server instead of stopping
+                triedFallback = false
+                selectServer(altCopies.first())
             } else {
                 error = message
                 controlsVisible = false
