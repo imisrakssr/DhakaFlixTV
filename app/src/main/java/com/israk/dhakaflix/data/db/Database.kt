@@ -70,6 +70,7 @@ data class ItemEntity(
         const val META_NOT_FOUND = 2
         const val META_MANUAL = 3
         const val META_HIDDEN = 4    // other-server index row: never looked up
+        const val META_EMPTY = 5     // the folder has nothing to play: kept out of the library
     }
 }
 
@@ -194,9 +195,14 @@ abstract class ItemDao {
     @Update
     abstract suspend fun update(item: ItemEntity)
 
-    /** One card per title, played from its best copy: 1080p first, then 720p, then the rest; DhakaFlix before other servers, then newest. */
+    /**
+     * One card per title, played from its best copy: 1080p first, then 720p, then the rest; DhakaFlix before
+     * other servers, then newest. Never shown: folders with nothing to play, and other servers' titles that
+     * couldn't be matched to TMDB (no poster, no details — usually junk or not-yet-filled folders).
+     */
     @Query(
         "UPDATE items SET isPrimary = CASE WHEN id = (SELECT j.id FROM items j WHERE j.groupKey = items.groupKey " +
+            "AND j.metaState != 5 AND NOT ((j.sourceId LIKE 'bk-%' OR j.sourceId LIKE 'rd-%') AND j.metaState NOT IN (1, 3)) " +
             "ORDER BY CASE WHEN LOWER(j.quality) = '1080p' THEN 0 WHEN LOWER(j.quality) = '720p' THEN 1 ELSE 2 END, " +
             "(j.sourceId LIKE 'bk-%' OR j.sourceId LIKE 'rd-%'), j.uploadedAt DESC LIMIT 1) THEN 1 ELSE 0 END"
     )
@@ -236,6 +242,17 @@ abstract class ItemDao {
 
     @Query("UPDATE items SET metaState = 0 WHERE metaState = 2")
     abstract suspend fun retryNotFound()
+
+    @Query("UPDATE items SET metaState = 5, isPrimary = 0 WHERE id = :id")
+    abstract suspend fun markEmpty(id: String)
+
+    /** Full rescan: give folders marked empty another look (episodes may have arrived). */
+    @Query("UPDATE items SET metaState = 0 WHERE metaState = 5")
+    abstract suspend fun resetEmpty()
+
+    /** RongDhong's stand-in poster (a plain blue box) is never used. */
+    @Query("UPDATE items SET localPoster = NULL WHERE localPoster LIKE 'http://172.31.255.238/%'")
+    abstract suspend fun dropRongDhongStandInPosters()
 
     @Query("UPDATE items SET localPoster = :url WHERE id = :id")
     abstract suspend fun setLocalPoster(id: String, url: String)

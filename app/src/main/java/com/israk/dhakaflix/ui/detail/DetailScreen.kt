@@ -60,6 +60,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.israk.dhakaflix.DhakaFlixApp
 import com.israk.dhakaflix.data.FolderContent
+import com.israk.dhakaflix.data.Defaults
 import com.israk.dhakaflix.data.LibraryRepository
 import com.israk.dhakaflix.data.PlayItem
 import com.israk.dhakaflix.data.VideoFile
@@ -114,6 +115,7 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
     var failed by remember(id) { mutableStateOf(false) }
     /** DhakaFlix didn't answer, so the film plays from another server (RongDhong / BokaSoka). */
     var offline by remember(id) { mutableStateOf(false) }
+    var empty by remember(id) { mutableStateOf(false) }
     var reload by remember { mutableStateOf(0) }
     var season by rememberSaveable(id) { mutableStateOf<Int?>(null) }
     var episodes by remember(id) { mutableStateOf<List<VideoFile>>(emptyList()) }
@@ -132,7 +134,14 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
         offline = false
         val entity = app.db.items().get(id) ?: return@LaunchedEffect
         content = try {
-            repo.listItem(entity)
+            repo.listItem(entity).also { c ->
+                // nothing to play in this folder: take it out of the library and say so
+                if (c.videos.isEmpty() && c.seasons.isEmpty() && !Defaults.isRongDhong(entity.sourceId)) {
+                    app.db.items().markEmpty(entity.id)
+                    app.db.items().recomputePrimary()
+                    empty = true
+                }
+            }
         } catch (e: Exception) {
             // DhakaFlix is down: a series can still be listed from another server that has it
             val series = if (entity.isSeries) com.israk.dhakaflix.data.AltServers.seriesFallback(entity) else null
@@ -163,8 +172,18 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
         val c = content ?: return@LaunchedEffect
         val ref = c.seasons.firstOrNull { it.number == season } ?: return@LaunchedEffect
         episodesLoading = true
-        episodes = runCatching { repo.listSeason(ref) }.getOrDefault(emptyList())
+        val list = runCatching { repo.listSeason(ref) }
+        episodes = list.getOrDefault(emptyList())
         episodesLoading = false
+        // the only "season" holds no episodes: nothing to play here
+        if (list.isSuccess && episodes.isEmpty() && c.videos.isEmpty() && c.seasons.size == 1 && !offline) {
+            val e = app.db.items().get(id)
+            if (e != null && !Defaults.isRongDhong(e.sourceId)) {
+                app.db.items().markEmpty(id)
+                app.db.items().recomputePrimary()
+                empty = true
+            }
+        }
     }
     LaunchedEffect(season, item?.tmdbId) {
         val t = item?.tmdbId ?: return@LaunchedEffect
@@ -304,6 +323,13 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
                         }
                         if (failed) {
                             Text(s.folderError, color = Color(0xFFFF8A80), style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (empty) {
+                            Text(
+                                if (com.israk.dhakaflix.ui.components.isDhakaiya()) "এই ফোল্ডারে চালানোর মতো কিছু নাই — লাইব্রেরি থেইকা সরায়া দিলাম।"
+                                else "Nothing to play in this folder yet — it's been taken out of the library.",
+                                color = Color(0xFFFBBF24), style = MaterialTheme.typography.bodySmall,
+                            )
                         }
                         if (offline) {
                             Text(

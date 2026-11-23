@@ -123,6 +123,7 @@ class LibraryRepository(private val app: DhakaFlixApp) {
             val count = db.items().countFlow().first()
             val stale = System.currentTimeMillis() - settings.lastSync.value > maxAgeMs
             db.items().unhideOldIndex()
+            db.items().dropRongDhongStandInPosters()
             // also when another server's library (RongDhong / BokaSoka) has never been filled
             val otherMissing = settings.sources.value.any { it.enabled && Defaults.isOtherServer(it.id) && db.items().countForSource(it.id) == 0 }
             if (count == 0 || stale || otherMissing) startSync(force = false, manual = false) else { startEnrich(); startPosterScan() }
@@ -151,6 +152,7 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         val sources = all.filter { it.enabled }
         _sync.value = SyncState(running = true)
         db.items().deleteNotInSources(sources.map { it.id }.ifEmpty { listOf("__none__") })
+        if (force) db.items().resetEmpty()
         val cache = if (force) emptyMap() else db.dirs().all().associate { it.url to it.modified }
         val newItems = AtomicInteger(0)
         val folders = AtomicInteger(0)
@@ -313,7 +315,7 @@ class LibraryRepository(private val app: DhakaFlixApp) {
             overview = o.str("overview")?.takeIf { it.isNotBlank() }?.take(400),
             rating = o.str("online_rating")?.toDoubleOrNull()?.takeIf { it > 0 },
             genres = genres, releaseYear = year,
-            localPoster = if (poster == null) rongDhong.posterUrl(isTv, rid) else null,
+            localPoster = null, // RongDhong's own "no poster" image is a plain blue box
             posterChecked = true,
         )
     }
@@ -400,6 +402,10 @@ class LibraryRepository(private val app: DhakaFlixApp) {
                         async {
                             net.withPermit {
                                 val entries = runCatching { h5ai.list(item.id) }.getOrNull()
+                                // a folder with no video and no subfolder has nothing to play: keep it out of the library
+                                if (entries != null && !Defaults.isRongDhong(item.sourceId) && entries.none { it.isDir || NameParser.ext(it.name) in NameParser.videoExt }) {
+                                    db.items().markEmpty(item.id)
+                                }
                                 item.id to entries?.let { pickPoster(it).first }
                             }
                         }
