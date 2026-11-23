@@ -118,7 +118,7 @@ class PlayerController(
         clearOwnSubs()
         subsChecked = false
         tracksRestored = false
-        toast = alt?.let { "${it.server} · ${it.label}" } ?: "DhakaFlix"
+        toast = alt?.let { "${it.server} · ${it.label}" } ?: com.israk.dhakaflix.data.AltServers.serverOf(current.url)
         start(pos)
     }
 

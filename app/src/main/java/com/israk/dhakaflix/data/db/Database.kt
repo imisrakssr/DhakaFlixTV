@@ -193,11 +193,19 @@ abstract class ItemDao {
     @Update
     abstract suspend fun update(item: ItemEntity)
 
-    @Query("UPDATE items SET isPrimary = CASE WHEN id IN (SELECT id FROM (SELECT id, MAX(uploadedAt) FROM items GROUP BY groupKey)) THEN 1 ELSE 0 END")
+    /** One card per title: the newest DhakaFlix copy, or the newest RongDhong one when DhakaFlix has none. */
+    @Query(
+        "UPDATE items SET isPrimary = CASE WHEN id IN (SELECT id FROM (SELECT id, MAX(uploadedAt) FROM items " +
+            "WHERE sourceId NOT LIKE 'rd-%' OR groupKey NOT IN (SELECT groupKey FROM items WHERE sourceId NOT LIKE 'rd-%') " +
+            "GROUP BY groupKey)) THEN 1 ELSE 0 END"
+    )
     abstract suspend fun recomputePrimary()
 
     @Query("SELECT * FROM items WHERE groupKey = :groupKey ORDER BY uploadedAt DESC")
     abstract fun versions(groupKey: String): Flow<List<ItemEntity>>
+
+    @Query("SELECT * FROM items WHERE groupKey = :groupKey ORDER BY uploadedAt DESC")
+    abstract suspend fun versionsNow(groupKey: String): List<ItemEntity>
 
     @Query("SELECT DISTINCT year FROM items WHERE year IS NOT NULL ORDER BY year DESC")
     abstract fun years(): Flow<List<Int>>

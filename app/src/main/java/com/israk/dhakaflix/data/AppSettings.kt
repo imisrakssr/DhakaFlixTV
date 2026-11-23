@@ -200,7 +200,17 @@ class AppSettings(ctx: Context) {
 
     private fun loadSources(): List<Source> {
         val s = prefs.getString("sources", null) ?: return Defaults.sources
-        return runCatching { json.decodeFromString(sourceSer, s) }.getOrNull()?.takeIf { it.isNotEmpty() } ?: Defaults.sources
+        val saved = runCatching { json.decodeFromString(sourceSer, s) }.getOrNull()?.takeIf { it.isNotEmpty() } ?: return Defaults.sources
+        // RongDhong arrived after the source list was saved: add its libraries once
+        if (!prefs.getBoolean("rd_sources_added", false)) {
+            prefs.edit().putBoolean("rd_sources_added", true).apply()
+            if (saved.none { Defaults.isRongDhong(it.id) }) {
+                val merged = saved + Defaults.rongDhong
+                prefs.edit().putString("sources", json.encodeToString(sourceSer, merged)).apply()
+                return merged
+            }
+        }
+        return saved
     }
 
     private val rowSer = ListSerializer(HomeRow.serializer())

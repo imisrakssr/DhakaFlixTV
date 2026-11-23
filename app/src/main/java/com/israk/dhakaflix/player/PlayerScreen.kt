@@ -555,7 +555,7 @@ private fun SidePanel(c: PlayerController) {
             ) { id -> c.setSleep(if (id == "eoe") null else id?.toIntOrNull() ?: 0) }
             PlayerController.Panel.SERVER -> {
                 val dhk = com.israk.dhakaflix.ui.components.isDhakaiya()
-                val opts = listOf(Opt("", "DhakaFlix", c.altPlaying == null)) +
+                val opts = listOf(Opt("", com.israk.dhakaflix.data.AltServers.serverOf(c.current.url), c.altPlaying == null)) +
                     c.altCopies.mapIndexed { i, a -> Opt("$i", "${a.server}  ·  ${a.label}", c.altPlaying?.url == a.url) }
                 if (c.altSearching) Text(if (dhk) "অন্য সার্ভারে খুঁজতাছি…" else "Looking on other servers…", color = TextDim, style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(bottom = 8.dp))
@@ -580,7 +580,7 @@ private fun SidePanel(c: PlayerController) {
                     Opt("async", s.audioSync + "  (" + String.format(Locale.US, "%+.2fs", c.audioDelay / 1000.0) + ")", false, chevron = true),
                     Opt("speed", s.speed + "  (" + c.speed + "x)", false, chevron = true),
                     Opt("aspect", s.aspect, false, chevron = true),
-                    Opt("server", serverLabel() + "  (" + (c.altPlaying?.server ?: "DhakaFlix") + ")", false, chevron = true),
+                    Opt("server", serverLabel() + "  (" + (c.altPlaying?.server ?: com.israk.dhakaflix.data.AltServers.serverOf(c.current.url)) + ")", false, chevron = true),
                     Opt("engine", s.switchEngine + "  (" + (if (c.kind == EngineKind.EXO) "ExoPlayer" else "LibVLC") + ")", false),
                     Opt("night", s.nightMode + "  ·  " + s.nightModeHint, c.nightMode),
                     Opt("autoskip", s.autoSkipIntro, autoSkip),

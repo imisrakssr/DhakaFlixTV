@@ -87,6 +87,7 @@ class LibraryRepository(private val app: DhakaFlixApp) {
     private val settings = app.settings
     private val scope = app.appScope
     val h5ai = H5aiClient(app.http)
+    val rongDhong = com.israk.dhakaflix.data.net.RongDhongClient(app.http, Defaults.RD_ROOT)
     val tmdb = TmdbClient(app.http) { settings.tmdbKey.value.ifBlank { BuildConfig.TMDB_API_KEY } }
     val mdblist = com.israk.dhakaflix.data.accounts.MdbList(app)
     val simkl = com.israk.dhakaflix.data.accounts.Simkl(app)
@@ -151,6 +152,7 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         val folders = AtomicInteger(0)
         val failed = mutableListOf<String>()
         for (src in sources) {
+            if (Defaults.isRongDhong(src.id)) continue // synced together below
             _sync.update { it.copy(currentSource = src.name) }
             val srcCache = if (db.items().countForSource(src.id) == 0) emptyMap() else cache
             try {
@@ -161,6 +163,18 @@ class LibraryRepository(private val app: DhakaFlixApp) {
                 Log.w(TAG, "source ${src.name} failed", e)
                 failed += src.name
                 DiagLog.add("Library", "${src.name}: ${e.message ?: e.javaClass.simpleName}")
+            }
+        }
+        val rdSources = sources.filter { Defaults.isRongDhong(it.id) }
+        if (rdSources.isNotEmpty()) {
+            try {
+                syncRongDhong(rdSources, force, newItems)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "RongDhong failed", e)
+                failed += rdSources.map { it.name }
+                DiagLog.add("Library", "RongDhong: ${e.message ?: e.javaClass.simpleName}")
             }
         }
         db.items().recomputePrimary()
@@ -215,6 +229,124 @@ class LibraryRepository(private val app: DhakaFlixApp) {
                 }
             }
         }.awaitAll()
+    }
+
+    // ------------------------------------------------------------ RongDhong library
+
+    /**
+     * RongDhong lists its whole catalogue through its API, already matched to TMDB, so its titles come in
+     * with posters and details straight away (no TMDB lookups). A cheap fingerprint skips unchanged catalogues.
+     */
+    private suspend fun syncRongDhong(srcs: List<Source>, force: Boolean, newItems: AtomicInteger) {
+        for ((kind, type) in listOf("movies" to MediaType.MOVIE, "tv-shows" to MediaType.SERIES)) {
+            val mine = srcs.filter { it.type == type }
+            if (mine.isEmpty()) continue
+            _sync.update { it.copy(currentSource = "RongDhong") }
+            val key = "rd:$kind:" + mine.joinToString(",") { it.id }
+            val fp = net.withPermit { rongDhong.fingerprint(kind) }.hashCode().toLong()
+            val have = mine.any { db.items().countForSource(it.id) > 0 }
+            if (!force && have && db.dirs().all().any { it.url == key && it.modified == fp }) continue
+            val now = System.currentTimeMillis()
+            val byLib = mine.associate { it.id.removePrefix("rd-") to (it to ArrayList<ItemEntity>()) }
+            net.withPermit {
+                rongDhong.all(kind) { page ->
+                    for (o in page) {
+                        val (src, list) = byLib[libraryOf(o)] ?: continue
+                        rdItem(o, kind, src, now)?.let(list::add)
+                    }
+                }
+            }
+            for ((src, list) in byLib.values) {
+                val leaves = list.distinctBy { it.id }
+                val before = db.items().countForSource(src.id)
+                db.items().upsertListing(src.url, leaves)
+                if (leaves.size > before) _sync.update { it.copy(newItems = newItems.addAndGet(leaves.size - before)) }
+            }
+            db.dirs().put(DirCacheEntity(key, fp))
+        }
+    }
+
+    private fun kotlinx.serialization.json.JsonObject.str(k: String): String? =
+        (this[k] as? kotlinx.serialization.json.JsonPrimitive)?.let { if (it is kotlinx.serialization.json.JsonNull) null else it.content }
+
+    private fun libraryOf(o: kotlinx.serialization.json.JsonObject): String? =
+        (o["Library"] as? kotlinx.serialization.json.JsonObject)?.str("id") ?: o.str("library")
+
+    private fun rdItem(o: kotlinx.serialization.json.JsonObject, kind: String, src: Source, now: Long): ItemEntity? {
+        val rid = o.str("id") ?: return null
+        val title = o.str("title")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val isTv = kind == "tv-shows"
+        val path = (if (isTv) o.str("path") else o.str("file_path")).orEmpty().trimEnd('/')
+        val file = path.substringAfterLast('/')
+        val folder = if (isTv) file else path.substringBeforeLast('/', "").substringAfterLast('/')
+        val parsed = NameParser.parseFolder(folder, src.type)
+        val year = o.str("year")?.toIntOrNull()?.takeIf { it in 1880..2100 }
+        val tmdbId = o.str("tmdb_id")?.toIntOrNull()?.takeIf { it > 0 }
+        val poster = o.str("poster_path")?.takeIf { it.startsWith("/") }
+        val genres = o.str("genre")?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
+            ?.takeIf { it.isNotEmpty() }?.joinToString("|", "|", "|")
+        val itemId = rongDhong.itemId(kind, rid)
+        return ItemEntity(
+            id = itemId, type = src.type.name, sourceId = src.id, parentUrl = src.url,
+            rawName = file.ifBlank { title }, title = title, year = year ?: parsed?.year,
+            quality = parsed?.quality, tags = parsed?.tags?.joinToString(",").orEmpty(),
+            uploadedAt = rdUploaded(o, isTv) ?: now, firstSeenAt = now,
+            groupKey = if (tmdbId != null) "${src.type.name}:$tmdbId" else itemId,
+            metaState = if (tmdbId != null) ItemEntity.META_MATCHED else ItemEntity.META_PENDING,
+            tmdbId = tmdbId, tmdbTitle = if (tmdbId != null) title else null,
+            posterPath = poster, backdropPath = o.str("backdrop_path")?.takeIf { it.startsWith("/") },
+            overview = o.str("overview")?.takeIf { it.isNotBlank() }?.take(400),
+            rating = o.str("online_rating")?.toDoubleOrNull()?.takeIf { it > 0 },
+            genres = genres, releaseYear = year,
+            localPoster = if (poster == null) rongDhong.posterUrl(isTv, rid) else null,
+            posterChecked = true,
+        )
+    }
+
+    /**
+     * When it really arrived. RongDhong imported its whole old collection in one go, so "added" alone would
+     * make every old film look brand new: a film counts from its release date unless it was added before it,
+     * and a show from its last update only when it changed after the import (new episodes).
+     */
+    private fun rdUploaded(o: kotlinx.serialization.json.JsonObject, isTv: Boolean): Long? {
+        val created = isoTime(o.str("createdAt"))
+        val updated = isoTime(o.str("updatedAt"))
+        val released = isoTime(o.str("release_date")?.let { if (it.length == 10) it + "T00:00:00" else it })
+        if (isTv && updated != null && created != null && updated - created > 86_400_000L) return updated
+        return listOfNotNull(created, released).minOrNull() ?: updated
+    }
+
+    private fun isoTime(s: String?): Long? {
+        if (s.isNullOrBlank()) return null
+        val f = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+        return runCatching { f.parse(s.take(19))?.time }.getOrNull()
+    }
+
+    private val rdEpisodes = ConcurrentHashMap<String, Pair<Long, List<com.israk.dhakaflix.data.net.RongDhongClient.Episode>>>()
+    private fun rdEpisodesOf(showId: String): List<com.israk.dhakaflix.data.net.RongDhongClient.Episode> {
+        rdEpisodes[showId]?.let { (t, l) -> if (System.currentTimeMillis() - t < 120_000) return l }
+        return rongDhong.episodes(showId).also { rdEpisodes[showId] = System.currentTimeMillis() to it }
+    }
+
+    private fun rdListItem(item: ItemEntity): FolderContent {
+        val rid = rongDhong.idOf(item.id)
+        if (!item.isSeries) {
+            val v = VideoFile(item.rawName, rongDhong.movieStream(rid), 0, null, null, emptyList())
+            return FolderContent(listOf(v), emptyList(), emptyList(), null, null)
+        }
+        val seasons = rdEpisodesOf(rid).map { it.season }.distinct().sorted()
+            .map { SeasonRef(it, "Season $it", rongDhong.seasonRef(item.id, it)) }
+        return FolderContent(emptyList(), seasons, emptyList(), null, null)
+    }
+
+    private fun rdListSeason(season: SeasonRef): List<VideoFile> {
+        val n = rongDhong.seasonOf(season.url) ?: season.number
+        val rid = rongDhong.idOf(season.url.substringBefore('#'))
+        return rdEpisodesOf(rid).filter { it.season == n }.map { e ->
+            val label = "S%02dE%02d".format(e.season, e.episode)
+            VideoFile(e.name?.takeIf { it.isNotBlank() }?.let { "$label · $it" } ?: label,
+                rongDhong.episodeStream(e.id), 0, e.season, e.episode.takeIf { it > 0 }, emptyList())
+        }
     }
 
     private fun isJunkFolder(name: String): Boolean {
@@ -422,6 +554,7 @@ class LibraryRepository(private val app: DhakaFlixApp) {
     // --------------------------------------------------------------- folders
 
     suspend fun listItem(item: ItemEntity): FolderContent = withContext(Dispatchers.IO) {
+        if (Defaults.isRongDhong(item.sourceId)) return@withContext rdListItem(item)
         val entries = h5ai.list(item.id)
         val files = entries.filter { !it.isDir }
         val dirs = entries.filter { it.isDir }
@@ -444,6 +577,7 @@ class LibraryRepository(private val app: DhakaFlixApp) {
     }
 
     suspend fun listSeason(season: SeasonRef): List<VideoFile> = withContext(Dispatchers.IO) {
+        if (rongDhong.owns(season.url)) return@withContext rdListSeason(season)
         val entries = h5ai.list(season.url)
         val files = entries.filter { !it.isDir }
         val subs = files.filter { NameParser.ext(it.name) in NameParser.subExt }.map { it.url }.toMutableList()

@@ -38,6 +38,24 @@ object Defaults {
     private const val S12 = "http://172.16.50.12/DHAKA-FLIX-12/"
     private const val S14 = "http://172.16.50.14/DHAKA-FLIX-14/"
 
+    /** RongDhong libraries (JSON API, not h5ai): one source per library, id "rd-<library id>". */
+    const val RD_ROOT = "http://172.31.255.238/"
+    val rongDhong: List<Source> = listOf(
+        Triple(4, "English Movies", MediaType.MOVIE),
+        Triple(3, "English Movies 1080p", MediaType.MOVIE),
+        Triple(6, "Hindi Movies", MediaType.MOVIE),
+        Triple(10, "South Indian Movies", MediaType.MOVIE),
+        Triple(11, "Hindi Dubbed", MediaType.MOVIE),
+        Triple(8, "Kolkata Bangla Movies", MediaType.MOVIE),
+        Triple(5, "Foreign Language Movies", MediaType.MOVIE),
+        Triple(2, "Animation Movies", MediaType.MOVIE),
+        Triple(1, "3D Movies", MediaType.MOVIE),
+        Triple(7, "IMDb Top-250", MediaType.MOVIE),
+        Triple(9, "Korean TV & Web Series", MediaType.SERIES),
+    ).map { (id, name, type) -> Source("rd-$id", "RongDhong · $name", "${RD_ROOT}api/library/$id", type, enabled = id != 7 && id != 1) }
+
+    fun isRongDhong(id: String) = id.startsWith("rd-")
+
     val sources: List<Source> = listOf(
         Source("eng", "English Movies", "${S7}English%20Movies/", MediaType.MOVIE),
         Source("eng1080", "English Movies 1080p", "${S14}English%20Movies%20%281080p%29/", MediaType.MOVIE),
@@ -52,7 +70,8 @@ object Defaults {
         Source("tvweb", "TV & WEB Series", "${S12}TV-WEB-Series/", MediaType.SERIES),
         Source("korean", "Korean TV & WEB Series", "${S14}KOREAN%20TV%20%26%20WEB%20Series/", MediaType.SERIES),
         Source("cartoon", "Anime & Cartoon Series", "${S10}Anime%20%26%20Cartoon%20TV%20Series/", MediaType.SERIES),
-    )
+    ) + rongDhong
+
 
     val homeRows: List<HomeRow> = listOf(
         HomeRow(RowKeys.CONTINUE),

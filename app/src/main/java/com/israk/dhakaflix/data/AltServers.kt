@@ -37,13 +37,47 @@ object AltServers {
         RongDhong("RongDhong", "http://172.31.255.238/"),
     )
 
-    /** Every other copy of what [p] is, across all extra servers (in parallel, quietly skipping dead ones). */
+    /** Which server a stream URL belongs to. */
+    fun serverOf(url: String): String = if (url.startsWith(Defaults.RD_ROOT)) "RongDhong" else "DhakaFlix"
+
+    /**
+     * Every other copy of what [p] is: other versions of the same title in the library (DhakaFlix or
+     * RongDhong folders), then the extra servers' own search. The copy being played is left out.
+     */
     suspend fun find(meta: ItemEntity?, p: PlayItem): List<Alt> = withContext(Dispatchers.IO) {
+        val lib = runCatching { libraryCopies(meta, p) }.getOrDefault(emptyList())
+        val ext = runCatching { searchServers(meta, p) }.getOrDefault(emptyList())
+        (lib + ext).distinctBy { it.url }.filter { it.url != p.url }
+    }
+
+    private suspend fun libraryCopies(meta: ItemEntity?, p: PlayItem): List<Alt> {
+        meta ?: return emptyList()
+        val app = DhakaFlixApp.instance
+        val repo = app.library
+        val names = app.settings.sources.value.associate { it.id to it.name.removePrefix("RongDhong · ") }
+        val versions = app.db.items().versionsNow(meta.groupKey).filter { it.id != meta.id }.take(6)
+        return versions.mapNotNull { v ->
+            runCatching {
+                val content = repo.listItem(v)
+                val url = if (!v.isSeries || p.season == null) {
+                    (content.videos.maxByOrNull { it.size } ?: content.videos.firstOrNull())?.url
+                } else {
+                    content.videos.firstOrNull { it.season == p.season && it.episode == p.episode }?.url
+                        ?: content.seasons.firstOrNull { it.number == p.season }
+                            ?.let { s -> repo.listSeason(s).firstOrNull { it.episode == p.episode } }?.url
+                } ?: return@runCatching null
+                val label = listOfNotNull(names[v.sourceId], v.quality).joinToString(" · ").ifBlank { qualityLabel(v.rawName) }
+                Alt(serverOf(url), label, url)
+            }.getOrNull()
+        }
+    }
+
+    private suspend fun searchServers(meta: ItemEntity?, p: PlayItem): List<Alt> {
         val title = meta?.displayTitle ?: p.title
         val year = meta?.displayYear
         val tmdb = meta?.tmdbId
         val isEpisode = (meta?.isSeries == true || p.season != null) && p.season != null && p.episode != null
-        coroutineScope {
+        return coroutineScope {
             servers.map { s ->
                 async {
                     runCatching {
