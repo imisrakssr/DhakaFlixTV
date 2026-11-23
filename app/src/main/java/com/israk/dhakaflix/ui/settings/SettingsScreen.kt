@@ -99,6 +99,7 @@ import com.israk.dhakaflix.data.RowKeys
 import com.israk.dhakaflix.data.Source
 import com.israk.dhakaflix.data.tmdb.TmdbClient
 import com.israk.dhakaflix.ui.LocalTopInset
+import com.israk.dhakaflix.ui.components.FocusFrame
 import com.israk.dhakaflix.ui.components.AppIcons
 import com.israk.dhakaflix.ui.components.PillButton
 import com.israk.dhakaflix.ui.components.dpadScrollFallback
@@ -274,7 +275,7 @@ private fun SectionContent(sec: Section) {
     ) {
         when (sec) {
             Section.LIBRARY -> item { LibraryCard() }
-            Section.APPEARANCE -> item { AppearanceCard() }
+            Section.APPEARANCE -> { item { NameCard() }; item { AppearanceCard() } }
             Section.HOME_ROWS -> homeRows(this)
             Section.CATEGORIES -> item { CategoriesCard() }
             Section.ACCOUNTS -> {
@@ -645,6 +646,34 @@ private fun PlayerCard() {
     }
 }
 
+/** The name in the Home greeting. */
+@Composable
+private fun NameCard() {
+    val s = LocalStrings.current
+    val st = DhakaFlixApp.instance.settings
+    val name by st.userName.collectAsState()
+    val bn = com.israk.dhakaflix.ui.components.isDhakaiya()
+    var editing by remember { mutableStateOf(false) }
+    if (editing) RenameDialog(
+        current = name.ifBlank { if (bn) "নাম" else "Name" },
+        onDismiss = { editing = false },
+        onReset = { st.setUserName("Israk"); editing = false },
+    ) { st.setUserName(it); editing = false }
+    Card {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(if (bn) "আপনের নাম" else "Your name", color = Color.White, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    (if (bn) "হোমে দেখাইবো: " else "Shown on Home: ") +
+                        s.greeting.format(if (bn && name == "Israk") "ইশরাক" else name).let { if (name.isBlank()) s.greeting.replace(", %s", "") else it },
+                    color = TextDim, style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            PillButton(if (bn) "বদলান" else "Edit", icon = Icons.Filled.Edit, compact = true, onClick = { editing = true })
+        }
+    }
+}
+
 @Composable
 private fun AboutCard() {
     val s = LocalStrings.current
@@ -656,11 +685,19 @@ private fun AboutCard() {
             Spacer(Modifier.height(6.dp))
             Text("DhakaFlix TV · ${s.version} ${BuildConfig.VERSION_NAME}", color = TextDim, style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(18.dp))
-            Text("Made ❤️ by Israk Sisir", color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("Streams from the DhakaFlix servers.", color = Color.White, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(4.dp))
+            Text("For more contact Israk", color = TextDim, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(14.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                ContactRow(badge = "f", badgeColor = Color(0xFF1877F2), text = "fb.com/imisrakssr", url = "https://fb.com/imisrakssr")
+                ContactRow(badge = "GH", badgeColor = Color(0xFF24292F), text = "github.com/imisrakssr", url = "https://github.com/imisrakssr")
+                ContactRow(badge = "@", badgeColor = Color(0xFFEA4335), text = "israksisir@gmail.com", url = "mailto:israksisir@gmail.com")
+            }
             Spacer(Modifier.height(18.dp))
             Text(
-                "Streams from DhakaFlix servers (172.16.50.x).\nThis product uses the TMDB API but is not endorsed or certified by TMDB.",
-                color = TextDim, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center,
+                "This product uses the TMDB API but is not endorsed or certified by TMDB.",
+                color = TextDim.copy(alpha = .7f), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center,
             )
         }
     }
@@ -1111,6 +1148,33 @@ private fun DiagSection(title: String, rows: List<Triple<String, String, Boolean
                 Text(k, Modifier.width(210.dp), color = TextDim, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
                 Text(v, color = Color.White, style = MaterialTheme.typography.bodyMedium)
             }
+        }
+    }
+}
+
+
+/** A contact line in About me: small coloured badge, the address, opens it when picked. */
+@Composable
+private fun ContactRow(badge: String, badgeColor: Color, text: String, url: String) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    FocusFrame(
+        onClick = {
+            runCatching {
+                ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+        },
+        focusedScale = 1.03f, shape = RoundedCornerShape(50),
+    ) { focused ->
+        Row(
+            Modifier.background(if (focused) Color.White.copy(alpha = .14f) else Color.White.copy(alpha = .06f)).padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.size(26.dp).clip(CircleShape).background(badgeColor), contentAlignment = Alignment.Center) {
+                Text(badge, color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.width(10.dp))
+            Text(text, color = Color.White, style = MaterialTheme.typography.bodyLarge)
         }
     }
 }

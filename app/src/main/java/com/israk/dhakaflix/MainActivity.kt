@@ -57,7 +57,7 @@ class MainActivity : ComponentActivity() {
         }
 
         val tv = isTvDevice(this)
-        if (!tv) hideStatusBar()
+        if (!tv) transparentStatusBar()
         // Compose paints the whole screen itself: drop the window background (one less full-screen fill per frame)
         window.decorView.post { window.setBackgroundDrawable(null) }
         setContent {
@@ -119,18 +119,15 @@ class MainActivity : ComponentActivity() {
         return super.dispatchTouchEvent(ev)
     }
 
-    /** Phone: full-screen look without the status bar (swipe down to peek at it). */
-    private fun hideStatusBar() {
+    /** Phone: the status bar stays visible but transparent; the app draws underneath it. */
+    @Suppress("DEPRECATION")
+    private fun transparentStatusBar() {
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
         androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).apply {
-            hide(androidx.core.view.WindowInsetsCompat.Type.statusBars())
-            systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            show(androidx.core.view.WindowInsetsCompat.Type.statusBars())
+            isAppearanceLightStatusBars = false // white icons on our dark pages
         }
-    }
-
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        if (hasFocus && !isTvDevice(this)) hideStatusBar()
     }
 
     companion object {

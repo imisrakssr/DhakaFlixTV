@@ -1,5 +1,6 @@
 package com.israk.dhakaflix.ui.detail
 
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -368,7 +369,7 @@ fun DetailScreen(id: String, onOpen: (String) -> Unit, autoPlay: Boolean = false
         // phone only: Back button fixed in the top-left corner (TV uses the remote's BACK, as in v1.0.21)
         if (!isTv) PillButton(
             s.back, icon = Icons.AutoMirrored.Filled.ArrowBack, compact = true, onClick = onBack,
-            modifier = Modifier.align(Alignment.TopStart).padding(start = 20.dp, top = 36.dp)
+            modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(start = 20.dp, top = 8.dp)
                 .clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = .55f)),
         )
     }

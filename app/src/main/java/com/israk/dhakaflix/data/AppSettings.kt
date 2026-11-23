@@ -32,6 +32,11 @@ class AppSettings(ctx: Context) {
     val uiSize: StateFlow<Int> = _uiSize
     fun setUiSize(v: Int) { _uiSize.value = v; prefs.edit().putInt("ui_size", v).apply() }
 
+    /** Name in the Home greeting ("What's the mood today, Israk?"). Blank = no name. */
+    private val _userName = MutableStateFlow(prefs.getString("user_name", "Israk") ?: "Israk")
+    val userName: StateFlow<String> = _userName
+    fun setUserName(v: String) { _userName.value = v.trim(); prefs.edit().putString("user_name", v.trim()).apply() }
+
     /** Audio delay in ms (positive = sound later). Device-wide, so it's remembered. */
     private val _audioDelay = MutableStateFlow(prefs.getLong("audio_delay", DEFAULT_AUDIO_DELAY))
     val audioDelay: StateFlow<Long> = _audioDelay

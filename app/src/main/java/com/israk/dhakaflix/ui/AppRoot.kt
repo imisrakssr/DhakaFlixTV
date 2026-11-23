@@ -17,6 +17,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.Arrangement
@@ -328,10 +330,14 @@ private fun MainScaffold(tab: Tab, currentTab: () -> Tab, onTab: (Tab) -> Unit, 
     } else {
         val s = LocalStrings.current
         val accent = LocalAccent.current
-        // phone: content runs full screen behind a floating glass tab bar
+        // phone: content runs full screen under a transparent status bar, a small header (not on Home)
+        // and a floating glass tab bar
+        val statusTop = androidx.compose.foundation.layout.WindowInsets.statusBars
+            .asPaddingValues().calculateTopPadding()
         Box(Modifier.fillMaxSize().background(Bg)) {
-            // same breathing room above every page title (Home's banner ignores it and runs to the top)
-            CompositionLocalProvider(LocalTopInset provides 56.dp, LocalBottomInset provides 96.dp) { content() }
+            // page titles start below the status bar and the header (Home's banner ignores it and runs to the top)
+            CompositionLocalProvider(LocalTopInset provides statusTop + 64.dp, LocalBottomInset provides 96.dp) { content() }
+            if (tab != Tab.HOME) PhoneHeader(Modifier.align(Alignment.TopCenter), statusTop)
             PhoneTabBar(
                 tab = tab, onTab = onTab, labels = { it.label(s) },
                 modifier = Modifier.align(Alignment.BottomCenter)
@@ -339,6 +345,26 @@ private fun MainScaffold(tab: Tab, currentTab: () -> Tab, onTab: (Tab) -> Unit, 
                     .padding(start = 14.dp, end = 14.dp, bottom = 12.dp),
             )
         }
+    }
+}
+
+/** Phone header: app logo on the left, Simkl profile picture on the right (like the TV top bar). */
+@Composable
+private fun PhoneHeader(modifier: Modifier, statusTop: androidx.compose.ui.unit.Dp) {
+    val (brandMark, brandWord) = rememberBrandLogos()
+    Box(
+        modifier.fillMaxWidth()
+            .background(Brush.verticalGradient(listOf(Bg, Bg.copy(alpha = .92f), Color.Transparent)))
+            .padding(top = statusTop)
+            .height(56.dp)
+            .padding(horizontal = LocalEdge.current),
+    ) {
+        Row(Modifier.align(Alignment.CenterStart), verticalAlignment = Alignment.CenterVertically) {
+            Image(painterResource(brandMark), null, Modifier.size(26.dp))
+            Spacer(Modifier.width(8.dp))
+            Image(painterResource(brandWord), "DhakaFlix", Modifier.height(16.dp))
+        }
+        Box(Modifier.align(Alignment.CenterEnd)) { SimklAvatar() }
     }
 }
 

@@ -386,7 +386,14 @@ private fun FeaturedBanner(
             ) { cur ->
                 Column(Modifier.widthIn(max = 600.dp)) {
                     if (cur == null) {
-                        Text(s.greeting, style = MaterialTheme.typography.headlineLarge, color = Color.White)
+                        val who by app.settings.userName.collectAsState()
+                        val lang by app.settings.language.collectAsState()
+                        // the default name is written in Bengali for Dhakaiya
+                        val name = if (lang == "dhk" && who == "Israk") "ইশরাক" else who
+                        Text(
+                            if (name.isBlank()) s.greeting.replace(", %s", "") else s.greeting.format(name),
+                            style = MaterialTheme.typography.headlineLarge, color = Color.White,
+                        )
                         Spacer(Modifier.height(16.dp))
                         return@Column
                     }
