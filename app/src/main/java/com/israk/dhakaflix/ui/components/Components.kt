@@ -124,6 +124,21 @@ fun FocusFrame(
     onLongClick: (() -> Unit)? = null,
     content: @Composable BoxScope.(focused: Boolean) -> Unit,
 ) {
+    if (!LocalIsTv.current) {
+        // phone: touch never focuses a card, so skip the focus animations, rim and layer.
+        // Every card that scrolls into view is then much cheaper to build -> smoother scrolling.
+        Box(
+            modifier
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                .dragCancelsClick()
+                .clip(shape)
+                .then(
+                    if (onLongClick == null) Modifier.clickable(onClick = onClick)
+                    else Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                ),
+        ) { content(false) }
+        return
+    }
     var focused by remember { mutableStateOf(false) }
     var longFired by remember { mutableStateOf(false) }
     // short tween (no spring overshoot) keeps fast D-pad scrolling calm
@@ -160,8 +175,6 @@ fun FocusFrame(
                     else -> false
                 }
             })
-            // phone: a sideways drag that starts on a card must not count as a tap
-            .then(if (LocalIsTv.current) Modifier else Modifier.dragCancelsClick())
             .border(2.5.dp, rim, shape)
             .clip(shape)
             .then(
