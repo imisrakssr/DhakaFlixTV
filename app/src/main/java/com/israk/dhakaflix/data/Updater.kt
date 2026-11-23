@@ -80,8 +80,8 @@ object Updater {
                 }
                 val o = json.parseToJsonElement(body) as JsonObject
                 val tag = o["tag_name"]?.jsonPrimitive?.contentOrNull ?: throw java.io.IOException("No release found")
-                val code = tag.substringAfterLast('.').toIntOrNull() ?: 0
-                if (code <= BuildConfig.VERSION_CODE) return@runCatching State.UpToDate
+                val code = 0
+                if (compareVersions(tag.removePrefix("v"), BuildConfig.VERSION_NAME) <= 0) return@runCatching State.UpToDate
                 val suffix = abiSuffix(app)
                 val asset = (o["assets"] as? JsonArray)?.mapNotNull { it as? JsonObject }
                     ?.firstOrNull { it["name"]?.jsonPrimitive?.contentOrNull?.endsWith(suffix) == true }
@@ -103,6 +103,17 @@ object Updater {
             // a silent check only changes what's shown when it found something
             if (!quiet || result is State.Available) _state.value = result
         }
+    }
+
+    /** "2.0.3" vs "1.0.41" → positive when [a] is newer. */
+    private fun compareVersions(a: String, b: String): Int {
+        val x = a.split('.').map { it.toIntOrNull() ?: 0 }
+        val y = b.split('.').map { it.toIntOrNull() ?: 0 }
+        for (i in 0 until maxOf(x.size, y.size)) {
+            val d = (x.getOrNull(i) ?: 0) - (y.getOrNull(i) ?: 0)
+            if (d != 0) return d
+        }
+        return 0
     }
 
     /** The release body minus the "which APK" lines (the app picks the right one by itself). */

@@ -13,6 +13,8 @@ val tmdbKey: String = (project.findProperty("TMDB_API_KEY") as String?)
 val simklId: String = (project.findProperty("SIMKL_CLIENT_ID") as String?)
     ?: System.getenv("SIMKL_CLIENT_ID") ?: ""
 val ciRun: Int = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toIntOrNull() ?: 1
+// Version 2 started at CI run 42 (= v2.0.0); versionCode keeps the run number so updates always go up
+val appVersion: String = "2.0.${(ciRun - 42).coerceAtLeast(0)}"
 
 android {
     namespace = "com.israk.dhakaflix"
@@ -23,7 +25,7 @@ android {
         minSdk = 23
         targetSdk = 35
         versionCode = ciRun
-        versionName = "2.0.$ciRun"
+        versionName = appVersion
         buildConfigField("String", "TMDB_API_KEY", "\"$tmdbKey\"")
         buildConfigField("String", "SIMKL_CLIENT_ID", "\"$simklId\"")
     }
