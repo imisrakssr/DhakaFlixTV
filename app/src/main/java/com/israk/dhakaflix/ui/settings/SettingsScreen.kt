@@ -471,7 +471,9 @@ private fun HomeRowsEditor() {
     }
     val allRows = remember(rows, sources) {
         val keys = rows.map { it.key }.toSet()
-        rows + sources.filter { it.enabled && !com.israk.dhakaflix.data.Defaults.isOtherServer(it.id) && RowKeys.source(it.id) !in keys }.map { HomeRow(RowKeys.source(it.id), false) }
+        // category rows (Hollywood, Bollywood, K-Drama …) can be added to Home
+        rows + com.israk.dhakaflix.data.Categories.available(null, sources)
+            .filter { RowKeys.category(it.key) !in keys }.map { HomeRow(RowKeys.category(it.key), false) }
     }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         allRows.forEachIndexed { i, row ->

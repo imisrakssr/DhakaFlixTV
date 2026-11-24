@@ -119,6 +119,8 @@ fun defaultRowTitle(key: String, s: Strings, sources: List<Source>): String = wh
     key == RowKeys.BECAUSE -> s.becauseYouWatched.format("…")
     key.startsWith("genre:") -> key.removePrefix("genre:")
     key.startsWith("src:") -> s.latestIn.format(sources.firstOrNull { it.id == key.removePrefix("src:") }?.name ?: "")
+    key.startsWith("cat:") -> com.israk.dhakaflix.data.Categories.find(key.removePrefix("cat:"), sources)
+        ?.label(s === com.israk.dhakaflix.ui.theme.Dhakaiya) ?: key.removePrefix("cat:")
     else -> key
 }
 

@@ -128,6 +128,48 @@ object Defaults {
     )
 }
 
+/**
+ * Streaming-style categories (Hollywood, Bollywood, K-Drama …) instead of server folder names. Each one
+ * gathers the matching folders of every server; a title is in a category when any of its copies is.
+ */
+data class Category(val key: String, val en: String, val dhk: String, val type: MediaType, val sources: Set<String>) {
+    fun label(dhakaiya: Boolean) = if (dhakaiya) dhk else en
+}
+
+object Categories {
+    val all: List<Category> = listOf(
+        Category("hollywood", "Hollywood", "হলিউড", MediaType.MOVIE,
+            setOf("eng", "eng1080", "imdb250", "rd-4", "rd-3", "rd-7", "bk-eng", "bk-imdb")),
+        Category("bollywood", "Bollywood", "বলিউড", MediaType.MOVIE, setOf("hindi", "rd-6", "bk-hindi")),
+        Category("south", "South Indian", "সাউথ ইন্ডিয়ান", MediaType.MOVIE, setOf("south", "rd-10", "bk-south", "bk-malayalam")),
+        Category("dubbed", "Hindi Dubbed", "হিন্দি ডাবড", MediaType.MOVIE, setOf("southdub", "rd-11")),
+        Category("bangla", "Bangla", "বাংলা", MediaType.MOVIE, setOf("kolkata", "rd-8", "bk-kolkata", "bk-bndub")),
+        Category("world", "World Cinema", "দুনিয়ার সিনেমা", MediaType.MOVIE, setOf("foreign", "rd-5", "bk-foreign")),
+        Category("animation", "Animation", "অ্যানিমেশন", MediaType.MOVIE, setOf("anim", "anim1080", "rd-2", "bk-anim")),
+        Category("english_tv", "English Series", "ইংলিশ সিরিজ", MediaType.SERIES, setOf("tvweb", "bk-engtv", "bk-othertv")),
+        Category("indian_tv", "Indian Web Series", "ইন্ডিয়ান ওয়েব সিরিজ", MediaType.SERIES, setOf("bk-hinditv")),
+        Category("bangla_tv", "Bangla Web Series", "বাংলা ওয়েব সিরিজ", MediaType.SERIES, setOf("bk-bntv")),
+        Category("kdrama", "K-Drama", "কে-ড্রামা", MediaType.SERIES, setOf("korean", "rd-9")),
+        Category("anime", "Anime & Cartoons", "অ্যানিমে আর কার্টুন", MediaType.SERIES, setOf("cartoon", "bk-animtv")),
+    )
+
+    /**
+     * Categories offered for [type] (null = both): the built-in ones that have an enabled source, plus one
+     * per enabled source of your own that isn't in any of them (named after the source).
+     */
+    fun available(type: MediaType?, sources: List<Source>): List<Category> {
+        val on = sources.filter { it.enabled && (type == null || it.type == type) }
+        val ids = on.map { it.id }.toSet()
+        val built = all.filter { (type == null || it.type == type) && it.sources.any { s -> s in ids } }
+        val covered = all.flatMap { it.sources }.toSet()
+        val own = on.filter { it.id !in covered && it.id != "rd-1" }.map { Category("src:${it.id}", it.name, it.name, it.type, setOf(it.id)) }
+        return built + own
+    }
+
+    fun find(key: String?, sources: List<Source>): Category? =
+        key?.let { k -> all.firstOrNull { it.key == k } ?: sources.firstOrNull { "src:${it.id}" == k }?.let { Category(k, it.name, it.name, it.type, setOf(it.id)) } }
+}
+
 object RowKeys {
     const val CONTINUE = "continue"
     const val LATEST = "latest"
@@ -140,6 +182,7 @@ object RowKeys {
     const val BECAUSE = "because"
     fun genre(name: String) = "genre:$name"
     fun source(id: String) = "src:$id"
+    fun category(key: String) = "cat:$key"
 }
 
 val ALL_GENRES = listOf(

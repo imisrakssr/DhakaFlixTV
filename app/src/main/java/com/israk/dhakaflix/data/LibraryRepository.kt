@@ -77,6 +77,8 @@ data class BrowseFilter(
     val query: String = "",
     val genre: String? = null,
     val sourceId: String? = null,
+    /** Category's sources: a title shows when any of its copies is in one of them. */
+    val categorySources: List<String> = emptyList(),
     val year: Int? = null,
     val sort: SortMode = SortMode.LATEST,
 )
@@ -851,6 +853,8 @@ class LibraryRepository(private val app: DhakaFlixApp) {
             key == RowKeys.BECAUSE -> discovery.because.map { it?.items ?: emptyList() }
             key.startsWith("genre:") -> dao.byGenre(key.removePrefix("genre:"), ROW_LIMIT)
             key.startsWith("src:") -> dao.latestInSource(key.removePrefix("src:"), ROW_LIMIT)
+            key.startsWith("cat:") -> Categories.find(key.removePrefix("cat:"), settings.sources.value)
+                ?.let { dao.latestInCategory(it.sources.toList(), ROW_LIMIT) } ?: flowOf(emptyList())
             else -> flowOf(emptyList())
         }
     }
@@ -865,6 +869,10 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         }
         f.genre?.let { where += "genres LIKE ?"; args += "%|$it|%" }
         f.sourceId?.let { where += "sourceId = ?"; args += it }
+        if (f.categorySources.isNotEmpty()) {
+            where += "groupKey IN (SELECT groupKey FROM items WHERE sourceId IN (${f.categorySources.joinToString(",") { "?" }}))"
+            args += f.categorySources
+        }
         f.year?.let { where += "COALESCE(year, releaseYear) = ?"; args += it }
         val order = when (f.sort) {
             SortMode.LATEST -> "uploadedAt DESC"

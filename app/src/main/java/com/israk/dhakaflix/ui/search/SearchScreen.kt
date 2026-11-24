@@ -92,16 +92,22 @@ fun SearchScreen(onOpen: (String) -> Unit) {
     var type by rememberSaveable { mutableStateOf<MediaType?>(null) }
     var year by rememberSaveable { mutableStateOf<Int?>(null) }
     var sort by rememberSaveable { mutableStateOf(SortMode.LATEST) }
+    var cat by rememberSaveable { mutableStateOf<String?>(null) }
+    var genre by rememberSaveable { mutableStateOf<String?>(null) }
+    val allSources by app.settings.sources.collectAsState()
+    val dhk = com.israk.dhakaflix.ui.components.isDhakaiya()
+    val categories = remember(allSources, type) { com.israk.dhakaflix.data.Categories.available(type, allSources) }
+    val catSources = remember(cat, categories) { categories.firstOrNull { it.key == cat }?.sources?.sorted().orEmpty() }
     val years by remember { app.db.items().years() }.collectAsState(initial = emptyList())
 
-    val filter = BrowseFilter(type = type, query = debounced, year = year, sort = sort)
+    val filter = BrowseFilter(type = type, query = debounced, year = year, sort = sort, genre = genre, categorySources = catSources)
     val items = rememberBrowsePager(filter).collectAsLazyPagingItems()
 
     // with an empty search box the page shows only titles you opened from search before
     val recentIds by app.settings.recentSearch.collectAsState()
     val recentItems by remember(recentIds) { app.db.items().observeMany(recentIds) }.collectAsState(initial = emptyList())
     val recent = remember(recentItems, recentIds) { val m = recentItems.associateBy { it.id }; recentIds.mapNotNull { m[it] } }
-    val showRecent = debounced.isBlank() && type == null && year == null
+    val showRecent = debounced.isBlank() && type == null && year == null && cat == null && genre == null
     val openTracked: (String) -> Unit = { id -> app.settings.addRecentSearch(id); onOpen(id) }
 
     PosterGrid(
@@ -179,13 +185,17 @@ fun SearchScreen(onOpen: (String) -> Unit) {
                 }
                 FilterBar(
                     listOf(
-                        FilterSpec(s.category, listOf<Pair<String?, String>>(null to s.all, MediaType.MOVIE.name to s.movies, MediaType.SERIES.name to s.series), type?.name) {
+                        FilterSpec(if (dhk) "ধরন" else "Type", listOf<Pair<String?, String>>(null to s.all, MediaType.MOVIE.name to s.movies, MediaType.SERIES.name to s.series), type?.name) {
                             type = it?.let { v -> MediaType.valueOf(v) }
+                            // a category of the other kind no longer fits
+                            if (cat != null && com.israk.dhakaflix.data.Categories.available(type, allSources).none { c -> c.key == cat }) cat = null
                         },
+                        FilterSpec(s.category, listOf<Pair<String?, String>>(null to s.allCategories) + categories.map { it.key to it.label(dhk) }, cat) { cat = it },
+                        FilterSpec(s.genre, listOf<Pair<String?, String>>(null to s.allGenres) + com.israk.dhakaflix.data.ALL_GENRES.map { it to it }, genre) { genre = it },
                         FilterSpec(s.year, listOf<Pair<String?, String>>(null to s.anyYear) + years.map { it.toString() to it.toString() }, year?.toString()) { year = it?.toInt() },
                         FilterSpec(s.sort, SortMode.entries.map { it.name to sortLabel(it, s) }, sort.name, highlight = false) { sort = SortMode.valueOf(it!!) },
                     ),
-                    onClear = if (type != null || year != null) ({ type = null; year = null }) else null,
+                    onClear = if (type != null || year != null || cat != null || genre != null) ({ type = null; year = null; cat = null; genre = null }) else null,
                 )
             }
         }

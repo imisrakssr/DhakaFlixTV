@@ -168,6 +168,12 @@ abstract class ItemDao {
     @Query("SELECT * FROM items WHERE isPrimary = 1 AND sourceId = :sourceId ORDER BY uploadedAt DESC LIMIT :limit")
     abstract fun latestInSource(sourceId: String, limit: Int): Flow<List<ItemEntity>>
 
+    @Query(
+        "SELECT * FROM items WHERE isPrimary = 1 AND groupKey IN (SELECT groupKey FROM items WHERE sourceId IN (:sourceIds)) " +
+            "ORDER BY uploadedAt DESC LIMIT :limit"
+    )
+    abstract fun latestInCategory(sourceIds: List<String>, limit: Int): Flow<List<ItemEntity>>
+
     @Query("SELECT * FROM items WHERE isPrimary = 1 AND voteCount >= 300 ORDER BY rating DESC LIMIT :limit")
     abstract fun topRated(limit: Int): Flow<List<ItemEntity>>
 

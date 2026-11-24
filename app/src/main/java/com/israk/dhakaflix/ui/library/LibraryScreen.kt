@@ -96,8 +96,9 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
     val wShown = remember(watched, wType, wSort) { watched.filtered(wType, wSort) }
 
     val recentlyAdded = if (com.israk.dhakaflix.ui.components.isDhakaiya()) "নতুন যোগ হইসে" else "Recently added"
+    val typeLabel = if (com.israk.dhakaflix.ui.components.isDhakaiya()) "ধরন" else "Type"
     fun specs(type: String?, sort: SortMode, onType: (String?) -> Unit, onSort: (SortMode) -> Unit) = listOf(
-        FilterSpec(s.category, listOf<Pair<String?, String>>(null to s.all, "MOVIE" to s.movies, "SERIES" to s.series), type) { onType(it) },
+        FilterSpec(typeLabel, listOf<Pair<String?, String>>(null to s.all, "MOVIE" to s.movies, "SERIES" to s.series), type) { onType(it) },
         // in the library "latest" means most recently added to the list, not latest upload
         FilterSpec(s.sort, SortMode.entries.map { it.name to if (it == SortMode.LATEST) recentlyAdded else sortLabel(it, s) }, sort.name, highlight = false) { onSort(SortMode.valueOf(it!!)) },
     )

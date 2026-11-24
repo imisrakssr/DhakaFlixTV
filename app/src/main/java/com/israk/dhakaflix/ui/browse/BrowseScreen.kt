@@ -117,21 +117,24 @@ fun BrowseScreen(type: MediaType, onOpen: (String) -> Unit) {
     val app = DhakaFlixApp.instance
     val s = LocalStrings.current
     val allSources by app.settings.sources.collectAsState()
-    val sources = remember(allSources, type) { allSources.filter { it.type == type && it.enabled && !com.israk.dhakaflix.data.Defaults.isOtherServer(it.id) } }
+    // streaming-style categories (Hollywood, Bollywood, K-Drama …) across every server
+    val categories = remember(allSources, type) { com.israk.dhakaflix.data.Categories.available(type, allSources) }
+    val dhk = com.israk.dhakaflix.ui.components.isDhakaiya()
     // only years this tab actually has (Movies or Series)
     val years by remember(type) { app.db.items().yearsFor(type.name) }.collectAsState(initial = emptyList())
 
     var sort by rememberSaveable { mutableStateOf(SortMode.LATEST) }
     var genre by rememberSaveable { mutableStateOf<String?>(null) }
-    var sourceId by rememberSaveable { mutableStateOf<String?>(null) }
+    var sourceId by rememberSaveable { mutableStateOf<String?>(null) } // category key
     var year by rememberSaveable { mutableStateOf<Int?>(null) }
 
-    val filter = BrowseFilter(type = type, genre = genre, sourceId = sourceId, year = year, sort = sort)
+    val catSources = remember(sourceId, categories) { categories.firstOrNull { it.key == sourceId }?.sources?.sorted().orEmpty() }
+    val filter = BrowseFilter(type = type, genre = genre, categorySources = catSources, year = year, sort = sort)
     val items = rememberBrowsePager(filter).collectAsLazyPagingItems()
 
     val specs = buildList {
         add(FilterSpec(s.sort, SortMode.entries.map { it.name to sortLabel(it, s) }, sort.name, highlight = false) { sort = SortMode.valueOf(it!!) })
-        if (sources.size > 1) add(FilterSpec(s.category, listOf<Pair<String?, String>>(null to s.allCategories) + sources.map { it.id to it.name }, sourceId) { sourceId = it })
+        if (categories.size > 1) add(FilterSpec(s.category, listOf<Pair<String?, String>>(null to s.allCategories) + categories.map { it.key to it.label(dhk) }, sourceId) { sourceId = it })
         add(FilterSpec(s.genre, listOf<Pair<String?, String>>(null to s.allGenres) + ALL_GENRES.map { it to it }, genre) { genre = it })
         add(FilterSpec(s.year, listOf<Pair<String?, String>>(null to s.anyYear) + years.map { it.toString() to it.toString() }, year?.toString()) { year = it?.toInt() })
     }
