@@ -37,7 +37,7 @@ jobs:
       - name: App version (v2.0.0 at run 42, then +1 per build)
         run: echo "APP_VERSION=2.0.$(( ${{ github.run_number }} - 42 ))" >> "$GITHUB_ENV"
 
-      - name: Which devices (commit trailers "Target: phone" / "Target: tv"; anything else = both)
+      - name: Which devices to build for (commit trailer Target phone or tv, otherwise both)
         run: |
           prev=$(git describe --tags --abbrev=0 2>/dev/null || true)
           range=${prev:+$prev..}HEAD
