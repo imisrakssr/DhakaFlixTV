@@ -191,13 +191,13 @@ object Categories {
         val parts = mutableListOf<String>()
         val args = mutableListOf<Any>()
         fun inList(col: String, vals: Collection<String>) = "$col IN (" + vals.joinToString(",") { "?" } + ")"
-        if (c.sources.isNotEmpty()) { parts += inList("sourceId", c.sources); args += c.sources }
-        if (c.langs.isNotEmpty()) { parts += inList("lang", c.langs); args += c.langs }
-        if (c.loose.isNotEmpty()) { parts += "(" + inList("sourceId", c.loose) + " AND (lang IS NULL OR lang = ''))"; args += c.loose }
+        if (c.sources.isNotEmpty()) { parts += inList("sourceId", c.sources); args.addAll(c.sources) }
+        if (c.langs.isNotEmpty()) { parts += inList("lang", c.langs); args.addAll(c.langs) }
+        if (c.loose.isNotEmpty()) { parts += "(" + inList("sourceId", c.loose) + " AND (lang IS NULL OR lang = ''))"; args.addAll(c.loose) }
         if (c.otherLangs) {
             val claimed = all.filter { it.type == c.type }.flatMap { it.langs }.toSet()
             parts += "(lang IS NOT NULL AND lang != '' AND " + inList("lang", claimed).replace(" IN (", " NOT IN (") + ")"
-            args += claimed
+            args.addAll(claimed)
         }
         if (parts.isEmpty()) return "0" to emptyList()
         return "(" + parts.joinToString(" OR ") + ")" to args

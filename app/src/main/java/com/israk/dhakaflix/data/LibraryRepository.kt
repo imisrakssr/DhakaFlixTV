@@ -898,7 +898,7 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         f.sourceId?.let { where += "sourceId = ?"; args += it }
         Categories.find(f.category, settings.sources.value)?.let { c ->
             val (cond, a) = Categories.groupCondition(c)
-            where += cond; args += a
+            where += cond; args.addAll(a)
         }
         f.year?.let { where += "COALESCE(year, releaseYear) = ?"; args += it }
         val order = when (f.sort) {
