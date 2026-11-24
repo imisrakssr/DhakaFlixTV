@@ -72,7 +72,8 @@ object Updater {
         if (!quiet) _state.value = State.Checking
         app.appScope.launch(Dispatchers.IO) {
             val result = runCatching {
-                val req = Request.Builder().url(LATEST)
+                // a build can be for phones only or TV only, so take the newest release that has this device's APK
+                val req = Request.Builder().url(LATEST.substringBeforeLast("/latest") + "?per_page=15")
                     .header("Accept", "application/vnd.github+json")
                     .header("User-Agent", "DhakaFlixTV/${BuildConfig.VERSION_NAME}")
                     .build()
@@ -80,18 +81,25 @@ object Updater {
                     if (!r.isSuccessful) throw java.io.IOException("GitHub HTTP ${r.code}")
                     r.body?.string().orEmpty()
                 }
-                val o = json.parseToJsonElement(body) as JsonObject
+                val suffix = abiSuffix(app)
+                fun assetOf(o: JsonObject) = (o["assets"] as? JsonArray)?.mapNotNull { it as? JsonObject }
+                    ?.firstOrNull { it["name"]?.jsonPrimitive?.contentOrNull?.endsWith(suffix) == true }
+                val releases = (json.parseToJsonElement(body) as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+                    .filter { it["draft"]?.jsonPrimitive?.contentOrNull != "true" && it["prerelease"]?.jsonPrimitive?.contentOrNull != "true" }
+                val o = releases.firstOrNull { assetOf(it) != null } ?: throw java.io.IOException("No release found")
                 val tag = o["tag_name"]?.jsonPrimitive?.contentOrNull ?: throw java.io.IOException("No release found")
                 val code = 0
                 if (compareVersions(tag.removePrefix("v"), BuildConfig.VERSION_NAME) <= 0) return@runCatching State.UpToDate
-                val suffix = abiSuffix(app)
-                val asset = (o["assets"] as? JsonArray)?.mapNotNull { it as? JsonObject }
-                    ?.firstOrNull { it["name"]?.jsonPrimitive?.contentOrNull?.endsWith(suffix) == true }
-                    ?: throw java.io.IOException("No ${suffix.removePrefix("-").removeSuffix(".apk")} APK in $tag")
+                val asset = assetOf(o)!!
+                // notes: everything for this device since the installed version (skipped other-device releases too)
+                val notes = releases.takeWhile { r ->
+                    compareVersions(r["tag_name"]?.jsonPrimitive?.contentOrNull.orEmpty().removePrefix("v"), BuildConfig.VERSION_NAME) > 0
+                }.filter { assetOf(it) != null }
+                    .joinToString("\n") { cleanNotes(it["body"]?.jsonPrimitive?.contentOrNull.orEmpty()) }
                 State.Available(
                     Release(
                         version = tag.removePrefix("v"), code = code,
-                        notes = cleanNotes(o["body"]?.jsonPrimitive?.contentOrNull.orEmpty()),
+                        notes = notes,
                         apkUrl = asset["browser_download_url"]?.jsonPrimitive?.contentOrNull ?: throw java.io.IOException("No download link"),
                         size = asset["size"]?.jsonPrimitive?.longOrNull ?: 0L,
                     )
