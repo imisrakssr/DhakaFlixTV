@@ -400,6 +400,15 @@ private fun AppearanceCard() {
             }
         }
         AppIconPicker()
+        if (!isTv) {
+            val glassLevel by st.glassLevel.collectAsState()
+            Label(s.glassLook)
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                s.glassLevels.forEachIndexed { i, name ->
+                    PillButton(name, onClick = { st.setGlassLevel(i) }, selected = glassLevel == i, compact = true)
+                }
+            }
+        }
         val saver by st.screensaver.collectAsState()
         Label(s.screensaver)
         androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

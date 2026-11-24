@@ -39,7 +39,7 @@ data class Strings(
     val recentSearches: String, val searchEmptyHint: String, val defaultSync: String, val resetDefault: String,
     val subtitleSize: String, val subtitleColor: String,
     val newEpisodes: String, val newBadge: String, val top10: String, val becauseYouWatched: String, val skipIntro: String, val autoSkipIntro: String, val skipIntroHint: String, val trailer: String, val bgTrailers: String, val screensaver: String, val sleepTimer: String, val endOfEpisode: String, val nightMode: String, val nightModeHint: String, val sleepIn: String, val sleepDone: String, val speakToSearch: String, val minutesShort: String, val extras: String,
-    val accounts: String, val diagnostics: String, val phoneSetup: String, val phoneSetupHint: String, val orOpen: String, val mdblistHint: String, val simklHint: String, val simklNeedsClient: String, val signIn: String, val signOut: String, val syncNow: String, val signedInAs: String, val scanToSignIn: String, val waitingApproval: String, val lastSynced: String, val postersPerRow: String, val auto: String, val appIcon: String, val appIconNote: String, val controlsHide: String, val pauseInfo: String, val youAreWatching: String, val paused: String, val runAgain: String, val clearCache: String, val device: String, val network: String, val servers: String, val decoders: String, val recentErrors: String, val noErrors: String, val backupHint: String, val ratings: String,
+    val accounts: String, val diagnostics: String, val phoneSetup: String, val phoneSetupHint: String, val orOpen: String, val mdblistHint: String, val simklHint: String, val simklNeedsClient: String, val signIn: String, val signOut: String, val syncNow: String, val signedInAs: String, val scanToSignIn: String, val waitingApproval: String, val lastSynced: String, val postersPerRow: String, val auto: String, val appIcon: String, val appIconNote: String, val controlsHide: String, val pauseInfo: String, val youAreWatching: String, val paused: String, val runAgain: String, val clearCache: String, val device: String, val network: String, val servers: String, val decoders: String, val recentErrors: String, val noErrors: String, val backupHint: String, val ratings: String, val glassLook: String, val glassLevels: List<String>,
 )
 
 val English = Strings(
@@ -114,6 +114,8 @@ val English = Strings(
     noErrors = "No errors 🎉",
     backupHint = "The phone page can also download a backup (settings, watchlist, history, progress) and restore it on another device.",
     ratings = "Ratings",
+    glassLook = "Glass look",
+    glassLevels = listOf("Crystal", "Clear", "Soft", "Frosted"),
     newEpisodes = "New episodes",
     newBadge = "NEW EP",
     top10 = "Top 10 this week",
@@ -207,6 +209,8 @@ val Dhakaiya = Strings(
     noErrors = "কোনো গ্যাঞ্জাম নাই 🎉",
     backupHint = "ফোনের পেজ থেইকা ব্যাকআপ নামাইতে পারবি, আরেক ডিভাইসে ঢুকাইয়াও দিতে পারবি।",
     ratings = "রেটিং",
+    glassLook = "কাঁচের লুক",
+    glassLevels = listOf("ক্রিস্টাল", "স্বচ্ছ", "হালকা ঘোলা", "ঘোলা"),
     newEpisodes = "নতুন এপিসোড আইছে",
     newBadge = "নতুন",
     top10 = "এই সপ্তার টপ ১০",

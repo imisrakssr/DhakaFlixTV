@@ -62,6 +62,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.ui.layout.onSizeChanged
@@ -530,24 +531,30 @@ fun PivotScroll(enabled: Boolean, pivot: Dp, content: @Composable () -> Unit) {
  * the middle stays clear, a faint reflection comes back at the bottom; the rim is bright on top, catches a
  * little light underneath too. Only gradients — cheap enough for the TV stick.
  */
-fun Modifier.glass(shape: Shape = RoundedCornerShape(18.dp), tint: Float = 0.10f): Modifier = this
-    .clip(shape)
-    .background(
-        Brush.verticalGradient(
-            0f to Color.White.copy(alpha = tint + 0.10f),
-            0.45f to Color.White.copy(alpha = tint * 0.35f),
-            1f to Color.White.copy(alpha = tint * 0.7f),
+fun Modifier.glass(shape: Shape = RoundedCornerShape(18.dp), tint: Float = 0.10f): Modifier = composed {
+    // phone: Settings → Glass look decides how clear it is (crystal = barely any fill, brighter edges)
+    val g = com.israk.dhakaflix.ui.theme.LocalGlass.current
+    val f = tint * g.fill
+    val r = g.rim
+    this
+        .clip(shape)
+        .background(
+            Brush.verticalGradient(
+                0f to Color.White.copy(alpha = (f + 0.10f * g.fill.coerceAtLeast(.6f)).coerceIn(0f, 1f)),
+                0.45f to Color.White.copy(alpha = f * 0.35f),
+                1f to Color.White.copy(alpha = f * 0.7f),
+            )
         )
-    )
-    .border(
-        1.dp,
-        Brush.verticalGradient(
-            0f to Color.White.copy(alpha = 0.42f),
-            0.5f to Color.White.copy(alpha = 0.06f),
-            1f to Color.White.copy(alpha = 0.16f),
-        ),
-        shape,
-    )
+        .border(
+            1.dp,
+            Brush.verticalGradient(
+                0f to Color.White.copy(alpha = (0.42f * r).coerceAtMost(.75f)),
+                0.5f to Color.White.copy(alpha = 0.06f * r),
+                1f to Color.White.copy(alpha = (0.16f * r).coerceAtMost(.4f)),
+            ),
+            shape,
+        )
+}
 
 /** Glossy highlight over a solid fill (accent buttons): the same light-from-above as [glass]. */
 fun Modifier.gloss(shape: Shape): Modifier = this

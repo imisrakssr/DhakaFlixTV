@@ -32,6 +32,24 @@ fun iconAccent(appIcon: String): Color = when (appIcon) {
     else -> Color(0xFF2E9BFF)
 }
 
+/**
+ * How see-through the phone's liquid glass is. [blur]/[tint] drive the real backdrop blur (tab bar, header),
+ * [fill] scales the milky fill of glass cards and [rim] the brightness of their light edge.
+ */
+data class GlassLook(val blur: Dp, val tint: Float, val fill: Float, val rim: Float) {
+    companion object {
+        /** TV and anything outside the phone shell: the original look. */
+        val Default = GlassLook(26.dp, .55f, 1f, 1f)
+        fun level(l: Int): GlassLook = when (l) {
+            0 -> GlassLook(3.dp, .08f, .45f, 1.45f)    // crystal: almost clear, bright edges
+            1 -> GlassLook(9.dp, .22f, .7f, 1.25f)     // clear
+            2 -> GlassLook(17.dp, .40f, .9f, 1.1f)     // soft
+            else -> GlassLook(26.dp, .58f, 1.1f, .95f) // frosted
+        }
+    }
+}
+val LocalGlass = staticCompositionLocalOf { GlassLook.Default }
+
 val Bg = Color(0xFF07080B)
 val Surface1 = Color(0xFF12141A)
 val Surface2 = Color(0xFF1B1E26)

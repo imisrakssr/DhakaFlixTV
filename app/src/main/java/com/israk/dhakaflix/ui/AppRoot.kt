@@ -34,6 +34,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import dev.chrisbanes.haze.hazeEffect
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
 import dev.chrisbanes.haze.hazeSource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -347,6 +349,9 @@ private fun MainScaffold(tab: Tab, currentTab: () -> Tab, onTab: (Tab) -> Unit, 
         val statusTop = androidx.compose.foundation.layout.WindowInsets.statusBars
             .asPaddingValues().calculateTopPadding()
         val haze = remember { dev.chrisbanes.haze.HazeState() }
+        val glassLevel by DhakaFlixApp.instance.settings.glassLevel.collectAsState()
+        val glassLook = remember(glassLevel) { com.israk.dhakaflix.ui.theme.GlassLook.level(glassLevel) }
+        CompositionLocalProvider(com.israk.dhakaflix.ui.theme.LocalGlass provides glassLook) {
         Box(Modifier.fillMaxSize().background(Bg)) {
             // page titles start below the status bar and the header (Home's banner ignores it and runs to the top)
             Box(Modifier.fillMaxSize().then(Modifier.hazeSourceCompat(haze))) {
@@ -363,6 +368,7 @@ private fun MainScaffold(tab: Tab, currentTab: () -> Tab, onTab: (Tab) -> Unit, 
                     .padding(start = 14.dp, end = 14.dp, bottom = 12.dp),
             )
         }
+        }
     }
 }
 
@@ -370,20 +376,24 @@ private fun MainScaffold(tab: Tab, currentTab: () -> Tab, onTab: (Tab) -> Unit, 
 @Composable
 private fun PhoneHeader(modifier: Modifier, statusTop: androidx.compose.ui.unit.Dp, haze: dev.chrisbanes.haze.HazeState) {
     val (brandMark, brandWord) = rememberBrandLogos()
+    val g = com.israk.dhakaflix.ui.theme.LocalGlass.current
     Box(
         modifier.fillMaxWidth()
-            // liquid glass: the page blurs under the header as it scrolls, a hairline of light at the bottom
+            // liquid glass: the page shows through the header as it scrolls (how clear: Settings → Glass look),
+            // a hairline of light at the bottom
             .hazeEffect(
                 haze,
                 dev.chrisbanes.haze.HazeStyle(
                     backgroundColor = Bg,
-                    tints = listOf(dev.chrisbanes.haze.HazeTint(Bg.copy(alpha = .62f))),
-                    blurRadius = 24.dp,
+                    tints = listOf(dev.chrisbanes.haze.HazeTint(Bg.copy(alpha = (g.tint + .08f).coerceAtMost(.7f)))),
+                    blurRadius = g.blur,
                     noiseFactor = 0f,
                 ),
             )
+            // a soft shade from the top keeps the status bar and logo readable even with crystal glass
+            .background(Brush.verticalGradient(listOf(Bg.copy(alpha = .45f * (1f - g.tint)), Color.Transparent)))
             .drawBehind {
-                drawLine(Color.White.copy(alpha = .10f), androidx.compose.ui.geometry.Offset(0f, size.height), androidx.compose.ui.geometry.Offset(size.width, size.height), 1f)
+                drawLine(Color.White.copy(alpha = .10f * g.rim), androidx.compose.ui.geometry.Offset(0f, size.height), androidx.compose.ui.geometry.Offset(size.width, size.height), 1f)
             }
             .padding(top = statusTop)
             .height(56.dp)
@@ -398,36 +408,75 @@ private fun PhoneHeader(modifier: Modifier, statusTop: androidx.compose.ui.unit.
     }
 }
 
-/** Floating pill tab bar for phones: dark glass, thin light rim, the current tab sits in a lighter pill. */
+/**
+ * Floating "crystal" tab bar for phones: the page shows through (how clear: Settings → Glass look), bright
+ * curved-glass edges, an accent-tinted lens under the current tab. Names show only while a finger is on the
+ * bar and fade out 2 s after it lifts.
+ */
 @Composable
 private fun PhoneTabBar(
     tab: Tab, onTab: (Tab) -> Unit, labels: (Tab) -> String,
     haze: dev.chrisbanes.haze.HazeState, modifier: Modifier = Modifier,
 ) {
-    // "Liquid glass": the page blurs through the bar (Android 12+), a bright rim and sheen on top, and a glass
-    // lens that slides to the chosen tab. Press and slide along the bar: the lens follows the finger, the
-    // tab under it lights up, and letting go opens it.
+    // Press and slide along the bar: the lens follows the finger, the tab under it lights up, and letting go
+    // opens it.
     val shape = RoundedCornerShape(50)
     val tabs = Tab.entries
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val accent = LocalAccent.current
+    val g = com.israk.dhakaflix.ui.theme.LocalGlass.current
+    var touching by remember { mutableStateOf(false) }
+    var showNames by remember { mutableStateOf(false) }
+    LaunchedEffect(touching) {
+        if (touching) showNames = true
+        else { kotlinx.coroutines.delay(2000); showNames = false }
+    }
+    val nameAlpha by animateFloatAsState(if (showNames) 1f else 0f, tween(if (showNames) 140 else 420), label = "names")
+    val barH by androidx.compose.animation.core.animateDpAsState(if (showNames) 66.dp else 58.dp, tween(260), label = "barH")
     BoxWithConstraints(
         modifier
             .fillMaxWidth()
-            .height(66.dp)
-            .shadow(18.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
+            .height(barH)
+            .shadow(16.dp * (.4f + g.tint), shape, ambientColor = Color.Black, spotColor = Color.Black)
             .clip(shape)
             .hazeEffect(
                 haze,
                 dev.chrisbanes.haze.HazeStyle(
                     backgroundColor = Bg,
-                    tints = listOf(dev.chrisbanes.haze.HazeTint(Color(0xFF14161C).copy(alpha = .55f))),
-                    blurRadius = 26.dp,
+                    tints = listOf(dev.chrisbanes.haze.HazeTint(Color(0xFF14161C).copy(alpha = g.tint))),
+                    blurRadius = g.blur,
                     noiseFactor = 0f,
                 ),
             )
-            // sheen: light from above, like curved glass
-            .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = .13f), Color.White.copy(alpha = .02f), Color.White.copy(alpha = .05f))))
-            .border(1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = .38f), Color.White.copy(alpha = .06f), Color.White.copy(alpha = .14f))), shape),
+            // curved glass: a bright highlight along the top, clear middle, a little light caught at the bottom
+            .background(
+                Brush.verticalGradient(
+                    0f to Color.White.copy(alpha = .16f * g.rim),
+                    .35f to Color.White.copy(alpha = .03f),
+                    .75f to Color.Transparent,
+                    1f to Color.White.copy(alpha = .07f * g.rim),
+                )
+            )
+            .border(
+                1.dp,
+                Brush.verticalGradient(
+                    0f to Color.White.copy(alpha = (.40f * g.rim).coerceAtMost(.7f)),
+                    .5f to Color.White.copy(alpha = .05f),
+                    1f to Color.White.copy(alpha = (.18f * g.rim).coerceAtMost(.35f)),
+                ),
+                shape,
+            )
+            // only watches the finger (doesn't consume), so taps and slides below still work
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    touching = true; showNames = true
+                    do {
+                        val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                    } while (e.changes.any { it.pressed })
+                    touching = false
+                }
+            },
     ) {
         val density = androidx.compose.ui.platform.LocalDensity.current
         val pad = 5.dp
@@ -466,15 +515,16 @@ private fun PhoneTabBar(
                     }
                 },
         ) {
-            // the glass lens under the chosen tab
+            // the glass lens under the chosen tab, tinted with the accent colour
             Box(
                 Modifier
                     .offset { androidx.compose.ui.unit.IntOffset(lensX.toInt(), 0) }
                     .width(slotW).fillMaxHeight()
                     .graphicsLayer { scaleX = lensScale; scaleY = lensScale }
                     .clip(shape)
-                    .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = .26f), Color.White.copy(alpha = .10f))))
-                    .border(1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = .55f), Color.White.copy(alpha = .08f))), shape),
+                    .background(Brush.verticalGradient(listOf(accent.copy(alpha = .38f), accent.copy(alpha = .16f))))
+                    .background(Brush.verticalGradient(0f to Color.White.copy(alpha = .22f), .5f to Color.Transparent, 1f to Color.White.copy(alpha = .06f)))
+                    .border(1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = .6f), accent.copy(alpha = .35f))), shape),
             )
             Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
                 tabs.forEachIndexed { i, t ->
@@ -486,15 +536,18 @@ private fun PhoneTabBar(
                         verticalArrangement = Arrangement.Center,
                     ) {
                         Box {
-                            Icon(t.icon(), labels(t), tint = tint, modifier = Modifier.size(22.dp))
+                            Icon(t.icon(), labels(t), tint = tint, modifier = Modifier.size(23.dp))
                             if (tabBadge(t)) UpdateDot(Modifier.align(Alignment.TopEnd).offset(x = 3.dp, y = (-2).dp))
                         }
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            labels(t), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                            color = tint, style = MaterialTheme.typography.labelSmall,
-                            fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium,
-                        )
+                        if (nameAlpha > 0.01f) {
+                            Spacer(Modifier.height(2.dp * nameAlpha))
+                            Text(
+                                labels(t), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                color = tint, style = MaterialTheme.typography.labelSmall,
+                                fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium,
+                                modifier = Modifier.graphicsLayer { alpha = nameAlpha },
+                            )
+                        }
                     }
                 }
             }

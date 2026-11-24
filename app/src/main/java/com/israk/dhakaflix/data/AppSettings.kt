@@ -101,6 +101,11 @@ class AppSettings(ctx: Context) {
     val postersPerRow: StateFlow<Int> = _postersPerRow
     fun setPostersPerRow(v: Int) { _postersPerRow.value = v; prefs.edit().putInt("posters_per_row", v).apply() }
 
+    /** Phone glass look: 0 crystal (clearest) … 3 frosted. */
+    private val _glassLevel = MutableStateFlow(prefs.getInt("glass_level", 0).coerceIn(0, 3))
+    val glassLevel: StateFlow<Int> = _glassLevel
+    fun setGlassLevel(v: Int) { _glassLevel.value = v.coerceIn(0, 3); prefs.edit().putInt("glass_level", v.coerceIn(0, 3)).apply() }
+
     private val _appIcon = MutableStateFlow(prefs.getString("app_icon", "classic") ?: "classic")
     val appIcon: StateFlow<String> = _appIcon
     fun setAppIcon(v: String) { _appIcon.value = v; prefs.edit().putString("app_icon", v).apply() }
