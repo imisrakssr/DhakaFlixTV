@@ -39,6 +39,8 @@ object Updater {
         data class Available(val release: Release) : State
         data class Downloading(val release: Release, val progress: Float) : State
         data class Installing(val release: Release) : State
+        /** Android won't let the app install updates yet ("Unknown sources" is off for it — common on TV). */
+        data class NeedsPermission(val release: Release) : State
         data class Failed(val message: String, val release: Release? = null) : State
     }
 
@@ -146,8 +148,33 @@ object Updater {
         .filterNot { it.contains("APK", ignoreCase = false) && it.contains("→") }
         .joinToString("\n").replace("**", "").trim()
 
+    /** Whether Android lets this app install APKs (Settings → Unknown sources / Install unknown apps). */
+    fun canInstall(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.O || app.packageManager.canRequestPackageInstalls()
+
+    /**
+     * Opens the screen where "Unknown sources" is turned on for this app. Android TV (Mi TV Stick) has no
+     * per-app "Install unknown apps" page — asking for it is what gave "you don't have an app that can do this" —
+     * so fall back to the security page, then to Settings itself.
+     */
+    fun openInstallPermission(ctx: Context): Boolean {
+        val pm = ctx.packageManager
+        val candidates = buildList {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                add(Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:${ctx.packageName}")))
+            add(Intent(android.provider.Settings.ACTION_SECURITY_SETTINGS))
+            add(Intent(android.provider.Settings.ACTION_SETTINGS))
+        }
+        for (i in candidates) {
+            if (i.resolveActivity(pm) == null) continue
+            if (runCatching { ctx.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess) return true
+        }
+        return false
+    }
+
     fun downloadAndInstall(release: Release) {
         if (_state.value is State.Downloading) return
+        if (!canInstall()) { _state.value = State.NeedsPermission(release); return }
         _state.value = State.Downloading(release, 0f)
         app.appScope.launch(Dispatchers.IO) {
             runCatching {
@@ -204,6 +231,12 @@ object Updater {
         }
     }
 
+    internal fun onConfirmMissing() {
+        val rel = (_state.value as? State.Installing)?.release
+        _state.value = if (rel != null && !canInstall()) State.NeedsPermission(rel)
+        else State.Failed("This device couldn't show the install screen", rel)
+    }
+
     internal fun onInstallResult(status: Int, message: String?) {
         val rel = (_state.value as? State.Installing)?.release
         when (status) {
@@ -222,7 +255,13 @@ class InstallReceiver : BroadcastReceiver() {
             @Suppress("DEPRECATION")
             val confirm = intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
             confirm?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            runCatching { context.startActivity(confirm) }
+            val ok = confirm != null && confirm.resolveActivity(context.packageManager) != null &&
+                runCatching { context.startActivity(confirm) }.isSuccess
+            if (!ok) {
+                // no confirm screen on this device: most likely "Unknown sources" is off for the app
+                Updater.onConfirmMissing()
+                return
+            }
         }
         Updater.onInstallResult(status, intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE))
     }

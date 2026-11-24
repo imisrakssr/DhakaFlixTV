@@ -1189,6 +1189,29 @@ private fun UpdateCard() {
                 androidx.compose.material3.LinearProgressIndicator(progress = { x.progress }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
                     color = MaterialTheme.colorScheme.primary, trackColor = Color.White.copy(alpha = .12f))
             }
+            is com.israk.dhakaflix.data.Updater.State.NeedsPermission -> {
+                ReleaseInfo(x.release, dhk)
+                val ctx = androidx.compose.ui.platform.LocalContext.current
+                val tv = LocalIsTv.current
+                Text(
+                    t("Android needs your OK before DhakaFlix can install updates. Turn on \"Unknown sources\" for DhakaFlix TV, come back and press Download & install again.",
+                        "আপডেট ইনস্টল করার লাইগা Android-এর অনুমতি লাগব। DhakaFlix TV-র লাইগা \"Unknown sources\" চালু কইরা আইসা আবার নামা আর ইনস্টল কর চাপ।"),
+                    color = Color(0xFFFDE68A), style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    if (tv) t("On the TV: Settings → Device Preferences → Security & restrictions → Unknown sources → DhakaFlix TV",
+                        "TV-তে: Settings → Device Preferences → Security & restrictions → Unknown sources → DhakaFlix TV")
+                    else t("Settings → Apps → Special app access → Install unknown apps → DhakaFlix TV",
+                        "Settings → Apps → Special app access → Install unknown apps → DhakaFlix TV"),
+                    color = TextDim, style = MaterialTheme.typography.bodySmall,
+                )
+                Spacer(Modifier.height(10.dp))
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PillButton(t("Open settings", "সেটিংস খোল"), primary = true, onClick = { U.openInstallPermission(ctx) })
+                    PillButton(t("Download & install", "নামা আর ইনস্টল কর"), icon = Icons.Filled.Refresh, onClick = { U.downloadAndInstall(x.release) })
+                }
+            }
             is com.israk.dhakaflix.data.Updater.State.Installing -> {
                 ReleaseInfo(x.release, dhk)
                 Text(t("Installing… confirm on the screen that opens.", "ইনস্টল হইতাছে… যেই স্ক্রিন আসব ওইখানে হ্যাঁ দে।"), color = Color(0xFF93C5FD), style = MaterialTheme.typography.bodyMedium)
