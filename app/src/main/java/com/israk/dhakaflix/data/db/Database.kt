@@ -285,6 +285,13 @@ abstract class ItemDao {
     @Query("SELECT * FROM items WHERE isPrimary = 1 AND (backdropPath IS NOT NULL OR localPoster IS NOT NULL) ORDER BY uploadedAt DESC LIMIT :limit")
     abstract fun featured(limit: Int): Flow<List<ItemEntity>>
 
+    /** Screensaver slides: any title matched to TMDB with a picture, one per title, picked at random. */
+    @Query(
+        "SELECT * FROM items WHERE metaState IN (1, 3) AND (backdropPath IS NOT NULL OR posterPath IS NOT NULL) " +
+            "GROUP BY groupKey ORDER BY (backdropPath IS NULL), RANDOM() LIMIT :limit"
+    )
+    abstract suspend fun saverSlides(limit: Int): List<ItemEntity>
+
     @Query("SELECT COUNT(*) FROM items WHERE sourceId = :sourceId")
     abstract suspend fun countForSource(sourceId: String): Int
 

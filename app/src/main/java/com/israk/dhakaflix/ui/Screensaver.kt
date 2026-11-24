@@ -72,7 +72,7 @@ fun OnTabReselect(toTop: suspend () -> Unit) {
 }
 
 /** Info shown over a screensaver slide: title logo, IMDb / Rotten Tomatoes, run time. */
-private class SaverInfo(val item: ItemEntity, val logo: String?, val ratings: List<com.israk.dhakaflix.data.accounts.ExtRating>)
+private data class SaverInfo(val item: ItemEntity, val logo: String?, val ratings: List<com.israk.dhakaflix.data.accounts.ExtRating>)
 
 /** Slideshow of backdrops (each pans slowly to the right until the next one) with the time, after a few idle minutes. */
 @Composable
@@ -93,7 +93,12 @@ fun Screensaver() {
         val ctx = LocalContext.current
         var items by remember { mutableStateOf<List<ItemEntity>>(emptyList()) }
         LaunchedEffect(Unit) {
-            items = app.db.items().latest(null, 120).first().filter { it.backdropPath != null }.shuffled().take(40)
+            // keep trying until the library has something to show (it may still be filling)
+            while (items.isEmpty()) {
+                items = runCatching { app.db.items().saverSlides(40) }.getOrDefault(emptyList())
+                    .let { l -> l.filter { it.backdropPath != null }.ifEmpty { l } }.shuffled()
+                if (items.isEmpty()) delay(30_000)
+            }
         }
         var idx by remember { mutableIntStateOf(0) }
         // logo, ratings and run time are fetched for the current slide and the next one, so they never pop in late
@@ -104,7 +109,7 @@ fun Screensaver() {
             val full = app.db.items().get(it.id) ?: it
             val logo = runCatching { app.library.discovery.logoUrl(full) }.getOrNull()
             if (logo != null) coil.Coil.imageLoader(ctx).execute(ImageRequest.Builder(ctx).data(logo).build())
-            coil.Coil.imageLoader(ctx).execute(ImageRequest.Builder(ctx).data(TmdbImages.url(full.backdropPath, "w1280")).build())
+            coil.Coil.imageLoader(ctx).execute(ImageRequest.Builder(ctx).data(slideUrl(full)).build())
             val ratings = full.tmdbId?.let { id ->
                 runCatching { app.library.mdblist.ratings(id, full.isSeries) }.getOrDefault(emptyList())
             }.orEmpty().filter { r -> r.source == "imdb" || r.source == "tomatoes" }
@@ -190,6 +195,10 @@ private fun runTime(it: ItemEntity): String? {
     return if (it.isSeries) "$t / episode" else t
 }
 
+/** The wide backdrop, or the poster when a title has none. */
+private fun slideUrl(it: ItemEntity): String? =
+    if (it.backdropPath != null) TmdbImages.url(it.backdropPath, "w1280") else TmdbImages.url(it.posterPath, "w780")
+
 /** The backdrop, a little larger than the screen, drifting steadily to the right until the next slide. */
 @Composable
 private fun SlideRight(item: ItemEntity) {
@@ -197,7 +206,7 @@ private fun SlideRight(item: ItemEntity) {
     val p = remember(item.id) { Animatable(0f) }
     LaunchedEffect(item.id) { p.animateTo(1f, tween(14_500, easing = LinearEasing)) }
     AsyncImage(
-        model = ImageRequest.Builder(ctx).data(TmdbImages.url(item.backdropPath, "w1280")).build(),
+        model = ImageRequest.Builder(ctx).data(slideUrl(item)).build(),
         contentDescription = null, contentScale = ContentScale.Crop,
         modifier = Modifier.fillMaxSize().graphicsLayer {
             scaleX = 1.14f; scaleY = 1.14f
