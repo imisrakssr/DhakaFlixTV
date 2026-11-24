@@ -825,7 +825,7 @@ private fun RenameDialog(current: String, onDismiss: () -> Unit, onReset: () -> 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
             Modifier.widthIn(max = 560.dp).fillMaxWidth().padding(24.dp)
-                .clip(RoundedCornerShape(20.dp)).background(Color(0xFF15181F)).padding(22.dp),
+                .clip(RoundedCornerShape(20.dp)).background(Color(0xF015181F)).glass(RoundedCornerShape(20.dp), tint = .06f).padding(22.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(current, style = MaterialTheme.typography.titleLarge, color = Color.White)
@@ -848,7 +848,7 @@ private fun AddCategoryDialog(onDismiss: () -> Unit, onAdd: (Source) -> Unit) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
             Modifier.widthIn(max = 560.dp).fillMaxWidth().padding(24.dp)
-                .clip(RoundedCornerShape(20.dp)).background(Color(0xFF15181F)).padding(22.dp),
+                .clip(RoundedCornerShape(20.dp)).background(Color(0xF015181F)).glass(RoundedCornerShape(20.dp), tint = .06f).padding(22.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(s.addCategory, style = MaterialTheme.typography.titleLarge, color = Color.White)

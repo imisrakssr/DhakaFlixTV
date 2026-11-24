@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.draw.shadow
@@ -354,7 +355,7 @@ private fun MainScaffold(tab: Tab, currentTab: () -> Tab, onTab: (Tab) -> Unit, 
                     androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides com.israk.dhakaflix.ui.components.NoAutoScrollSpec,
                 ) { content() }
             }
-            if (tab != Tab.HOME) PhoneHeader(Modifier.align(Alignment.TopCenter), statusTop)
+            if (tab != Tab.HOME) PhoneHeader(Modifier.align(Alignment.TopCenter), statusTop, haze)
             PhoneTabBar(
                 tab = tab, onTab = onTab, labels = { it.label(s) }, haze = haze,
                 modifier = Modifier.align(Alignment.BottomCenter)
@@ -367,11 +368,23 @@ private fun MainScaffold(tab: Tab, currentTab: () -> Tab, onTab: (Tab) -> Unit, 
 
 /** Phone header: app logo on the left, Simkl profile picture on the right (like the TV top bar). */
 @Composable
-private fun PhoneHeader(modifier: Modifier, statusTop: androidx.compose.ui.unit.Dp) {
+private fun PhoneHeader(modifier: Modifier, statusTop: androidx.compose.ui.unit.Dp, haze: dev.chrisbanes.haze.HazeState) {
     val (brandMark, brandWord) = rememberBrandLogos()
     Box(
         modifier.fillMaxWidth()
-            .background(Brush.verticalGradient(listOf(Bg, Bg.copy(alpha = .92f), Color.Transparent)))
+            // liquid glass: the page blurs under the header as it scrolls, a hairline of light at the bottom
+            .hazeEffect(
+                haze,
+                dev.chrisbanes.haze.HazeStyle(
+                    backgroundColor = Bg,
+                    tints = listOf(dev.chrisbanes.haze.HazeTint(Bg.copy(alpha = .62f))),
+                    blurRadius = 24.dp,
+                    noiseFactor = 0f,
+                ),
+            )
+            .drawBehind {
+                drawLine(Color.White.copy(alpha = .10f), androidx.compose.ui.geometry.Offset(0f, size.height), androidx.compose.ui.geometry.Offset(size.width, size.height), 1f)
+            }
             .padding(top = statusTop)
             .height(56.dp)
             .padding(horizontal = LocalEdge.current),

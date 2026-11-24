@@ -59,6 +59,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -190,8 +191,11 @@ fun FilterBar(specs: List<FilterSpec>, onClear: (() -> Unit)?, firstModifier: Mo
                     expanded = open == i,
                     onDismissRequest = { open = null },
                     modifier = Modifier.heightIn(max = 380.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    containerColor = Color(0xFF17171F),
+                    shape = RoundedCornerShape(18.dp),
+                    containerColor = Color(0xF0181A22),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp, Brush.verticalGradient(0f to Color.White.copy(alpha = .38f), .5f to Color.White.copy(alpha = .05f), 1f to Color.White.copy(alpha = .14f)),
+                    ),
                 ) {
                     sp.options.forEach { (id, label) ->
                         val sel = id == sp.selected || (sp.selected == null && id == null)

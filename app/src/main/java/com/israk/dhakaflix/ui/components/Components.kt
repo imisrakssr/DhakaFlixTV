@@ -525,10 +525,34 @@ fun PivotScroll(enabled: Boolean, pivot: Dp, content: @Composable () -> Unit) {
 }
 
 /** Frosted "liquid glass" surface (blur-free so it runs smoothly on low-end TV sticks). */
+/**
+ * "Liquid glass" surface (Apple-style), used across the app: light falls in from above (bright upper sheen),
+ * the middle stays clear, a faint reflection comes back at the bottom; the rim is bright on top, catches a
+ * little light underneath too. Only gradients — cheap enough for the TV stick.
+ */
 fun Modifier.glass(shape: Shape = RoundedCornerShape(18.dp), tint: Float = 0.10f): Modifier = this
     .clip(shape)
-    .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = tint + 0.06f), Color.White.copy(alpha = tint * 0.45f))))
-    .border(1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.32f), Color.White.copy(alpha = 0.05f))), shape)
+    .background(
+        Brush.verticalGradient(
+            0f to Color.White.copy(alpha = tint + 0.10f),
+            0.45f to Color.White.copy(alpha = tint * 0.35f),
+            1f to Color.White.copy(alpha = tint * 0.7f),
+        )
+    )
+    .border(
+        1.dp,
+        Brush.verticalGradient(
+            0f to Color.White.copy(alpha = 0.42f),
+            0.5f to Color.White.copy(alpha = 0.06f),
+            1f to Color.White.copy(alpha = 0.16f),
+        ),
+        shape,
+    )
+
+/** Glossy highlight over a solid fill (accent buttons): the same light-from-above as [glass]. */
+fun Modifier.gloss(shape: Shape): Modifier = this
+    .background(Brush.verticalGradient(0f to Color.White.copy(alpha = .28f), 0.5f to Color.White.copy(alpha = .04f), 1f to Color.Transparent), shape)
+    .border(1.dp, Brush.verticalGradient(0f to Color.White.copy(alpha = .5f), 1f to Color.White.copy(alpha = .08f)), shape)
 
 /** Rounded pill button: translucent at rest, solid white when focused (tvOS style). */
 @Composable
@@ -550,21 +574,25 @@ fun PillButton(
             focused -> Color.White
             primary -> accent
             selected -> accent.copy(alpha = .38f)
-            else -> Color.White.copy(alpha = .12f)
+            else -> Color.Transparent
         }, label = "pillBg",
     )
     val fg = if (focused) Color.Black else Color.White
+    val pill = RoundedCornerShape(50)
     Row(
         modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { focused = it.isFocused }
-            .clip(RoundedCornerShape(50))
+            .clip(pill)
             .background(bg)
+            // liquid glass: clear glass at rest, glossy accent for the main action
             .then(
-                if (!focused && !primary) Modifier.border(
-                    1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = .30f), Color.White.copy(alpha = .05f))), RoundedCornerShape(50),
-                ) else Modifier
+                when {
+                    focused -> Modifier
+                    primary || selected -> Modifier.gloss(pill)
+                    else -> Modifier.glass(pill, tint = .07f)
+                }
             )
             .clickable(onClick = onClick)
             .padding(horizontal = if (compact) 14.dp else 20.dp, vertical = if (compact) 7.dp else 11.dp),
