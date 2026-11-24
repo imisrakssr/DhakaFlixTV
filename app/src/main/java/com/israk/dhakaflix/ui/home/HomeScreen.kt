@@ -56,6 +56,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
@@ -298,6 +300,7 @@ fun HomeScreen(onOpen: (String) -> Unit) {
                     },
                     onDown = { goRow(0) },
                     onNext = { if (featured.isNotEmpty()) bannerIndex = (bannerIndex + 1) % featured.size },
+                    onPrev = { if (featured.isNotEmpty()) bannerIndex = (bannerIndex - 1 + featured.size) % featured.size },
                 )
             }
             itemsIndexed(visible, key = { _, r -> r.key }) { ri, row ->
@@ -363,6 +366,7 @@ private fun FeaturedBanner(
     onFocus: () -> Unit,
     onDown: () -> Unit,
     onNext: () -> Unit,
+    onPrev: () -> Unit = {},
 ) {
     val s = LocalStrings.current
     val isTv = LocalIsTv.current
@@ -372,7 +376,18 @@ private fun FeaturedBanner(
     val app = DhakaFlixApp.instance
     val scope = rememberCoroutineScope()
 
-    Box(Modifier.fillMaxWidth().height(height)) {
+    // phone: swipe the banner left/right for the next/previous title (it still turns by itself)
+    val swipe = if (isTv) Modifier else Modifier.pointerInput(count) {
+        var total = 0f
+        detectHorizontalDragGestures(
+            onDragStart = { total = 0f },
+            onDragEnd = {
+                val min = 56.dp.toPx()
+                if (total < -min) onNext() else if (total > min) onPrev()
+            },
+        ) { change, dx -> change.consume(); total += dx }
+    }
+    Box(Modifier.fillMaxWidth().height(height).then(swipe)) {
         if (!isTv && item != null) {
             Crossfade(targetState = item.backdropUrl(false), animationSpec = tween(700), label = "phoneBanner") { url ->
                 AsyncImage(ImageRequest.Builder(ctx).data(url).crossfade(true).build(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
@@ -438,7 +453,7 @@ private fun FeaturedBanner(
                         onClick = { scope.launch { app.library.toggleWatchlist(item.id) } },
                         icon = if (inList) Icons.Filled.Check else Icons.Filled.Add, selected = inList, compact = !isTv,
                     )
-                    if (count > 1) {
+                    if (count > 1 && isTv) {
                         Spacer(Modifier.width(10.dp))
                         PillButton("", onClick = onNext, icon = AppIcons.Forward, compact = true)
                         Spacer(Modifier.width(8.dp))
