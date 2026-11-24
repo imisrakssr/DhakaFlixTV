@@ -77,8 +77,8 @@ data class BrowseFilter(
     val query: String = "",
     val genre: String? = null,
     val sourceId: String? = null,
-    /** Category's sources: a title shows when any of its copies is in one of them. */
-    val categorySources: List<String> = emptyList(),
+    /** Category key (Categories): folders and/or languages, matched on any copy of a title. */
+    val category: String? = null,
     val year: Int? = null,
     val sort: SortMode = SortMode.LATEST,
 )
@@ -432,7 +432,7 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         if (enrichJob?.isActive == true || !tmdb.hasKey) return
         enrichJob = scope.launch(Dispatchers.IO) {
             _enriching.value = true
-            try { enrichLoop() } finally { _enriching.value = false }
+            try { enrichLoop(); fillLanguages() } finally { _enriching.value = false }
             startPosterScan()
         }
     }
@@ -535,12 +535,15 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         when (o) {
             is Outcome.Match -> applyResult(o.item, o.r, ItemEntity.META_MATCHED)
             is Outcome.Miss -> db.items().setMetaState(o.id, ItemEntity.META_NOT_FOUND)
-            is Outcome.Copy -> db.items().applyMeta(
-                id = o.item.id, state = ItemEntity.META_MATCHED, tmdbId = o.from.tmdbId!!, tmdbTitle = o.from.tmdbTitle,
-                posterPath = o.from.posterPath, backdropPath = o.from.backdropPath, overview = o.from.overview,
-                rating = o.from.rating, voteCount = o.from.voteCount, genres = o.from.genres,
-                releaseYear = o.from.releaseYear, groupKey = "${o.item.type}:${o.from.tmdbId}",
-            )
+            is Outcome.Copy -> {
+                db.items().applyMeta(
+                    id = o.item.id, state = ItemEntity.META_MATCHED, tmdbId = o.from.tmdbId!!, tmdbTitle = o.from.tmdbTitle,
+                    posterPath = o.from.posterPath, backdropPath = o.from.backdropPath, overview = o.from.overview,
+                    rating = o.from.rating, voteCount = o.from.voteCount, genres = o.from.genres,
+                    releaseYear = o.from.releaseYear, groupKey = "${o.item.type}:${o.from.tmdbId}",
+                )
+                o.from.lang?.let { db.items().setLang(o.item.id, it) }
+            }
             else -> Unit
         }
     }
@@ -584,6 +587,27 @@ class LibraryRepository(private val app: DhakaFlixApp) {
             genres = if (genres.isEmpty()) null else genres.joinToString("|", "|", "|"),
             releaseYear = r.year, groupKey = "${item.type}:${r.id}",
         )
+        r.originalLanguage?.takeIf { it.isNotBlank() }?.let { db.items().setLang(item.id, it) }
+    }
+
+    /**
+     * Series sort into categories by language (TV & WEB Series mixes every language in one folder).
+     * New matches carry it from the search; older ones get it from TMDB details, a few per second.
+     */
+    private suspend fun fillLanguages() {
+        db.items().shareLang()
+        while (true) {
+            val batch = db.items().needingLang(20)
+            if (batch.isEmpty()) break
+            var ok = 0
+            for (it in batch) {
+                val r = runCatching { tmdb.details(it.isSeries, it.tmdbId!!).originalLanguage }
+                if (r.isSuccess) { ok++; db.items().setLang(it.id, r.getOrNull()?.takeIf { l -> l.isNotBlank() } ?: "") }
+                delay(250)
+            }
+            if (ok == 0) break // TMDB unreachable: try again next time
+            db.items().shareLang()
+        }
     }
 
     private fun pickBest(results: List<TmdbResult>, title: String, year: Int?): TmdbResult? {
@@ -621,6 +645,7 @@ class LibraryRepository(private val app: DhakaFlixApp) {
                 overview = d.overview?.ifBlank { null },
                 posterPath = d.posterPath, backdropPath = d.backdropPath,
             )
+            d.originalLanguage?.takeIf { it.isNotBlank() }?.let { db.items().setLang(id, it) }
         }.onFailure { Log.w(TAG, "details failed", it) }
         Unit
     }
@@ -853,8 +878,10 @@ class LibraryRepository(private val app: DhakaFlixApp) {
             key == RowKeys.BECAUSE -> discovery.because.map { it?.items ?: emptyList() }
             key.startsWith("genre:") -> dao.byGenre(key.removePrefix("genre:"), ROW_LIMIT)
             key.startsWith("src:") -> dao.latestInSource(key.removePrefix("src:"), ROW_LIMIT)
-            key.startsWith("cat:") -> Categories.find(key.removePrefix("cat:"), settings.sources.value)
-                ?.let { dao.latestInCategory(it.sources.toList(), ROW_LIMIT) } ?: flowOf(emptyList())
+            key.startsWith("cat:") -> Categories.find(key.removePrefix("cat:"), settings.sources.value)?.let { c ->
+                val (cond, a) = Categories.groupCondition(c)
+                dao.rawFlow(SimpleSQLiteQuery("SELECT * FROM items WHERE isPrimary = 1 AND $cond ORDER BY uploadedAt DESC LIMIT $ROW_LIMIT", a.toTypedArray()))
+            } ?: flowOf(emptyList())
             else -> flowOf(emptyList())
         }
     }
@@ -869,9 +896,9 @@ class LibraryRepository(private val app: DhakaFlixApp) {
         }
         f.genre?.let { where += "genres LIKE ?"; args += "%|$it|%" }
         f.sourceId?.let { where += "sourceId = ?"; args += it }
-        if (f.categorySources.isNotEmpty()) {
-            where += "groupKey IN (SELECT groupKey FROM items WHERE sourceId IN (${f.categorySources.joinToString(",") { "?" }}))"
-            args += f.categorySources
+        Categories.find(f.category, settings.sources.value)?.let { c ->
+            val (cond, a) = Categories.groupCondition(c)
+            where += cond; args += a
         }
         f.year?.let { where += "COALESCE(year, releaseYear) = ?"; args += it }
         val order = when (f.sort) {

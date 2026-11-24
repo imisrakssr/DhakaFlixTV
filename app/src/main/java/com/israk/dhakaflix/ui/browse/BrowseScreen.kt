@@ -128,8 +128,7 @@ fun BrowseScreen(type: MediaType, onOpen: (String) -> Unit) {
     var sourceId by rememberSaveable { mutableStateOf<String?>(null) } // category key
     var year by rememberSaveable { mutableStateOf<Int?>(null) }
 
-    val catSources = remember(sourceId, categories) { categories.firstOrNull { it.key == sourceId }?.sources?.sorted().orEmpty() }
-    val filter = BrowseFilter(type = type, genre = genre, categorySources = catSources, year = year, sort = sort)
+    val filter = BrowseFilter(type = type, genre = genre, category = sourceId, year = year, sort = sort)
     val items = rememberBrowsePager(filter).collectAsLazyPagingItems()
 
     val specs = buildList {

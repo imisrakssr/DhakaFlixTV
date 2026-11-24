@@ -97,10 +97,9 @@ fun SearchScreen(onOpen: (String) -> Unit) {
     val allSources by app.settings.sources.collectAsState()
     val dhk = com.israk.dhakaflix.ui.components.isDhakaiya()
     val categories = remember(allSources, type) { com.israk.dhakaflix.data.Categories.available(type, allSources) }
-    val catSources = remember(cat, categories) { categories.firstOrNull { it.key == cat }?.sources?.sorted().orEmpty() }
     val years by remember { app.db.items().years() }.collectAsState(initial = emptyList())
 
-    val filter = BrowseFilter(type = type, query = debounced, year = year, sort = sort, genre = genre, categorySources = catSources)
+    val filter = BrowseFilter(type = type, query = debounced, year = year, sort = sort, genre = genre, category = cat)
     val items = rememberBrowsePager(filter).collectAsLazyPagingItems()
 
     // with an empty search box the page shows only titles you opened from search before

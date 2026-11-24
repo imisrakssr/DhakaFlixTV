@@ -129,14 +129,23 @@ object Defaults {
 }
 
 /**
- * Streaming-style categories (Hollywood, Bollywood, K-Drama …) instead of server folder names. Each one
- * gathers the matching folders of every server; a title is in a category when any of its copies is.
+ * Streaming-style categories (Hollywood, Bollywood, K-Drama …) instead of server folder names. A title is in
+ * a category when any of its copies is in one of the category's folders ([sources]), or — for series — when
+ * TMDB says its original language is one of [langs] ([loose] folders count only while the language is unknown).
+ * [otherLangs]: every language not claimed by another category.
  */
-data class Category(val key: String, val en: String, val dhk: String, val type: MediaType, val sources: Set<String>) {
+data class Category(
+    val key: String, val en: String, val dhk: String, val type: MediaType,
+    val sources: Set<String> = emptySet(),
+    val langs: Set<String> = emptySet(),
+    val loose: Set<String> = emptySet(),
+    val otherLangs: Boolean = false,
+) {
     fun label(dhakaiya: Boolean) = if (dhakaiya) dhk else en
 }
 
 object Categories {
+    private val indian = setOf("hi", "ta", "te", "ml", "kn", "mr", "pa", "gu", "ur")
     val all: List<Category> = listOf(
         Category("hollywood", "Hollywood", "হলিউড", MediaType.MOVIE,
             setOf("eng", "eng1080", "imdb250", "rd-4", "rd-3", "rd-7", "bk-eng", "bk-imdb")),
@@ -146,28 +155,59 @@ object Categories {
         Category("bangla", "Bangla", "বাংলা", MediaType.MOVIE, setOf("kolkata", "rd-8", "bk-kolkata", "bk-bndub")),
         Category("world", "World Cinema", "দুনিয়ার সিনেমা", MediaType.MOVIE, setOf("foreign", "rd-5", "bk-foreign")),
         Category("animation", "Animation", "অ্যানিমেশন", MediaType.MOVIE, setOf("anim", "anim1080", "rd-2", "bk-anim")),
-        Category("english_tv", "English Series", "ইংলিশ সিরিজ", MediaType.SERIES, setOf("tvweb", "bk-engtv", "bk-othertv")),
-        Category("indian_tv", "Indian Web Series", "ইন্ডিয়ান ওয়েব সিরিজ", MediaType.SERIES, setOf("bk-hinditv")),
-        Category("bangla_tv", "Bangla Web Series", "বাংলা ওয়েব সিরিজ", MediaType.SERIES, setOf("bk-bntv")),
-        Category("kdrama", "K-Drama", "কে-ড্রামা", MediaType.SERIES, setOf("korean", "rd-9")),
-        Category("anime", "Anime & Cartoons", "অ্যানিমে আর কার্টুন", MediaType.SERIES, setOf("cartoon", "bk-animtv")),
+        // series: by language (DhakaFlix's "TV & WEB Series" mixes every language in one folder)
+        Category("english_tv", "English Series", "ইংলিশ সিরিজ", MediaType.SERIES,
+            langs = setOf("en"), loose = setOf("tvweb", "bk-engtv", "bk-othertv")),
+        Category("indian_tv", "Indian Web Series", "ইন্ডিয়ান ওয়েব সিরিজ", MediaType.SERIES, setOf("bk-hinditv"), langs = indian),
+        Category("bangla_tv", "Bangla Web Series", "বাংলা ওয়েব সিরিজ", MediaType.SERIES, setOf("bk-bntv"), langs = setOf("bn")),
+        Category("kdrama", "K-Drama", "কে-ড্রামা", MediaType.SERIES, setOf("korean", "rd-9"), langs = setOf("ko")),
+        Category("anime", "Anime & Cartoons", "অ্যানিমে আর কার্টুন", MediaType.SERIES, setOf("cartoon", "bk-animtv"), langs = setOf("ja")),
+        Category("intl_tv", "International Series", "আন্তর্জাতিক সিরিজ", MediaType.SERIES, otherLangs = true),
     )
 
     /**
-     * Categories offered for [type] (null = both): the built-in ones that have an enabled source, plus one
-     * per enabled source of your own that isn't in any of them (named after the source).
+     * Categories offered for [type] (null = both): built-in ones that have something to show, plus one per
+     * enabled source of your own that isn't in any of them (named after the source).
      */
     fun available(type: MediaType?, sources: List<Source>): List<Category> {
         val on = sources.filter { it.enabled && (type == null || it.type == type) }
         val ids = on.map { it.id }.toSet()
-        val built = all.filter { (type == null || it.type == type) && it.sources.any { s -> s in ids } }
-        val covered = all.flatMap { it.sources }.toSet()
-        val own = on.filter { it.id !in covered && it.id != "rd-1" }.map { Category("src:${it.id}", it.name, it.name, it.type, setOf(it.id)) }
+        val hasSeries = on.any { it.type == MediaType.SERIES }
+        val built = all.filter { c ->
+            (type == null || c.type == type) &&
+                ((c.sources + c.loose).any { it in ids } || (c.type == MediaType.SERIES && hasSeries && (c.langs.isNotEmpty() || c.otherLangs)))
+        }
+        val covered = all.flatMap { it.sources + it.loose }.toSet()
+        val own = on.filter { it.id !in covered && it.id != "rd-1" }
+            .map { Category("src:${it.id}", it.name, it.name, it.type, setOf(it.id)) }
         return built + own
     }
 
     fun find(key: String?, sources: List<Source>): Category? =
         key?.let { k -> all.firstOrNull { it.key == k } ?: sources.firstOrNull { "src:${it.id}" == k }?.let { Category(k, it.name, it.name, it.type, setOf(it.id)) } }
+
+    /** SQL condition (on one copy's row) for being in [c], with its arguments. */
+    fun condition(c: Category): Pair<String, List<Any>> {
+        val parts = mutableListOf<String>()
+        val args = mutableListOf<Any>()
+        fun inList(col: String, vals: Collection<String>) = "$col IN (" + vals.joinToString(",") { "?" } + ")"
+        if (c.sources.isNotEmpty()) { parts += inList("sourceId", c.sources); args += c.sources }
+        if (c.langs.isNotEmpty()) { parts += inList("lang", c.langs); args += c.langs }
+        if (c.loose.isNotEmpty()) { parts += "(" + inList("sourceId", c.loose) + " AND (lang IS NULL OR lang = ''))"; args += c.loose }
+        if (c.otherLangs) {
+            val claimed = all.filter { it.type == c.type }.flatMap { it.langs }.toSet()
+            parts += "(lang IS NOT NULL AND lang != '' AND " + inList("lang", claimed).replace(" IN (", " NOT IN (") + ")"
+            args += claimed
+        }
+        if (parts.isEmpty()) return "0" to emptyList()
+        return "(" + parts.joinToString(" OR ") + ")" to args
+    }
+
+    /** "this card's title is in the category" (any of its copies), for queries on primary rows. */
+    fun groupCondition(c: Category): Pair<String, List<Any>> {
+        val (cond, args) = condition(c)
+        return "groupKey IN (SELECT groupKey FROM items WHERE $cond)" to args
+    }
 }
 
 object RowKeys {

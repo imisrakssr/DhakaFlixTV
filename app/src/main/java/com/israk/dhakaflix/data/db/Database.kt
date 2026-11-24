@@ -58,6 +58,8 @@ data class ItemEntity(
     val detailsFetched: Boolean = false,
     val localPoster: String? = null,     // server-provided jpg
     @ColumnInfo(defaultValue = "0") val posterChecked: Boolean = false,
+    /** TMDB original language ("en", "hi", "ko" …): sorts series into categories by language, not by folder. */
+    val lang: String? = null,
 ) {
     @get:Ignore val isSeries: Boolean get() = type == "SERIES"
     @get:Ignore val displayTitle: String get() = tmdbTitle ?: title
@@ -168,11 +170,7 @@ abstract class ItemDao {
     @Query("SELECT * FROM items WHERE isPrimary = 1 AND sourceId = :sourceId ORDER BY uploadedAt DESC LIMIT :limit")
     abstract fun latestInSource(sourceId: String, limit: Int): Flow<List<ItemEntity>>
 
-    @Query(
-        "SELECT * FROM items WHERE isPrimary = 1 AND groupKey IN (SELECT groupKey FROM items WHERE sourceId IN (:sourceIds)) " +
-            "ORDER BY uploadedAt DESC LIMIT :limit"
-    )
-    abstract fun latestInCategory(sourceIds: List<String>, limit: Int): Flow<List<ItemEntity>>
+
 
     @Query("SELECT * FROM items WHERE isPrimary = 1 AND voteCount >= 300 ORDER BY rating DESC LIMIT :limit")
     abstract fun topRated(limit: Int): Flow<List<ItemEntity>>
@@ -182,6 +180,20 @@ abstract class ItemDao {
 
     @RawQuery(observedEntities = [ItemEntity::class])
     abstract fun browse(query: SupportSQLiteQuery): PagingSource<Int, ItemEntity>
+
+    @RawQuery(observedEntities = [ItemEntity::class])
+    abstract fun rawFlow(query: SupportSQLiteQuery): Flow<List<ItemEntity>>
+
+    @Query("UPDATE items SET lang = :lang WHERE id = :id")
+    abstract suspend fun setLang(id: String, lang: String?)
+
+    /** Matched series still missing their language (filled from TMDB details, a few at a time). */
+    @Query("SELECT * FROM items WHERE lang IS NULL AND tmdbId IS NOT NULL AND metaState IN (1, 3) AND type = 'SERIES' LIMIT :limit")
+    abstract suspend fun needingLang(limit: Int): List<ItemEntity>
+
+    /** Same TMDB title elsewhere already has its language: copy it. */
+    @Query("UPDATE items SET lang = (SELECT j.lang FROM items j WHERE j.tmdbId = items.tmdbId AND j.type = items.type AND j.lang IS NOT NULL LIMIT 1) WHERE lang IS NULL AND tmdbId IS NOT NULL")
+    abstract suspend fun shareLang()
 
     @Query("SELECT * FROM items WHERE metaState = 0 ORDER BY uploadedAt DESC LIMIT :limit")
     abstract suspend fun pendingMeta(limit: Int): List<ItemEntity>
@@ -371,7 +383,7 @@ interface ProgressDao {
 
 @Database(
     entities = [ItemEntity::class, DirCacheEntity::class, UserStateEntity::class, ProgressEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -383,8 +395,14 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         fun create(ctx: Context): AppDatabase =
             Room.databaseBuilder(ctx, AppDatabase::class.java, "dhakaflix.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
+
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE items ADD COLUMN lang TEXT")
+            }
+        }
 
         private val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {

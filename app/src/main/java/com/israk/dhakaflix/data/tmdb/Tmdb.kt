@@ -25,6 +25,7 @@ data class TmdbResult(
     @SerialName("release_date") val releaseDate: String? = null,
     @SerialName("first_air_date") val firstAirDate: String? = null,
     @SerialName("media_type") val mediaType: String? = null,
+    @SerialName("original_language") val originalLanguage: String? = null,
 ) {
     val displayTitle get() = title ?: name ?: ""
     val year: Int? get() = (releaseDate ?: firstAirDate)?.take(4)?.toIntOrNull()
@@ -82,6 +83,7 @@ data class TmdbDetails(
     @SerialName("vote_average") val voteAverage: Double? = null,
     @SerialName("vote_count") val voteCount: Int? = null,
     val genres: List<TmdbGenre> = emptyList(),
+    @SerialName("original_language") val originalLanguage: String? = null,
     val runtime: Int? = null,
     @SerialName("episode_run_time") val episodeRunTime: List<Int> = emptyList(),
     @SerialName("release_date") val releaseDate: String? = null,
