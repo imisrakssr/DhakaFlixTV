@@ -124,6 +124,8 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.10.1")
     // installs the Compose libraries' baseline profiles at install time: pre-compiled scrolling code, far less first-scroll jank
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
+    // real backdrop blur for the phone tab bar ("liquid glass"; Android 12+, translucent fallback below)
+    implementation("dev.chrisbanes.haze:haze:1.6.10")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
 

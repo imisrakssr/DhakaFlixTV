@@ -26,6 +26,14 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.hazeSource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -337,15 +345,18 @@ private fun MainScaffold(tab: Tab, currentTab: () -> Tab, onTab: (Tab) -> Unit, 
         // and a floating glass tab bar
         val statusTop = androidx.compose.foundation.layout.WindowInsets.statusBars
             .asPaddingValues().calculateTopPadding()
+        val haze = remember { dev.chrisbanes.haze.HazeState() }
         Box(Modifier.fillMaxSize().background(Bg)) {
             // page titles start below the status bar and the header (Home's banner ignores it and runs to the top)
-            CompositionLocalProvider(
-                LocalTopInset provides statusTop + 64.dp, LocalBottomInset provides 96.dp,
-                androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides com.israk.dhakaflix.ui.components.NoAutoScrollSpec,
-            ) { content() }
+            Box(Modifier.fillMaxSize().then(Modifier.hazeSourceCompat(haze))) {
+                CompositionLocalProvider(
+                    LocalTopInset provides statusTop + 64.dp, LocalBottomInset provides 96.dp,
+                    androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides com.israk.dhakaflix.ui.components.NoAutoScrollSpec,
+                ) { content() }
+            }
             if (tab != Tab.HOME) PhoneHeader(Modifier.align(Alignment.TopCenter), statusTop)
             PhoneTabBar(
-                tab = tab, onTab = onTab, labels = { it.label(s) },
+                tab = tab, onTab = onTab, labels = { it.label(s) }, haze = haze,
                 modifier = Modifier.align(Alignment.BottomCenter)
                     .navigationBarsPadding()
                     .padding(start = 14.dp, end = 14.dp, bottom = 12.dp),
@@ -376,46 +387,110 @@ private fun PhoneHeader(modifier: Modifier, statusTop: androidx.compose.ui.unit.
 
 /** Floating pill tab bar for phones: dark glass, thin light rim, the current tab sits in a lighter pill. */
 @Composable
-private fun PhoneTabBar(tab: Tab, onTab: (Tab) -> Unit, labels: (Tab) -> String, modifier: Modifier = Modifier) {
+private fun PhoneTabBar(
+    tab: Tab, onTab: (Tab) -> Unit, labels: (Tab) -> String,
+    haze: dev.chrisbanes.haze.HazeState, modifier: Modifier = Modifier,
+) {
+    // "Liquid glass": the page blurs through the bar (Android 12+), a bright rim and sheen on top, and a glass
+    // lens that slides to the chosen tab. Press and slide along the bar: the lens follows the finger, the
+    // tab under it lights up, and letting go opens it.
     val shape = RoundedCornerShape(50)
-    val accent = LocalAccent.current
-    Row(
+    val tabs = Tab.entries
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    BoxWithConstraints(
         modifier
             .fillMaxWidth()
             .height(66.dp)
+            .shadow(18.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
             .clip(shape)
-            .background(Brush.verticalGradient(listOf(Color(0xF2262A33), Color(0xF2101217))))
-            .border(1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = .22f), Color.White.copy(alpha = .05f))), shape)
-            .padding(5.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .hazeEffect(
+                haze,
+                dev.chrisbanes.haze.HazeStyle(
+                    backgroundColor = Bg,
+                    tints = listOf(dev.chrisbanes.haze.HazeTint(Color(0xFF14161C).copy(alpha = .55f))),
+                    blurRadius = 26.dp,
+                    noiseFactor = 0f,
+                ),
+            )
+            // sheen: light from above, like curved glass
+            .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = .13f), Color.White.copy(alpha = .02f), Color.White.copy(alpha = .05f))))
+            .border(1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = .38f), Color.White.copy(alpha = .06f), Color.White.copy(alpha = .14f))), shape),
     ) {
-        Tab.entries.forEach { t ->
-            val selected = t == tab
-            val bg by animateColorAsState(if (selected) Color.White.copy(alpha = .14f) else Color.Transparent, tween(220), label = "tabBg")
-            Column(
-                Modifier.weight(1f).fillMaxHeight()
-                    .clip(shape)
-                    .background(bg)
-                    .clickable { onTab(t) },
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Box {
-                    Icon(t.icon(), labels(t), tint = if (selected) Color.White else TextDim, modifier = Modifier.size(22.dp))
-                    if (tabBadge(t)) UpdateDot(Modifier.align(Alignment.TopEnd).offset(x = 3.dp, y = (-2).dp))
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        val pad = 5.dp
+        val slotW = (maxWidth - pad * 2) / tabs.size
+        val slotPx = with(density) { slotW.toPx() }
+        var dragX by remember { mutableStateOf<Float?>(null) }   // lens left edge (px) while the finger slides
+        var hover by remember { mutableIntStateOf(tabs.indexOf(tab)) }
+        val selIdx = tabs.indexOf(tab)
+        val target = dragX ?: (selIdx * slotPx)
+        val lensX by animateFloatAsState(
+            target, if (dragX != null) androidx.compose.animation.core.snap() else androidx.compose.animation.core.spring(dampingRatio = .72f, stiffness = 420f),
+            label = "lens",
+        )
+        val lensScale by animateFloatAsState(if (dragX != null) 1.08f else 1f, label = "lensScale")
+        val lit = if (dragX != null) hover else selIdx
+
+        Box(
+            Modifier.fillMaxSize().padding(pad)
+                .pointerInput(tabs.size) {
+                    detectTapGestures { o -> tabs.getOrNull((o.x / slotPx).toInt().coerceIn(0, tabs.size - 1))?.let(onTab) }
                 }
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    labels(t), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    color = if (selected) Color.White else TextDim,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                )
-                if (selected) Box(Modifier.padding(top = 2.dp).size(width = 14.dp, height = 2.dp).clip(shape).background(accent))
+                .pointerInput(tabs.size) {
+                    detectHorizontalDragGestures(
+                        onDragStart = { o ->
+                            dragX = (o.x - slotPx / 2).coerceIn(0f, slotPx * (tabs.size - 1))
+                            hover = ((o.x / slotPx).toInt()).coerceIn(0, tabs.size - 1)
+                        },
+                        onDragEnd = { tabs.getOrNull(hover)?.let(onTab); dragX = null },
+                        onDragCancel = { dragX = null },
+                    ) { change, dx ->
+                        change.consume()
+                        val x = ((dragX ?: 0f) + dx).coerceIn(0f, slotPx * (tabs.size - 1))
+                        dragX = x
+                        val h = ((x + slotPx / 2) / slotPx).toInt().coerceIn(0, tabs.size - 1)
+                        if (h != hover) { hover = h; haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove) }
+                    }
+                },
+        ) {
+            // the glass lens under the chosen tab
+            Box(
+                Modifier
+                    .offset { androidx.compose.ui.unit.IntOffset(lensX.toInt(), 0) }
+                    .width(slotW).fillMaxHeight()
+                    .graphicsLayer { scaleX = lensScale; scaleY = lensScale }
+                    .clip(shape)
+                    .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = .26f), Color.White.copy(alpha = .10f))))
+                    .border(1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = .55f), Color.White.copy(alpha = .08f))), shape),
+            )
+            Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                tabs.forEachIndexed { i, t ->
+                    val on = i == lit
+                    val tint by animateColorAsState(if (on) Color.White else TextDim, tween(160), label = "tabTint")
+                    Column(
+                        Modifier.weight(1f).fillMaxHeight(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        Box {
+                            Icon(t.icon(), labels(t), tint = tint, modifier = Modifier.size(22.dp))
+                            if (tabBadge(t)) UpdateDot(Modifier.align(Alignment.TopEnd).offset(x = 3.dp, y = (-2).dp))
+                        }
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            labels(t), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            color = tint, style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium,
+                        )
+                    }
+                }
             }
         }
     }
 }
+
+/** Marks the page as what the glass tab bar blurs. */
+private fun Modifier.hazeSourceCompat(state: dev.chrisbanes.haze.HazeState): Modifier = this.then(Modifier.hazeSource(state))
 
 /**
  * The menu can only be entered on purpose: UP (top bar), LEFT (left rail), BACK, or by the app itself.
