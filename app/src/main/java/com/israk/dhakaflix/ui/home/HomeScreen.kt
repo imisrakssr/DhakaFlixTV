@@ -446,17 +446,21 @@ private fun FeaturedBanner(
                     horizontalArrangement = Arrangement.spacedBy(if (isTv) 12.dp else 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    PillButton(s.play, onClick = { onPlay(item) }, icon = Icons.Filled.PlayArrow, primary = true, focusRequester = playFr, compact = !isTv)
+                    // TV: LEFT on the first button / RIGHT on the last one turns the banner instead of leaving it
+                    fun slideKey(dir: androidx.compose.ui.input.key.Key, go: () -> Unit) = Modifier.onPreviewKeyEvent { e ->
+                        if (isTv && count > 1 && e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && e.key == dir) { go(); true } else false
+                    }
+                    PillButton(s.play, onClick = { onPlay(item) }, icon = Icons.Filled.PlayArrow, primary = true, focusRequester = playFr, compact = !isTv,
+                        modifier = slideKey(androidx.compose.ui.input.key.Key.DirectionLeft, onPrev))
                     PillButton(s.moreInfo, onClick = { onInfo(item) }, icon = Icons.Filled.Info, compact = !isTv)
                     PillButton(
                         if (inList) s.inWatchlist else s.addToWatchlist,
                         onClick = { scope.launch { app.library.toggleWatchlist(item.id) } },
                         icon = if (inList) Icons.Filled.Check else Icons.Filled.Add, selected = inList, compact = !isTv,
+                        modifier = slideKey(androidx.compose.ui.input.key.Key.DirectionRight, onNext),
                     )
                     if (count > 1 && isTv) {
-                        Spacer(Modifier.width(10.dp))
-                        PillButton("", onClick = onNext, icon = AppIcons.Forward, compact = true)
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(18.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             repeat(count) { i ->
                                 val on = i == index % count
