@@ -124,7 +124,8 @@ abstract class ItemDao {
     open suspend fun upsertListing(parent: String, items: List<ItemEntity>) {
         val existing = idsByParent(parent).toHashSet()
         val fresh = items.filter { it.id !in existing }
-        if (fresh.isNotEmpty()) insertAll(fresh)
+        // new rows stay hidden until they are matched to TMDB (recomputePrimary shows them)
+        if (fresh.isNotEmpty()) insertAll(fresh.map { it.copy(isPrimary = false) })
         items.filter { it.id in existing }.forEach {
             updateListing(it.id, it.uploadedAt, it.rawName, it.quality, it.tags)
         }
@@ -215,12 +216,12 @@ abstract class ItemDao {
 
     /**
      * One card per title, played from its best copy: 1080p first, then 720p, then the rest; DhakaFlix before
-     * other servers, then newest. Never shown: folders with nothing to play, and other servers' titles that
-     * couldn't be matched to TMDB (no poster, no details — usually junk or not-yet-filled folders).
+     * other servers, then newest. Only titles matched to TMDB with a poster are shown (on every server):
+     * no poster or details means junk, an empty folder, or not looked up yet — those stay hidden.
      */
     @Query(
         "UPDATE items SET isPrimary = CASE WHEN id = (SELECT j.id FROM items j WHERE j.groupKey = items.groupKey " +
-            "AND j.metaState != 5 AND NOT ((j.sourceId LIKE 'bk-%' OR j.sourceId LIKE 'rd-%') AND j.metaState NOT IN (1, 3)) " +
+            "AND j.metaState IN (1, 3) AND j.tmdbId IS NOT NULL AND j.posterPath IS NOT NULL " +
             "ORDER BY CASE WHEN LOWER(j.quality) = '1080p' THEN 0 WHEN LOWER(j.quality) = '720p' THEN 1 ELSE 2 END, " +
             "(j.sourceId LIKE 'bk-%' OR j.sourceId LIKE 'rd-%'), j.uploadedAt DESC LIMIT 1) THEN 1 ELSE 0 END"
     )

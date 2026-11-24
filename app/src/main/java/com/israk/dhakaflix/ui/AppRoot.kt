@@ -522,14 +522,14 @@ private fun PhoneTabBar(
                     .width(slotW).fillMaxHeight()
                     .graphicsLayer { scaleX = lensScale; scaleY = lensScale }
                     .clip(shape)
-                    .background(Brush.verticalGradient(listOf(accent.copy(alpha = .38f), accent.copy(alpha = .16f))))
-                    .background(Brush.verticalGradient(0f to Color.White.copy(alpha = .22f), .5f to Color.Transparent, 1f to Color.White.copy(alpha = .06f)))
-                    .border(1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = .6f), accent.copy(alpha = .35f))), shape),
+                    .background(Brush.verticalGradient(listOf(accent.copy(alpha = .16f), accent.copy(alpha = .06f))))
+                    .background(Brush.verticalGradient(0f to Color.White.copy(alpha = .20f), .5f to Color.White.copy(alpha = .04f), 1f to Color.White.copy(alpha = .08f)))
+                    .border(1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = .55f), accent.copy(alpha = .45f))), shape),
             )
             Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
                 tabs.forEachIndexed { i, t ->
                     val on = i == lit
-                    val tint by animateColorAsState(if (on) Color.White else TextDim, tween(160), label = "tabTint")
+                    val tint by animateColorAsState(if (on) accent else TextDim, tween(160), label = "tabTint")
                     Column(
                         Modifier.weight(1f).fillMaxHeight(),
                         horizontalAlignment = Alignment.CenterHorizontally,

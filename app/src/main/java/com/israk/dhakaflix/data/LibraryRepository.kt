@@ -165,12 +165,16 @@ class LibraryRepository(private val app: DhakaFlixApp) {
     }
 
     /** Incremental sync when the library is older than [maxAgeMs]; cheap because unchanged folders are skipped. */
+    @Volatile private var primaryPicked = false
+
     fun syncIfStale(maxAgeMs: Long = TEN_MINUTES) {
         scope.launch(Dispatchers.IO) {
             val count = db.items().countFlow().first()
             val stale = System.currentTimeMillis() - settings.lastSync.value > maxAgeMs
             db.items().unhideOldIndex()
             db.items().dropRongDhongStandInPosters()
+            // once per launch: re-pick the cards so titles without TMDB poster/details drop out of the library
+            if (!primaryPicked) { primaryPicked = true; db.items().recomputePrimary() }
             // also when another server's library (RongDhong / BokaSoka) has never been filled
             val otherMissing = settings.sources.value.any { it.enabled && Defaults.isOtherServer(it.id) && db.items().countForSource(it.id) == 0 }
             if (count == 0 || stale || otherMissing) startSync(force = false, manual = false) else { startEnrich(); startPosterScan() }
@@ -510,6 +514,7 @@ class LibraryRepository(private val app: DhakaFlixApp) {
             return known["${item.type}|$n|$y"] ?: y?.let { known["${item.type}|$n|${it - 1}"] ?: known["${item.type}|$n|${it + 1}"] }
         }
         var lastPrimary = System.currentTimeMillis()
+        var firstPick = true
         while (true) {
             val batch = db.items().pendingMeta(40)
             if (batch.isEmpty()) break
@@ -526,7 +531,9 @@ class LibraryRepository(private val app: DhakaFlixApp) {
             // one transaction per batch = one UI refresh instead of 40 (keeps the TV UI smooth)
             db.withTransaction { outcomes.forEach { applyOutcome(it) } }
             // re-pick the cards now and then, not every batch: with a big library that query is the slow part on TV
-            if (System.currentTimeMillis() - lastPrimary > 60_000) { db.items().recomputePrimary(); lastPrimary = System.currentTimeMillis() }
+            // (only matched titles are shown, so on an empty library the first cards come in after 10 s, not a minute)
+            val gap = if (firstPick) 10_000 else 60_000
+            if (System.currentTimeMillis() - lastPrimary > gap) { db.items().recomputePrimary(); lastPrimary = System.currentTimeMillis(); firstPick = false }
         }
         db.items().recomputePrimary()
     }
