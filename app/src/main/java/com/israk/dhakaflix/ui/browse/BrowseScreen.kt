@@ -170,14 +170,24 @@ class FilterSpec(
 fun FilterBar(specs: List<FilterSpec>, onClear: (() -> Unit)?, firstModifier: Modifier = Modifier) {
     val s = LocalStrings.current
     var open by remember { mutableStateOf<Int?>(null) }
+    val tv = LocalIsTv.current
+    // phone: a filter you set jumps to the front (the latest one first), the rest keep their order
+    val pickedAt = remember { androidx.compose.runtime.mutableStateMapOf<String, Long>() }
+    val shown = if (tv) specs else {
+        val active = specs.filter { it.highlight && it.selected != null }
+            .sortedByDescending { pickedAt[it.title] ?: 0L }
+        active + specs.filter { it !in active }
+    }
+    val scroll = rememberScrollState()
+    val order = shown.joinToString("|") { it.title }
+    if (!tv) LaunchedEffect(order) { scroll.animateScrollTo(0) }
     androidx.compose.runtime.CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides com.israk.dhakaflix.ui.components.tvScrollSpec(com.israk.dhakaflix.ui.components.OnlyIfNeededSpec)) {
     Row(
-        Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 10.dp),
+        Modifier.horizontalScroll(scroll).padding(horizontal = 8.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val tv = LocalIsTv.current
-        specs.forEachIndexed { i, sp ->
+        shown.forEachIndexed { i, sp ->
             Box {
                 PillButton(
                     sp.title + ":  " + sp.selectedLabel,
@@ -202,7 +212,10 @@ fun FilterBar(specs: List<FilterSpec>, onClear: (() -> Unit)?, firstModifier: Mo
                         androidx.compose.material3.DropdownMenuItem(
                             text = { Text(label, color = if (sel) LocalAccent.current else Color.White, maxLines = 1) },
                             trailingIcon = if (sel) ({ Icon(Icons.Filled.Check, null, tint = LocalAccent.current) }) else null,
-                            onClick = { sp.onSelect(id); open = null },
+                            onClick = {
+                                if (id != null) pickedAt[sp.title] = System.currentTimeMillis() else pickedAt.remove(sp.title)
+                                sp.onSelect(id); open = null
+                            },
                         )
                     }
                 }

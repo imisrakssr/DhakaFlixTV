@@ -529,7 +529,7 @@ private fun PhoneTabBar(
             Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
                 tabs.forEachIndexed { i, t ->
                     val on = i == lit
-                    val tint by animateColorAsState(if (on) accent else TextDim, tween(160), label = "tabTint")
+                    val tint by animateColorAsState(if (on) accent else Color.White, tween(160), label = "tabTint")
                     Column(
                         Modifier.weight(1f).fillMaxHeight(),
                         horizontalAlignment = Alignment.CenterHorizontally,
