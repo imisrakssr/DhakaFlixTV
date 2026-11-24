@@ -171,16 +171,20 @@ fun FilterBar(specs: List<FilterSpec>, onClear: (() -> Unit)?, firstModifier: Mo
     val s = LocalStrings.current
     var open by remember { mutableStateOf<Int?>(null) }
     val tv = LocalIsTv.current
-    // phone: a filter you set jumps to the front (the latest one first), the rest keep their order
+    // a filter you set jumps to the front (the latest one first), the rest keep their order
     val pickedAt = remember { androidx.compose.runtime.mutableStateMapOf<String, Long>() }
-    val shown = if (tv) specs else {
+    val shown = run {
         val active = specs.filter { it.highlight && it.selected != null }
             .sortedByDescending { pickedAt[it.title] ?: 0L }
         active + specs.filter { it !in active }
     }
+    fun pick(sp: FilterSpec, id: String?) {
+        if (id != null) pickedAt[sp.title] = System.currentTimeMillis() else pickedAt.remove(sp.title)
+        sp.onSelect(id)
+    }
     val scroll = rememberScrollState()
     val order = shown.joinToString("|") { it.title }
-    if (!tv) LaunchedEffect(order) { scroll.animateScrollTo(0) }
+    LaunchedEffect(order) { scroll.animateScrollTo(0) }
     androidx.compose.runtime.CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides com.israk.dhakaflix.ui.components.tvScrollSpec(com.israk.dhakaflix.ui.components.OnlyIfNeededSpec)) {
     Row(
         Modifier.horizontalScroll(scroll).padding(horizontal = 8.dp, vertical = 10.dp),
@@ -188,6 +192,8 @@ fun FilterBar(specs: List<FilterSpec>, onClear: (() -> Unit)?, firstModifier: Mo
         verticalAlignment = Alignment.CenterVertically,
     ) {
         shown.forEachIndexed { i, sp ->
+            // keyed by filter, so the TV focus moves along with the button it is on
+            androidx.compose.runtime.key(sp.title) {
             Box {
                 PillButton(
                     sp.title + ":  " + sp.selectedLabel,
@@ -212,29 +218,38 @@ fun FilterBar(specs: List<FilterSpec>, onClear: (() -> Unit)?, firstModifier: Mo
                         androidx.compose.material3.DropdownMenuItem(
                             text = { Text(label, color = if (sel) LocalAccent.current else Color.White, maxLines = 1) },
                             trailingIcon = if (sel) ({ Icon(Icons.Filled.Check, null, tint = LocalAccent.current) }) else null,
-                            onClick = {
-                                if (id != null) pickedAt[sp.title] = System.currentTimeMillis() else pickedAt.remove(sp.title)
-                                sp.onSelect(id); open = null
-                            },
+                            onClick = { pick(sp, id); open = null },
                         )
                     }
                 }
+            }
             }
         }
         if (onClear != null) PillButton(s.clearFilters, icon = Icons.Filled.Close, compact = true, onClick = onClear)
     }
     }
-    if (LocalIsTv.current) open?.let { idx -> specs.getOrNull(idx)?.let { FilterSheet(it) { open = null } } }
+    if (tv) open?.let { idx -> shown.getOrNull(idx)?.let { sp -> FilterSheet(sp, onPick = { id -> pick(sp, id) }) { open = null } } }
 }
 
 @Composable
-private fun FilterSheet(spec: FilterSpec, onDismiss: () -> Unit) {
+private fun FilterSheet(spec: FilterSpec, onPick: (String?) -> Unit = spec.onSelect, onDismiss: () -> Unit) {
     val fr = remember { FocusRequester() }
     val selIdx = spec.options.indexOfFirst { it.first == spec.selected }.coerceAtLeast(0)
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = (selIdx - 3).coerceAtLeast(0))
     LaunchedEffect(Unit) { delay(80); runCatching { fr.requestFocus() } }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(Modifier.fillMaxSize().clickable(onClick = onDismiss), contentAlignment = Alignment.CenterEnd) {
+        // one BACK closes it (Compose would otherwise spend the first BACK just moving focus out of the list)
+        Box(
+            Modifier.fillMaxSize()
+                .onPreviewKeyEvent { e ->
+                    if (e.key == androidx.compose.ui.input.key.Key.Back || e.key == androidx.compose.ui.input.key.Key.Escape) {
+                        if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyUp) onDismiss()
+                        true
+                    } else false
+                }
+                .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.CenterEnd,
+        ) {
             Column(
                 Modifier.padding(16.dp).width(340.dp).fillMaxHeight()
                     .glass(RoundedCornerShape(24.dp), tint = .10f)
@@ -246,7 +261,7 @@ private fun FilterSheet(spec: FilterSpec, onDismiss: () -> Unit) {
                 LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     itemsIndexed(spec.options) { i, (id, label) ->
                         FocusFrame(
-                            onClick = { spec.onSelect(id); onDismiss() },
+                            onClick = { onPick(id); onDismiss() },
                             focusedScale = 1.03f, shape = RoundedCornerShape(14.dp),
                             focusRequester = if (i == selIdx) fr else null,
                             modifier = Modifier.fillMaxWidth(),
